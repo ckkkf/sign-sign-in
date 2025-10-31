@@ -50,8 +50,11 @@
 13. 将刚才复制的code填入code对应后方的双引号中。
 ![config.json](imgimage12.png)
 
-14. 根据下图填写其他信息：
+14. 根据下图填写其他信息，别忘了保存，别忘了保存，别忘了保存！！！：
 ![填写其他信息](imgimage14.png)
+
+15. 双击sign_in.exe，根据控制台日志修改。
+![双击sign_in.exe](imgimage15.png)
 
 
 ## 安装教程 之 源码启动方式
