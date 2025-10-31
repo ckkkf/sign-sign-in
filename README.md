@@ -92,7 +92,8 @@
    - Gitee 封面人物: [https://gitee.com/gitee-stars/](https://gitee.com/gitee-stars/)
 3. Gitee 官方使用手册: [https://gitee.com/help](https://gitee.com/help)
 
-## 开发不易，若能您对您有帮助，是我们的荣幸，若您手头有余，在自己有可乐喝的前提下，可以考虑请我喝瓶冰露：
+## 发电
+开发不易，若能您对您有帮助，是我们的荣幸，若您手头有余，在自己有可乐喝的前提下，可以考虑请我喝瓶冰露：
 ![支付宝](img/4269955c59522f0674fc4d7e7a1fd137.jpg)
 
 ## 许可证
