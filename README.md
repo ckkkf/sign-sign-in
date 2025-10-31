@@ -12,49 +12,49 @@
 
 ## 安装教程 之 软件启动方式
 1. [点我进入下载页面](https://gitee.com/ckkk524334/sign-sign-in/releases)
-![下载此压缩包](imgimage1.png)。
+![下载此压缩包](img/image1.png)。
 
 2. 解压下载的压缩包。
-![可见这些文件](imgimage2.png)
+![可见这些文件](img/image2.png)
 
 3. 下载并安装Reqable抓包工具，官方链接：[https://reqable.com/zh-CN/](https://reqable.com/zh-CN/)
 
 4. 打开刚刚安装的Reqable抓包工具并安装证书，点击“证书-安装根证书到本机”：
-![证书-安装根证书到本机”](imgimage3.png)
+![证书-安装根证书到本机”](img/image3.png)
 
 5. 点击“工具-断点”：
-![工具-断点](imgimage.png)
+![工具-断点](img/image.png)
 
 6. 勾选左上角按钮，并点击左下角新建：
-![输入图片说明](imgimage4.png)
+![输入图片说明](img/image4.png)
 
 7. 名称填写：getOpenId.action，URL填写：`https://xcx.xybsyw.com/common/getOpenId.action`，点击完成
-![填写](imgimage5.png)
+![填写](img/image5.png)
 
 8. 返回主页面，点击“启动”开始抓包：
-![启动](imgimage6.png)
+![启动](img/image6.png)
 
 9. 进入校友邦小程序，观察Reqable抓包工具是否有信息，是否自动弹出“断点执行器”页面
-![断点执行器](imgimage7.png)
+![断点执行器](img/image7.png)
 
 10. 若没有自动弹出“断点执行器”页面，则可尝试点击“代理-系统代理”开启系统代理，或点击“代理-二级代理”开启二级代理，让地球图标或飞机图标为绿色即为成功开启：
-![地球图标](imgimage9.png)
-![飞机图标](imgimage8.png)
+![地球图标](img/image9.png)
+![飞机图标](img/image8.png)
 
 11. 若自动弹出“断点执行器”页面，则可点击请求体，复制“code=”后面的一长串（注意不要包含“code=”）
-![断点执行器](imgimage10.png)
+![断点执行器](img/image10.png)
 
 12. 使用记事本或其他文本编辑软件打开刚才解压出来的config.json文件
-![config.json](imgimage11.png)
+![config.json](img/image11.png)
 
 13. 将刚才复制的code填入code对应后方的双引号中。
-![config.json](imgimage12.png)
+![config.json](img/image12.png)
 
 14. 根据下图填写其他信息，别忘了保存，别忘了保存，别忘了保存！！！：
-![填写其他信息](imgimage14.png)
+![填写其他信息](img/image14.png)
 
 15. 双击sign_in.exe，根据控制台日志修改。
-![双击sign_in.exe](imgimage15.png)
+![双击sign_in.exe](img/image15.png)
 
 
 ## 安装教程 之 源码启动方式
