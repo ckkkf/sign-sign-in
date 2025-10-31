@@ -17,7 +17,7 @@
 2. 解压下载的压缩包。
 ![可见这些文件](imgimage2.png)
 
-3. 下载并安装Reqable抓包工具，官方链接：[https://reqable.com/zh-CN/](https://reqable.com/zh-CN/)。
+3. 下载并安装Reqable抓包工具，官方链接：[https://reqable.com/zh-CN/](https://reqable.com/zh-CN/)
 
 4. 打开刚刚安装的Reqable抓包工具并安装证书，点击“证书-安装根证书到本机”：
 ![证书-安装根证书到本机”](imgimage3.png)
@@ -28,7 +28,7 @@
 6. 勾选左上角按钮，并点击左下角新建：
 ![输入图片说明](imgimage4.png)
 
-7. 名称填写：getOpenId.action，URL填写：https://xcx.xybsyw.com/common/getOpenId.action，点击完成
+7. 名称填写：getOpenId.action，URL填写：`https://xcx.xybsyw.com/common/getOpenId.action`，点击完成
 ![填写](imgimage5.png)
 
 8. 返回主页面，点击“启动”开始抓包：
