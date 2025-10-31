@@ -10,7 +10,51 @@
 - 设备模拟：生成模拟设备信息，用于伪装设备指纹。
 - 签到逻辑：根据配置信息自动完成签到流程。
 
-## 安装教程
+## 安装教程 之 软件启动方式
+1. [点我进入下载页面](https://gitee.com/ckkk524334/sign-sign-in/releases)
+![下载此压缩包](imgimage1.png)。
+
+2. 解压下载的压缩包。
+![可见这些文件](imgimage2.png)
+
+3. 下载并安装Reqable抓包工具，官方链接：[https://reqable.com/zh-CN/](https://reqable.com/zh-CN/)。
+
+4. 打开刚刚安装的Reqable抓包工具并安装证书，点击“证书-安装根证书到本机”：
+![证书-安装根证书到本机”](imgimage3.png)
+
+5. 点击“工具-断点”：
+![工具-断点](imgimage.png)
+
+6. 勾选左上角按钮，并点击左下角新建：
+![输入图片说明](imgimage4.png)
+
+7. 名称填写：getOpenId.action，URL填写：https://xcx.xybsyw.com/common/getOpenId.action，点击完成
+![填写](imgimage5.png)
+
+8. 返回主页面，点击“启动”开始抓包：
+![启动](imgimage6.png)
+
+9. 进入校友邦小程序，观察Reqable抓包工具是否有信息，是否自动弹出“断点执行器”页面
+![断点执行器](imgimage7.png)
+
+10. 若没有自动弹出“断点执行器”页面，则可尝试点击“代理-系统代理”开启系统代理，或点击“代理-二级代理”开启二级代理，让地球图标或飞机图标为绿色即为成功开启：
+![地球图标](imgimage9.png)
+![飞机图标](imgimage8.png)
+
+11. 若自动弹出“断点执行器”页面，则可点击请求体，复制“code=”后面的一长串（注意不要包含“code=”）
+![断点执行器](imgimage10.png)
+
+12. 使用记事本或其他文本编辑软件打开刚才解压出来的config.json文件
+![config.json](imgimage11.png)
+
+13. 将刚才复制的code填入code对应后方的双引号中。
+![config.json](imgimage12.png)
+
+14. 根据下图填写其他信息：
+![填写其他信息](imgimage14.png)
+
+
+## 安装教程 之 源码启动方式
 1. 安装 Python 3.x（推荐使用 Python 3.6 或更高版本）。
 2. 克隆本仓库到本地：
    ```bash
@@ -20,14 +64,8 @@
    ```bash
    pip install -r requirements.txt
    ```
+4. 抓包和配置文件同上。
 
-## 使用说明
-1. 配置文件 `config.json` 中填写签到所需的账号、密码、经纬度等信息。
-2. 运行脚本：
-   ```bash
-   python sign_in.py
-   ```
-3. 脚本会自动完成登录、获取签到计划、提交签到等操作，并输出执行结果。
 
 ## 参与贡献
 1. Fork 本仓库。
