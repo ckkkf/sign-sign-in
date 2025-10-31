@@ -11,15 +11,15 @@
 - 签到逻辑：根据配置信息自动完成签到流程。
 
 ## 安装教程 之 软件启动方式
-1. [点我进入下载页面](https://gitee.com/ckkk524334/sign-sign-in/releases)
-![下载此压缩包](img/image1.png)。
+1. 点击进入下载页面：[https://gitee.com/ckkk524334/sign-sign-in/releases](https://gitee.com/ckkk524334/sign-sign-in/releases)：
+![下载此压缩包](img/image1.png)
 
-2. 解压下载的压缩包。
+2. 解压下载的压缩包：
 ![可见这些文件](img/image2.png)
 
-3. 下载并安装Reqable抓包工具，官方链接：[https://reqable.com/zh-CN/](https://reqable.com/zh-CN/)
+3. 下载并安装Reqable抓包工具，官方链接：[https://reqable.com/zh-CN/](https://reqable.com/zh-CN/)。
 
-4. 打开刚刚安装的Reqable抓包工具并安装证书，点击“证书-安装根证书到本机”：
+4. 打开刚刚安装的Reqable抓包工具并安装证书，点击“证书-安装根证书到本机”安装证书：
 ![证书-安装根证书到本机”](img/image3.png)
 
 5. 点击“工具-断点”：
@@ -28,7 +28,15 @@
 6. 勾选左上角按钮，并点击左下角新建：
 ![输入图片说明](img/image4.png)
 
-7. 名称填写：getOpenId.action，URL填写：`https://xcx.xybsyw.com/common/getOpenId.action`，点击完成
+7. 名称填写：
+    ```bash
+    getOpenId.action
+    ```
+    URL填写：
+    ```bash
+    https://xcx.xybsyw.com/common/getOpenId.action
+    ```
+    点击完成：
 ![填写](img/image5.png)
 
 8. 返回主页面，点击“启动”开始抓包：
