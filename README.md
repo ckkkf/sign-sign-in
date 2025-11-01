@@ -12,30 +12,36 @@
 
 ## 使用教程 之 软件启动方式
 1. 进入下载页面：[点我下载最新版本](https://gitee.com/ckkk524334/sign-sign-in/releases)：
+
   ![下载此压缩包](img/download.png)
 
   ​
 
 2. 解压下载的压缩包：
+
   ![可见这些文件](img/files.png)
 
   ​
 
 3. 下载并安装 Reqable 抓包工具，官方链接：[https://reqable.com/zh-CN/](https://reqable.com/zh-CN/)。
+也可从本仓库下载：[reqable](https://gitee.com/ckkk524334/sign-sign-in/raw/master/software/reqable-app-windows-x86_64.exe/)
 
     ​
 
 4. 打开刚刚安装的 Reqable 抓包工具并安装证书，点击“证书-安装根证书到本机”安装证书：
+
   ![证书-安装根证书到本机”](img/certificate.png)
 
   ​
 
 5. 点击 “工具 -- 断点” ：
+
   ![输入图片说明](img/breakpoint.png)
 
   ​
 
 6. 勾选左上角 “启动断点” 按钮，并点击左下角 “新建”：
+
   ![输入图片说明](img/breakpointList.png)
 
   ​
@@ -48,34 +54,40 @@
     ```bash
     https://xcx.xybsyw.com/common/getOpenId.action
     ```
+
     点击 “完成” ：
+
     ![填写](img/createBreakpoint.png)
 
     ​
 
 8. 返回主页面，点击 “启动” 开始抓包：
+
   ![启动](img/begin.png)
 
   ​
 
 9. 进入校友邦小程序，观察 Reqable 抓包工具是否有信息，是否自动弹出 “断点执行器” 页面:
+
   ![断点执行器](img/body.png)
 
   ​
 
 10. 若没有自动弹出 “断点执行器” 页面，则可尝试点击“代理-系统代理”开启系统代理，或点击 “代理 -- 二级代理” 开启二级代理，让 “地球图标” 或 ”飞机图标“ 为绿色即为成功开启：
+
   ![地球图标](img/earth.png)
+
   ![飞机图标](img/plane.png)
 
   ​
 
 11. 若自动弹出 “断点执行器” 页面，则可点击请求体，复制 “code=” 后面的一长串（注意不要包含 “code=” ）:
+
    ![断点执行器](img/getCode.png)
 
    ​
 
-12. 若成功抓取到code，请复制后点击停止抓取，否则会拦截脚本的请求：
-
+12. 若成功抓取到code，请复制后点击 “停止” 抓取，否则会拦截脚本的请求！！！！
 
 ![76196689828](img/end.png)
 
@@ -94,11 +106,6 @@
 15. 根据下图填写其他信息，别忘了保存，别忘了保存，别忘了保存！！！
 
 ![填写其他信息](img/configExplain.png)
-
-
-
-其中的签到地点经纬度可通过
-
 
 
 
