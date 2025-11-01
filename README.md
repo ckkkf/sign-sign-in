@@ -74,23 +74,39 @@
 
    ​
 
-12. 使用记事本或其他文本编辑软件打开刚才解压出来的 config.json 文件:
-   ![config.json](img/config.png)
+12. 若成功抓取到code，请复制后点击停止抓取，否则会拦截脚本的请求：
 
-   ​
 
-13. 将刚才复制的 code 填入 code 对应后方的双引号中:
-   ![config.json](img/configCode.png)
+![76196689828](img/end.png)
 
-   ​
+13. 使用记事本或其他文本编辑软件打开刚才解压出来的 config.json 文件:
 
-14. 根据下图填写其他信息，别忘了保存，别忘了保存，别忘了保存！！！
-   ![填写其他信息](img/configExplain.png)
+![config.json](img/config.png)
 
-   ​
+​
 
-15. 双击运行 sign_in.exe，根据控制台日志修改:
-   ![双击sign_in.exe](img/exe.png)
+14. 将刚才复制的 code 填入 code 对应后方的双引号中:
+
+![config.json](img/configCode.png)
+
+
+
+15. 根据下图填写其他信息，别忘了保存，别忘了保存，别忘了保存！！！
+
+![填写其他信息](img/configExplain.png)
+
+
+
+其中的签到地点经纬度可通过
+
+
+
+
+
+16. 双击运行 sign_in.exe，根据控制台日志修改:
+
+![双击sign_in.exe](img/exe.png)
+
 
 
 使用教程至此结束！
