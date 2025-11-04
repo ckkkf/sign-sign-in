@@ -24,6 +24,8 @@
 
 
 3. 修改配置文件 config.json：
+​
+如果不知道怎么获取经纬度，推荐网站 👉 https://api.map.baidu.com/lbsapi/getpoint/
 
 ![76209252311](img/config-new.png)
 
