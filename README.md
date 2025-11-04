@@ -28,7 +28,7 @@
 
 
 
-4. 双击 sign_in.exe 运行即可：
+4. 双击 sign_in.exe 运行即可。
 
 
 
