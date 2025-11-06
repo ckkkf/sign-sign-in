@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-import builtins
 import hashlib
 import json
+import logging
 import os
 import platform
 import random
@@ -9,35 +9,39 @@ import re
 import string
 import subprocess
 import sys
-import threading
 import time
-import traceback
 import urllib
 import urllib.parse
-from time import sleep
-
+from requests.utils import requote_uri
+import psutil
 import qrcode
 import requests
 from colorama import Fore
+from colorlog import ColoredFormatter
 from gmssl import sm2
 
-# 保存原始的 print 函数
-original_print = builtins.print
+# ================== 配置区 ==================
+### 日志配置
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+logger.handlers.clear()  # 清空已存在的 handler（避免重复）
+console_handler = logging.StreamHandler(stream=sys.stdout)  # 创建一个输出到控制台的 handler
+formatter = ColoredFormatter(  # 设置彩色格式
+    "%(log_color)s%(asctime)s - %(levelname)s - %(message)s",
+    datefmt=None,
+    log_colors={
+        'DEBUG': 'white',
+        'INFO': 'light_green',
+        'WARNING': 'light_yellow',
+        'ERROR': 'light_red',
+        'CRITICAL': 'bold_red',
+    }
+)
+console_handler.setFormatter(formatter)
+logger.addHandler(console_handler)
 
 
-# 自定义 print 函数
-def custom_print(*args, **kwargs):
-    # 获取当前的调用栈
-    stack = traceback.extract_stack()
-    # 获取当前栈帧的函数名
-    method_name = stack[-2].name if len(stack) >= 2 else 'unknown'
-    # 打印方法名和内容
-    original_print(f"[{method_name}] ", *args, **kwargs)
-
-
-# 替换全局的 print 函数
-builtins.print = custom_print
-
+# ===========================================
 
 def read_config(file_path: str) -> dict:
     """
@@ -50,10 +54,10 @@ def read_config(file_path: str) -> dict:
         # 打开并读取 JSON 文件
         with open(file_path, 'r', encoding='utf-8') as file:
             params = json.load(file)
-        print(f"成功读取参数: {params}")
+        logging.debug(f"成功读取参数: {params}")
         return params
     except Exception as e:
-        print(f"读取失败: {e}")
+        logging.error(f"读取失败: {e}")
         return {}
 
 
@@ -68,9 +72,9 @@ def save_json_file(file_path: str, params: dict) -> None:
         # 将字典格式的参数写入 JSON 文件
         with open(file_path, 'w', encoding='utf-8') as file:
             json.dump(params, file, ensure_ascii=False, indent=4)
-        print(f"参数已成功保存到 {file_path}")
+        logging.info(f"参数已成功保存到 {file_path}")
     except Exception as e:
-        print(f"保存失败: {e}")
+        logging.info(f"保存失败: {e}")
 
 
 # 修改 JSON 文件中的数据，传递一个字典来进行修改
@@ -87,35 +91,9 @@ def update_config(file_path: str, changes: dict) -> None:
         save_json_file(file_path, config)
 
 
-def get_plan_detail(userAgent, encryptValue, sessionId, traineeId):
-    url = "https://xcx.xybsyw.com/student/clock/GetPlan!detail.action"
-
-    data = {
-        "traineeId": str(traineeId)
-    }
-    header_token = get_header_token(data)
-    headers = {
-        "v": "1.6.39",
-        "wechat": "1",
-        "xweb_xhr": "1",
-        "authority": "xcx.xybsyw.com",
-        "content-type": "application/x-www-form-urlencoded",
-        "referer": "https://servicewechat.com/wx9f1c2e0bbc10673c/533/page-frame.html",
-        "n": "content,deviceName,keyWord,blogBody,blogTitle,getType,responsibilities,street,text,reason,searchvalue,key,answers,leaveReason,personRemark,selfAppraisal,imgUrl,wxname,deviceId,avatarTempPath,file,file,model,brand,system,deviceId,platform,code,openId,unionid,clockDeviceToken,clockDevice,address,name,enterpriseEmail,responsibilities,practiceTarget,guardianName,guardianPhone,practiceDays,linkman,enterpriseName,companyIntroduction,accommodationStreet,accommodationLongitude,accommodationLatitude,internshipDestination,specialStatement,enterpriseStreet,insuranceName,insuranceFinancing,policyNumber,overtimeRemark,riskStatement,specialStatement",
-        "m": header_token['m'],
-        "s": header_token['s'],
-        "t": header_token['t'],
-        "user-agent": userAgent,
-        "encryptvalue": encryptValue,
-    }
-    cookies = {"JSESSIONID": sessionId}
-    response = requests.post(url, headers=headers, cookies=cookies, data=data)
-
-    print(response, response.text)
-
-
 def regeo(userAgent, location):
-    url = "https://restapi.amap.com/v3/geocode/regeo"
+    logging.info('正在调用高德地图解析经纬度...')
+    url = "https://restapi.amap.com/v3/geocode/regeo".strip()
     headers = {
         "xweb_xhr": "1",
         "Content-Type": "application/json",
@@ -132,14 +110,16 @@ def regeo(userAgent, location):
         "appname": "c222383ff12d31b556c3ad6145bb95f4",
         "location": f"{location['longitude']},{location['latitude']}",
     }
+    logger.info(f"url:{url}, headers: {headers}, params: {params}")
     response = requests.get(url, headers=headers, params=params)
     json = response.json()
-    print(f'{response}  |  {response.json()['regeocode']['formatted_address']}  |  {response.json()}')
+    logging.info(f'{response}  |  {response.json()['regeocode']['formatted_address']}')
     return json['regeocode']
 
 
 def get_plan(userAgent, args):
-    url = "https://xcx.xybsyw.com/student/clock/GetPlan.action"
+    logging.info('正在获取实习计划...')
+    url = "https://xcx.xybsyw.com/student/clock/GetPlan.action".strip()
     data = {}
     header_token = get_header_token(data)
     headers = {
@@ -159,9 +139,10 @@ def get_plan(userAgent, args):
         "JSESSIONID": args['sessionId']
     }
     data = json.dumps(data, separators=(',', ':'))
+    logger.info(f"url:{url}, headers: {headers}, cookies: {cookies}, data: {data}")
     response = requests.post(url, headers=headers, cookies=cookies, data=data)
 
-    print(response, response.text)
+    logging.info(f'{response} {response.text}')
     return response.json()['data']
 
 
@@ -172,7 +153,7 @@ def generate_qrcode(data, label):
     :param data: 二维码需要编码的内容
     :param label: 显示在二维码前的标签
     """
-    print(Fore.BLUE + label)
+    logging.info(Fore.BLUE + label)
     qr = qrcode.QRCode(
         version=1,  # 控制二维码的大小，1表示最小
         error_correction=qrcode.constants.ERROR_CORRECT_L,  # 控制错误容忍度
@@ -191,14 +172,17 @@ def show_qrcode():
 
     # 微信二维码
     url_wx = 'wxp://f2f01EiRAzk-cwnkJtbu5GMpj0Juf_dTWQr1DiUn5r25wlM'
-    generate_qrcode(url_wx, '微信')
+    generate_qrcode(url_wx, '微信👇')
 
     # 支付宝二维码
     url_zfb = 'https://qr.alipay.com/fkx10780lnnieguozv3vhaa'
-    generate_qrcode(url_zfb, '支付宝')
+    generate_qrcode(url_zfb, '支付宝👇')
 
 
-def sign_in(config, args):
+def do_sign_in(config):
+    ### 登录
+    args = login(config=config)
+
     ### 获取实习信息
     userAgent = config['userAgent']
     location = config['location']
@@ -208,14 +192,24 @@ def sign_in(config, args):
 
     ### 调用接口获取当前位置。todo：仅支持第一段实习
     traineeId = str(plan_data[0]['dateList'][0]['traineeId'])
-    get_plan_detail(userAgent=userAgent, encryptValue=args['encryptValue'], sessionId=args['sessionId'],
-                    traineeId=traineeId)
 
     ### 调用高德地图逆解析
     geo = regeo(userAgent=userAgent, location=location)
 
     ### 调用签到接口
-    url = "https://xcx.xybsyw.com/student/clock/Post.action"
+    msg = sign_in(args, device, geo, location, traineeId, userAgent)
+
+    if msg == 'success':
+        logging.info(f'✅ 签到成功！！！签到成功！！！签到成功！！！')
+    elif msg == '已经签到':
+        logging.info(f'✅ 已经签到过了，明天再来吧！')
+    else:
+        raise RuntimeError('签到失败，请查看日志或联系开发者')
+
+
+def sign_in(args, device, geo, location, traineeId, userAgent):
+    logging.info('正在调用签到接口进行签到...')
+    url = "https://xcx.xybsyw.com/student/clock/Post.action".strip()
     data = {
         'punchInStatus': "0",
         'clockStatus': "2",
@@ -232,9 +226,7 @@ def sign_in(config, args):
         'address': geo['formatted_address'],
         'deviceName': device['model'],
     }
-
     header_token = get_header_token(data)
-
     headers = {
         'v': "1.6.39",
         'wechat': "1",
@@ -247,26 +239,15 @@ def sign_in(config, args):
         'encryptvalue': args['encryptValue'],
         'devicecode': get_device_code(openId=args['openId'], device=device),
     }
-
     cookies = {
         "JSESSIONID": args['sessionId']
     }
+    logger.info(f"url:{url}, headers: {headers}, cookies: {cookies}, data: {data}")
     response = requests.post(url, data=data, headers=headers, cookies=cookies)
-
-    print(response, response.text)
+    logging.info(f'{response} {response.text}')
     json = response.json()
     msg = json['msg']
-    data = json['data']
-    signPersonNum = data['signPersonNum']
-
-    print('\n\n---------------------------------------------------------\n')
-
-    if msg == 'success' and signPersonNum is not None:
-        print(Fore.GREEN + f'✅签到成功！！！签到成功！！！签到成功！！！')
-    if msg == '已经签到' and signPersonNum is not None:
-        print(Fore.GREEN + f'✅已经签到过了，明天再来吧！')
-    else:
-        raise ValueError('签到失败，请查看日志或联系开发者')
+    return msg
 
 
 def get_header_token(e):
@@ -356,22 +337,22 @@ def get_device_code(openId, device):
     )
 
     device_code = sm2_crypt.encrypt(
-        f'b|_{device['brand']},{device['model']},{device['system']},{device['platform']}aid|_wx9f1c2e0bbc10673ct|_{int(time.time() * 1000)}uid|_{rand_str()}oid|_{openId}'.encode()).hex()
-    print('device_code: ', device_code)
+        f'b|_{device['brand']},{device['model']},{device['system']},{device['platform']}aid|_wx9f1c2e0bbc10673ct|_{int(time.time() * 1000)}uid|_{rand_str()}oid|_{openId}'.encode()).hex().strip()
+    logging.debug(f'device_code: {device_code}')
     return device_code
 
 
-def get_base_path():
-    # 获取当前程序目录
+def get_resource_path(relative_path):
+    """获取资源文件路径（支持打包和开发）"""
     if getattr(sys, 'frozen', False):
-        # PyInstaller 打包后的路径
-        return sys._MEIPASS
+        base_path = sys._MEIPASS
     else:
-        # 正常开发时的路径
-        return os.path.abspath(".")
+        base_path = os.path.dirname(__file__)  # 脚本所在目录
+    return os.path.join(base_path, relative_path)
 
 
 def get_open_id(user_agent, device, code):
+    logger.info("正在获取open_id...")
     headers = {
         "v": "1.6.39",
         "xweb_xhr": "1",
@@ -379,25 +360,27 @@ def get_open_id(user_agent, device, code):
         "referer": "https://servicewechat.com/wx9f1c2e0bbc10673c/534/page-frame.html",
         'User-Agent': user_agent,
         "devicecode": get_device_code("", device),
-
     }
 
-    url = "https://xcx.xybsyw.com/common/getOpenId.action"
+    # url = requote_uri("https://xcx.xybsyw.com/common/getOpenId.action".strip())
+    url = "https://xcx.xybsyw.com/common/getOpenId.action".strip()
     data = {
         "code": code
     }
-    response = requests.post(url, headers=headers, data=data)
+    logger.info(f"url:{url}, headers: {headers}, data: {data}")
+    response = requests.post(url=url, headers=headers, data=data,allow_redirects=False)
     json = response.json()
 
-    print(response, response.text)
+    logging.info(f'{response} {response.text}')
 
     if json['code'] == '202':
-        raise ValueError('参数code已失效（有效次数为一次），请重新配置！')
+        raise RuntimeError('参数code已失效（有效次数为一次），请重新配置！')
 
     return json['data']
 
 
 def wx_login(user_agent, device, openIdData):
+    logger.info("正在进行微信登录...")
     data = {
         "openId": openIdData['openId'],
         "unionId": openIdData['unionId']
@@ -421,15 +404,62 @@ def wx_login(user_agent, device, openIdData):
     cookies = {
         "JSESSIONID": openIdData['sessionId'],
     }
-    url = "https://xcx.xybsyw.com/login/login!wx.action"
+    url = "https://xcx.xybsyw.com/login/login!wx.action".strip()
 
+    logger.info(f"url:{url}, headers: {headers}, cookies: {cookies}, data: {data}")
     response = requests.post(url, headers=headers, cookies=cookies, data=data)
 
-    print(response, response.text)
+    logging.info(f'{response} {response.text}')
     return response.json()['data']
 
 
-def loginByWechat(config, code):
+def validate_config(config, config_path, parent_key="", skip_keys=None):
+    """
+    递归校验配置是否完整
+    :param config: 配置字典
+    :param config_path: 配置文件路径（用于错误提示）
+    :param parent_key: 父级路径（如 'user.account'）
+    :param skip_keys: 需要跳过的字段（如 ['code']）
+    """
+    if skip_keys is None:
+        skip_keys = ['code']
+
+    if config is None or not isinstance(config, dict) or config == {}:
+        raise RuntimeError(f"请创建配置文件，并重命名为 {config_path} 后再运行")
+
+    for key, value in config.items():
+        current_path = f"{parent_key}.{key}" if parent_key else key
+
+        # 跳过指定字段
+        if key in skip_keys:
+            continue
+
+        # 校验空字符串
+        if value == '':
+            raise RuntimeError(f"请对照教程填写配置 \"{current_path}\"")
+
+        # 递归校验嵌套 dict
+        if isinstance(value, dict):
+            validate_config(value, config_path, current_path, skip_keys)
+
+
+def get_config():
+    config_path = get_config_path()
+    # 读取配置文件
+    config = read_config(config_path)
+    inputConfig = config['input']
+
+    validate_config(inputConfig, config_path)
+
+    return inputConfig
+
+
+def login(config):
+    logging.info('正在执行登录流程')
+    code = config['code']
+    if code is None or code == '':
+        raise RuntimeError('❌ 获取code失败！')
+
     userAgent = config['userAgent']
     device = config['device']
 
@@ -451,70 +481,6 @@ def loginByWechat(config, code):
     }
 
 
-def get_config():
-    config_path = get_config_path()
-    # 读取配置文件
-    config = read_config(config_path)
-    inputConfig = config['input']
-
-    if inputConfig is None or inputConfig == {}:   raise ValueError(f'请创建配置文件，并重命名为{config_path}后再运行')
-
-    for key in inputConfig.keys():
-        # 兼容旧版本配置
-        if inputConfig[key] == '' and key != 'code':
-            raise ValueError(f"请对照教程填写配置\"{key}\"")
-
-    return {**inputConfig}
-
-
-def loginByUsername(config):
-    data = {
-        "picCode": "132",
-        "username": "31312312",
-        "password": "2467d3744600858cc9026d5ac6005305",
-        "openId": "ooru94khFi-GQMq4EnD0SCrrU4HU",
-        "unionId": "oHY-uwXrJTDlphny7GEDohWJG6wA",
-        "model": "microsoft",
-        "brand": "microsoft",
-        "platform": "windows",
-        "system": "Windows Unknown x64",
-        "deviceId": ""
-    }
-    header_token = get_header_token(data)
-    headers = {
-        "v": "1.6.39",
-        "wechat": "1",
-        "xweb_xhr": "1",
-        "content-type": "application/x-www-form-urlencoded",
-        "referer": "https://servicewechat.com/wx9f1c2e0bbc10673c/534/page-frame.html",
-        "n": "content,deviceName,keyWord,blogBody,blogTitle,getType,responsibilities,street,text,reason,searchvalue,key,answers,leaveReason,personRemark,selfAppraisal,imgUrl,wxname,deviceId,avatarTempPath,file,file,model,brand,system,deviceId,platform,code,openId,unionid,clockDeviceToken,clockDevice,address,name,enterpriseEmail,responsibilities,practiceTarget,guardianName,guardianPhone,practiceDays,linkman,enterpriseName,companyIntroduction,accommodationStreet,accommodationLongitude,accommodationLatitude,internshipDestination,specialStatement,enterpriseStreet,insuranceName,insuranceFinancing,policyNumber,overtimeRemark,riskStatement,specialStatement",
-        # "devicecode": "70c44ba290d2d467e2a996c918a5ddf714d72da863919ac9b821cd4d87c19c19401bb9688de31e8dbbb9bc0a42749667b6be857a456e73a8ea7dd64c17149aab806ab3669aa48bada4468845257b08d7913cf64fa2d92b9647cd15fdef79d9efc89a2c5c63c49fd0ad5ffaed8f1fd062d41137fd67a792036ac6f5cf26a4689a94c72eac6ca8ffa5a1fb819692d2fc6ee3c05c7c7ccad4cfed478ae79c8face98f7d008ed9a17583539fbd5f47c5a0ee654dfff03aac5c1537b6fae2c2453b32a2d87115872857d1d7649e3530bc157bf7d7d47ce63a1f7dc67e738f966be89e4ad679772a53550418ae31ecdb8328",
-        # "encryptvalue": "b20f0974689202bf2f1591dceb79a34953b0a979897f17acb4ac5a9975042da6066339a92b6e12fff6de3bb6801faae3ebdb6d449fc60f981e1b50dd706dcd9bc1d699a55558461d5ee744841f2e12aeca78a75d7a2bb6e958389ed870937c2afb299f894f5b9c27b676ae0dc1e1a93670c23f18eaefc6752314b487887cd7da60039d4fe99c4f8fbd2db5b3a3ef54460a098c904a1923a2f3812cc09b5dead9488d4f51ffdfde9702c299ac41d596a4f7903df1c7399107a438d42c4fba9fba1a820d26adbe7875e64c25264d1a4bece257da60a30ced377c5e1e5dfa6d368ca9bd85fbe5c3846cbd9546b21c4de5b35b02490c5459008b0560f77eba5e214697b81a48cf57fe7b5acf89d2e21d3440df720ecba21ca33301e2c3abd03db2e4fe26405c4b47624744d48faaaea37c9a45ba8deb4052ce647bc74144251f9b2bcce139cadc3358ed4a278b92184ac149a032194a9b0a17f0b3ce6fdf3aaa8120f35c443beb92589819dd91e1b44bda51e4f0fc23ed",
-        "m": header_token['m'],
-        "s": header_token['s'],
-        "t": header_token['t'],
-        "user-agent": config['userAgent'],
-    }
-    cookies = {
-        # "JSESSIONID": "7E4D106786F898E028A0459482335C7F"
-    }
-    url = "https://xcx.xybsyw.com/login/login.action"
-
-    response = requests.post(url, headers=headers, cookies=cookies, data=data)
-
-    print(response.text)
-    print(response)
-
-
-def login(config):
-    code = config['code']
-    if code is None or code == '':
-        raise ValueError('请下载软件Reqable，按照教程获取code参数并配置到配置文件中')
-
-    # 微信登录
-    return loginByWechat(config=config, code=code)
-
-
 # 检查文件是否存在
 def check_file_exists(file_path):
     return os.path.isfile(file_path)
@@ -524,128 +490,158 @@ def check_file_exists(file_path):
 def get_config_path():
     config_file_path = 'config.json'
     if not check_file_exists(config_file_path):
-        raise ValueError(f'未找到{config_file_path}文件，请检查或重新下载！')
+        raise RuntimeError(f'未找到{config_file_path}文件，请检查或重新下载！')
     return config_file_path
 
 
-mitm_process = None
+def file_exists(file_path):
+    return os.path.isfile(file_path)
 
 
-def start_mitmproxy():
-    print('🔰🔰🔰开始运行mitmproxy🔰🔰🔰')
-    # bash("mitmweb  --listen-port 13140 --web-port 52000 -s interceptor.py")
-    global mitm_process
-    # web_port = 52000
-    # mitm_process = subprocess.Popen(f'mitmweb  --listen-port 13140 --web-port {web_port} -s getCode.py')
-    # mitm_process = subprocess.Popen(f'mitmdump --p 13140 -s {__file__} --quiet')
-    # mitm_process = subprocess.Popen(f'mitmdump --p 13140 -s {__file__}')
-    # print(f"mitmweb 启动: http://127.0.0.1:{web_port}, listen-port: 13140")
+def start_mitmdump(port):
+    mitmdump_path = 'bin/mitmdump.exe'
+    addons_path = 'bin/get_code.py'
 
-    mitm_process = subprocess.Popen([
-        'mitmdump',
-        '-p', '13140',  # 代理端口
-        '-s', get_base_path() + '\\get_code.py',  # 当前文件作为 addon
-        '--quiet',  # 静默
-        '--set', 'web_port=0'  # 关键：禁用 Web UI，避免 Python 3.13 模板错误
-    ])
+    if is_port_in_use(port):
+        logger.warning(f'端口{port}被占用，正在执行强制查杀')
+        process = get_process_by_port(port)
+        if not process:
+            raise RuntimeError(f"未找到端口{port}的pid")
+        kill_process_tree(process.pid)
+
+    try:
+        process = subprocess.Popen([
+            mitmdump_path,
+            "-p", str(port),
+            "-s", addons_path,
+            "--quiet"
+        ])
+        if not process:
+            raise RuntimeError(f"❌ mitmdump 启动失败: {process}")
+
+        logging.info(
+            f"mitmdump 启动成功！mitmdump_path: {mitmdump_path}, addons_path: {addons_path}, pid: {process.pid}, port: {port}。")
+
+        time.sleep(3)
+
+        return process
+    except Exception as e:
+        raise RuntimeError(f"❌ mitmdump 启动失败: {e}")
 
 
-def stop_mitmproxy():
-    global mitm_process
-    if mitm_process:
-        mitm_process.terminate()
+def stop_mitmproxy(mitm_process, port):
+    if not mitm_process:
+        logging.warning('⚠️ mitmproxy未运行！')
+        return  # 没启动就直接返回
+
+    mitm_process.terminate()
+    try:
         mitm_process.wait(timeout=3)
-        print("mitmweb 已停止")
-        mitm_process = None
+    except subprocess.TimeoutExpired:
+        mitm_process.kill()
+
+    if not is_port_in_use(port):
+        logging.info("停止mitmproxy成功")
+        return
+
+    process = get_process_by_port(port)
+
+    if not process:
+        raise RuntimeError(f"未找到端口{port}的pid")
+
+    kill_process_tree(process.pid)
 
 
 def detect_os():
     os_name = platform.system()
 
     if os_name == "Windows":
-        print("当前操作系统是 Windows")
+        logging.info("当前操作系统是 Windows")
     elif os_name == "Darwin":
-        print("当前操作系统是 macOS")
+        logging.info("当前操作系统是 macOS")
     else:
-        print(f"当前操作系统是 {os_name}")
+        logging.info(f"当前操作系统是 {os_name}")
 
     return os_name
 
 
-def get_download_info(file_name):
-    print('🔰🔰🔰开始下载SSL证书🔰🔰🔰')
-    # 发送 GET 请求下载文件获取 .p12 格式的证书
-    # response = requests.get('http://mitm.it/cert/p12')
-    response = requests.get('http://mitm.it/cert/pem')
-
-    if response.status_code == 200:
-        # 保存文件到本地 .p12 格式
-        with open(file_name, 'wb') as file:
-            file.write(response.content)
-        print(f'SSL证书下载成功，保存为 {file_name}')
-        return file_name
-    else:
-        raise ValueError(f"下载失败，HTTP 状态码：{response.status_code}")
-
-
-def check_cert_installed_windows():
-    print('🔰🔰🔰开始检测ssl证书🔰🔰🔰')
+def check_cert():
     try:
         # 使用 certutil 检查证书是否存在
         stdout = bash('certutil -user -store root | findstr mitmproxy')
 
-        if "mitmproxy" in stdout:
-            print("证书已成功安装！")
-            return True
-        else:
-            print("证书未安装或未正确安装。")
+        if not stdout or "mitmproxy" not in stdout:
             return False
 
+        return True
+
     except Exception as e:
-        print(f"发生其他错误: {e}")
+        logging.error(f"❌ 检测ssl证书时发生其他错误: {e}")
         return False
 
 
+def download_cert(file_name, proxy):
+    # 发送 GET 请求下载文件获取 .p12 格式的证书
+    # response = requests.get('http://mitm.it/cert/p12')
+
+    count = 3
+    for i in range(count):
+        try:
+            response = requests.get('http://mitm.it/cert/pem', proxies={"http": proxy, "https": proxy})
+            logger.info(f"正在下载证书... (第 {i + 1} 次尝试)")
+            if response.status_code == 200:
+                # 自动创建 cert/ 目录
+                os.makedirs(os.path.dirname(file_name), exist_ok=True)
+                # 保存文件到本地 .p12 格式
+                with open(file_name, 'wb') as file:
+                    file.write(response.content)
+                logging.info(f'SSL证书下载成功，保存为 {file_name}')
+                return file_name
+
+            logging.error(f"❌ 下载失败，HTTP 状态码：{response.status_code}")
+        except Exception as e:
+            logging.error(f"❌ 下载失败，HTTP 状态码：{e}")
+
+    raise RuntimeError(f"❌ 下载SSL证书失败！")
+
+
 def install_cert(file_name):
+    logging.info("正在安装证书，若出现弹窗请点击[确定]！")
     # 使用 certutil 安装证书到 Windows 系统中
-    print('🔰🔰🔰正在安装证书🔰🔰🔰')
     try:
         # 安装证书
-        print('❗正在安装抓取https包所需的ssl证书，若出现弹窗请点击确定。')
-
         while True:
             stdout = bash(f'certutil -user -addstore Root "{file_name}"')
-            if not stdout:
-                print("⚠️请点击确定以同意安装ssl证书，否则将无法使用本程序！")
-                continue
-
-            sleep(0.5)
-
             # 再次检测
-            if not check_cert_installed_windows():
-                continue
+            if stdout and '命令成功完成' in stdout and check_cert():
+                logger.info("安装成功")
+                break
 
-            break
-
-        if "命令成功完成" not in stdout:
-            raise ValueError(f"安装证书时发生错误: {stdout}")
+            logging.warning("⚠️请点击[确定]以同意安装ssl证书，否则将无法使用本程序！")
 
     except subprocess.CalledProcessError as e:
-        raise ValueError(f"安装证书时发生错误: {e}")
+        raise RuntimeError(f"❌ 安装证书时发生错误: {e}")
 
 
-def do_cert():
-    file_name = 'mitmproxy-ca-cert.p12'
-
+def do_cert(file_name, process, host, port):
     ### 检查是否安装证书
-    if check_cert_installed_windows():
-        return
+
+    if check_cert():
+        logger.info("CA证书状态正常")
+        return process
+
+    logging.warning("证书未安装")
 
     ### 下载证书
-    get_download_info(file_name)
+    download_cert(file_name, f"{host}:{port}")
 
     ### 安装证书
     install_cert(file_name)
+
+    # ### 关闭 mitmproxy
+    # stop_mitmproxy(process)
+
+    return process
 
 
 def bash(command, encoding='gbk'):
@@ -655,164 +651,190 @@ def bash(command, encoding='gbk'):
     :param command: 要执行的命令（字符串类型）
     :param encoding: 命令输出的编码格式，默认为 'gbk'（Windows 默认编码）
     """
-    print(f"💻执行bash命令：{command}")
+    logging.debug(f"💻 执行bash命令：{command}")
     try:
         # 使用 shell=True 让命令行中包含的引号能够正确处理
-        result = subprocess.run(command, capture_output=True, text=True, check=True, encoding=encoding, shell=True)
-        print(result)
+        result = subprocess.run(command, capture_output=True, text=True, encoding=encoding, shell=True)
+        logging.debug(result)
+
+        if not result:
+            return result
+
         return result.stdout
 
     except subprocess.CalledProcessError as e:
         # 捕获并打印错误
-        print(f"执行命令出错: {e}")
-        print(f"错误输出: {e.stderr}")
+        logging.error(f"执行命令出错: {e}")
+        logging.error(f"错误输出: {e.stderr}")
     except Exception as e:
-        print(f"发生其他错误: {e}")
+        logging.error(f"发生其他错误: {e}")
 
 
-def bash_new(command, encoding='gbk'):
-    """
-    在新的控制台窗口中执行命令。
-
-    :param command: 要执行的命令（字符串类型）
-    :param encoding: 命令输出的编码格式，默认为 'gbk'（Windows 默认编码）
-    """
-    print(f"💻 开启新控制台并执行命令：{command}")
-    try:
-        # 使用 start 命令打开新的命令行窗口并执行传入的命令
-        subprocess.Popen(['start', 'cmd', '/K', command], shell=True, encoding=encoding, text=True)
-
-    except subprocess.CalledProcessError as e:
-        # 捕获并打印错误
-        print(f"执行命令出错: {e}")
-    except Exception as e:
-        print(f"发生其他错误: {e}")
+def reset_proxy(proxy, target_proxy):
+    if proxy and proxy != '' and proxy != target_proxy:
+        set_proxy(proxy)
+    else:
+        bash(
+            r'reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings" /v ProxyEnable /t REG_DWORD /d 0 /f >nul 2>nul')
+        bash(
+            r'reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings" /v ProxyServer /d "" /f >nul 2>nul')
+        logging.info('代理地址已重置')
 
 
-def reset_proxy():
-    bash(
-        r'reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings" /v ProxyEnable /t REG_DWORD /d 0 /f >nul 2>nul')
-    bash(
-        r'reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings" /v ProxyServer /d "" /f >nul 2>nul')
-
-
-def get_code():
-    print('🔰🔰🔰开始获取code，请打开或重新进入小程序。🔰🔰🔰')
-    """
-    循环等待并获取 code（每次收到一个就打印并继续等下一个）。
-    按 Ctrl+C 或程序结束可退出循环。
-    """
-    # 全局队列：addon → 主线程
-
+def get_code(code_file):
     while True:
         try:
             code = None
-            with open("code.json") as f:
-                code = json.load(f)["code"]
+            with open(code_file) as f:
+                code = json.load(f)["code"].strip()
 
             if not code or code == '':
                 time.sleep(1)
                 continue
 
-            print("😍主程序收到 code:", code)
-            os.remove("code.json")
+            logging.info(f"😍获取到 code:\"{code}\"")
+            os.remove(code_file)
             return code
         except:
             time.sleep(1)
-
-
-def set_proxy():
-    print('🔰🔰🔰开始设置系统代理🔰🔰🔰')
-
-    # 获取系统代理
-    before_proxy = get_system_proxy()
-
-    # 修改注册表
-    host = "127.0.0.1"
-    port = 13140
-    if not before_proxy or before_proxy != f"{host}:{port}":
-        bash(
-            r'reg add "HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Internet Settings" /v ProxyEnable /t REG_DWORD /d 1 /f >nul 2>nul')
-        bash(
-            rf'reg add "HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Internet Settings" /v ProxyServer /d "{host}:{port}" /f >nul 2>nul')
-        print('系统代理设置完成！')
-    else:
-        print('✔️系统代理无需设置，已跳过')
 
 
 def get_system_proxy():
     stdout = bash(
         r'reg query "HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Internet Settings" /v ProxyServer')
 
-    if not stdout or stdout == '':
-        print(f"未配置系统代理：{stdout}")
+    if not stdout or stdout.strip() == '':
+        logging.info(f"未配置系统代理：{stdout}")
         return None
 
     match = re.search(r'ProxyServer\s+REG_SZ\s+(.+)', stdout)
     if not match or match == '':
-        print(f"未配置系统代理：{stdout}")
+        logging.info(f"未配置系统代理：{stdout}")
         return None
 
     # 提取代理地址
     proxy = match.group(1)
-    print(f"代理服务器地址: {proxy}")
+    if not proxy or proxy.strip() == '':
+        logging.info(f"未配置系统代理：{stdout}")
+        return None
+    logging.info(f"检测到代理地址: {proxy}")
     return proxy
 
 
-def main():
+def set_proxy(proxy):
+    # 获取系统代理
+    origin_proxy = get_system_proxy()
+
+    # 修改注册表
+    if origin_proxy and origin_proxy == proxy:
+        logging.info('系统代理无需设置，已跳过')
+        return None
+
+    bash(
+        r'reg add "HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Internet Settings" /v ProxyEnable /t REG_DWORD /d 1 /f >nul 2>nul')
+    bash(
+        rf'reg add "HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Internet Settings" /v ProxyServer /d "{proxy}" /f >nul 2>nul')
+
+    logging.info(f'代理地址设置为{proxy}')
+
+    return origin_proxy
+
+
+# ================== 工具函数 ==================
+
+def get_process_by_port(port: int):
+    """Windows 兼容 + 未来兼容：查找监听端口的进程"""
+    for proc in psutil.process_iter(['pid', 'name']):
+        try:
+            # 使用 net_connections()
+            connections = proc.net_connections()
+            for conn in connections:
+                if getattr(conn.laddr, 'port', None) == port and conn.status == psutil.CONN_LISTEN:
+                    return proc
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess, psutil.Error):
+            continue
+    return None
+
+
+def is_port_in_use(port: int) -> bool:
+    return get_process_by_port(port) is not None
+
+
+def kill_process_tree(pid: int):
+    """Windows 强制杀进程树"""
     try:
-        ### 设置系统代理
-        set_proxy()
+        os.system(f"taskkill /PID {pid} /F /T >nul 2>&1")
+        logging.info(f"已强制终止进程树: {pid}")
+    except:
+        pass
 
-        ### 开启 mitmproxy
-        threading.Thread(target=start_mitmproxy).start()
-        sleep(1)
 
-        ### 操作ssl证书
-        do_cert()
+def restart_mitmproxy(process, port):
+    """热重启：stop + start"""
+    stop_mitmproxy(process, port)
+    time.sleep(1)  # 确保 TIME_WAIT 清理
+    return start_mitmdump(port)
 
-        ### 关闭 mitmproxy
-        stop_mitmproxy()
 
-        ### 开启 mitmproxy
-        threading.Thread(target=start_mitmproxy).start()
-        sleep(1)
+def main():
+    target_host = "127.0.0.1"
+    target_port = 13140
+    target_proxy = f"{target_host}:{target_port}"
+    origin_proxy = None
 
-        ### 开始抓包获取code
-        code = get_code()
-
-        ### 关闭 mitmproxy
-        stop_mitmproxy()
-
-        # 重置代理
-        reset_proxy()
-
+    try:
         ### 获取配置参数
         config = get_config()
+
+        ### 设置系统代理
+        logging.info('🔰🔰🔰 正在设置系统代理 🔰🔰🔰')
+        origin_proxy = set_proxy(target_proxy)
+
+        ### 启动 mitmproxy
+        logging.info('🔰🔰🔰 正在启动 mitmdump 🔰🔰🔰')
+        process = start_mitmdump(target_port)
+
+        ### 操作ssl证书
+        logging.info('🔰🔰🔰 正在检测CA证书 🔰🔰🔰')
+        process = do_cert("cert/mitmproxy-ca-cert.p12", process, target_host, target_port)
+
+        ### 重启 mitmproxy
+        logging.info("🔰🔰🔰 正在重启 mitmdump 🔰🔰🔰")
+        process = restart_mitmproxy(process, target_port)
+        if not process:
+            raise RuntimeError("mitmdump 重启失败")
+
+        ### 正在获取code
+        logging.info('🔰🔰🔰 正在获取code，请打开或重新进入小程序。 🔰🔰🔰')
+        code = get_code("bin/code.json")
+
+        ### 停止 mitmproxy
+        logging.info('🔰🔰🔰 正在停止mitmproxy 🔰🔰🔰')
+        stop_mitmproxy(process, target_port)
+
+        # 重置代理
+        logging.info('🔰🔰🔰 正在重置代理地址 🔰🔰🔰')
+        reset_proxy(origin_proxy, target_proxy)
+
         config['code'] = code
 
-        ### 登录
-        args = login(config=config)
-
-        ### 调用签到接口
-        sign_in(config=config, args=args)
+        ### 开始执行签到流程
+        logger.info("🔰🔰🔰 开始执行签到流程 🔰🔰🔰")
+        do_sign_in(config=config)
 
         ### 显示付款码
         show_qrcode()
 
-        input(Fore.YELLOW + "感谢您的支持，程序已结束，按回车键退出...")
-
-    except ValueError as ve:
-        print('\n\n---------------------------------------------------------')
-        print(Fore.LIGHTRED_EX + str(ve))
+    except RuntimeError as ve:
+        logging.error(Fore.LIGHTRED_EX + str(ve))
     except Exception as e:
-        print(f": {e}")
-        print('\n\n---------------------------------------------------------')
-        print(Fore.RED + f"系统异常: {str(e)}")
-    # finally:
-    # 重置代理
-    # reset_proxy()
+        logging.error(f": {e}")
+        logging.error(Fore.RED + f"系统异常: {str(e)}")
+    finally:
+        # 重置代理
+        reset_proxy(origin_proxy, target_proxy)
 
 
 if __name__ == '__main__':
     main()
+    input(Fore.YELLOW + "程序已结束，按回车键退出...")
