@@ -1,0 +1,7 @@
+colorama==0.4.6
+colorlog==6.10.1
+gmssl==3.2.2
+mitmproxy==12.2.0
+psutil==7.1.0
+qrcode==8.2
+Requests==2.32.5

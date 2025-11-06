@@ -1,17 +1,17 @@
 {
-    "input": {
-        "location": {
-            "longitude": "",
-            "latitude": ""
-        },
-        "device": {
-            "brand": "OnePlus",
-            "model": "PHP110",
-            "system": "Android 15",
-            "platform": "android",
-            "SDKVersion": "3.10.3",
-            "version": "8.0.30"
-        },
-        "userAgent": "Mozilla/5.0 (Linux; Android 15; PHP110 Build/AP3A.240617.008; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/138.0.7204.180 Mobile Safari/537.36 XWEB/1380243 MMWEBSDK/20230805 MMWEBID/9843 MicroMessenger/8.0.42.2460(0x28002A35) WeChat/arm64 Weixin NetType/4G Language/zh_CN ABI/arm64 MiniProgramEnv/android"
-    }
+  "input": {
+    "location": {
+      "longitude": "",
+      "latitude": ""
+    },
+    "device": {
+      "brand": "OnePlus",
+      "model": "PHP110",
+      "system": "Android 15",
+      "platform": "android",
+      "SDKVersion": "3.10.3",
+      "version": "8.0.30"
+    },
+    "userAgent": "Mozilla/5.0 (Linux; Android 15; PHP110 Build/AP3A.240617.008; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/138.0.7204.180 Mobile Safari/537.36 XWEB/1380243 MMWEBSDK/20230805 MMWEBID/9843 MicroMessenger/8.0.42.2460(0x28002A35) WeChat/arm64 Weixin NetType/4G Language/zh_CN ABI/arm64 MiniProgramEnv/android"
+  }
 }
