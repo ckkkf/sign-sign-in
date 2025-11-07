@@ -12,7 +12,7 @@ import sys
 import time
 import urllib
 import urllib.parse
-from requests.utils import requote_uri
+
 import psutil
 import qrcode
 import requests
@@ -23,10 +23,10 @@ from gmssl import sm2
 # ================== 配置区 ==================
 ### 日志配置
 logger = logging.getLogger()
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.DEBUG)
 logger.handlers.clear()  # 清空已存在的 handler（避免重复）
 console_handler = logging.StreamHandler(stream=sys.stdout)  # 创建一个输出到控制台的 handler
-formatter = ColoredFormatter(  # 设置彩色格式
+console_handler.setFormatter(ColoredFormatter(  # 设置彩色格式
     "%(log_color)s%(asctime)s - %(levelname)s - %(message)s",
     datefmt=None,
     log_colors={
@@ -36,8 +36,7 @@ formatter = ColoredFormatter(  # 设置彩色格式
         'ERROR': 'light_red',
         'CRITICAL': 'bold_red',
     }
-)
-console_handler.setFormatter(formatter)
+))
 logger.addHandler(console_handler)
 
 
@@ -179,7 +178,30 @@ def show_qrcode():
     generate_qrcode(url_zfb, '支付宝👇')
 
 
-def do_sign_in(config):
+def get_sign_opt():
+    sign_opt_map = {
+        "0": {
+            "action": "签到",
+            "code": "2"
+        },
+        "1": {
+            "action": "签退",
+            "code": "1"
+        }
+    }
+
+    while True:
+        logger.info(f"请选择操作（0：签到，1：签退）：")
+        input_str = input()
+        if input_str in sign_opt_map:
+            opt = sign_opt_map[input_str]
+            logger.info(f"你选择了 {opt['code']}:{opt['action']}")
+            return opt
+
+        logger.warning("输入无效，请重新选择！")
+
+
+def do_sign(config):
     ### 登录
     args = login(config=config)
 
@@ -196,23 +218,20 @@ def do_sign_in(config):
     ### 调用高德地图逆解析
     geo = regeo(userAgent=userAgent, location=location)
 
-    ### 调用签到接口
-    msg = sign_in(args, device, geo, location, traineeId, userAgent)
+    # 获取用户操作
+    opt = get_sign_opt()
 
-    if msg == 'success':
-        logging.info(f'✅ 签到成功！！！签到成功！！！签到成功！！！')
-    elif msg == '已经签到':
-        logging.info(f'✅ 已经签到过了，明天再来吧！')
-    else:
-        raise RuntimeError('签到失败，请查看日志或联系开发者')
+    ### 调用签到签退接口
+    sign_in_or_out(args, device, geo, location, traineeId, userAgent, opt)
 
 
-def sign_in(args, device, geo, location, traineeId, userAgent):
+def sign_in_or_out(args, device, geo, location, traineeId, userAgent, opt):
     logging.info('正在调用签到接口进行签到...')
     url = "https://xcx.xybsyw.com/student/clock/Post.action".strip()
     data = {
         'punchInStatus': "0",
-        'clockStatus': "2",
+        # 2：签到，1：签退
+        'clockStatus': str(opt['code']),
         'traineeId': traineeId,
         'adcode': geo['addressComponent']['adcode'],
         'model': device['model'],
@@ -242,12 +261,27 @@ def sign_in(args, device, geo, location, traineeId, userAgent):
     cookies = {
         "JSESSIONID": args['sessionId']
     }
+
     logger.info(f"url:{url}, headers: {headers}, cookies: {cookies}, data: {data}")
+
     response = requests.post(url, data=data, headers=headers, cookies=cookies)
+
     logging.info(f'{response} {response.text}')
     json = response.json()
     msg = json['msg']
-    return msg
+    json_code = json['code']
+    if json_code == "200":
+        if msg == 'success':
+            logging.info(f'✅ {opt['action']}成功！不要忘了为项目点上star，以便更新新内容哦！')
+        elif msg == '已经签到':
+            logging.info(f'✅ 已经{opt['action']}过了，明天再来吧！')
+    elif json_code == "403":
+        if msg == "当前实习任务无需下班打卡":
+            logging.warning(f'{msg}')
+    elif json_code == "202":
+        raise RuntimeError("配置错误，请重新下载config.json模板文件，使用ai重新模拟您设备的device和userAgent参数，并重新填写。")
+    else:
+        raise RuntimeError('签到失败，请查看日志或联系开发者')
 
 
 def get_header_token(e):
@@ -368,7 +402,7 @@ def get_open_id(user_agent, device, code):
         "code": code
     }
     logger.info(f"url:{url}, headers: {headers}, data: {data}")
-    response = requests.post(url=url, headers=headers, data=data,allow_redirects=False)
+    response = requests.post(url=url, headers=headers, data=data, allow_redirects=False)
     json = response.json()
 
     logging.info(f'{response} {response.text}')
@@ -641,6 +675,12 @@ def do_cert(file_name, process, host, port):
     # ### 关闭 mitmproxy
     # stop_mitmproxy(process)
 
+    ### 重启 mitmproxy
+    logging.info("🔰🔰🔰 正在重启 mitmdump 🔰🔰🔰")
+    process = restart_mitmproxy(process, port)
+    if not process:
+        raise RuntimeError("mitmdump 重启失败")
+
     return process
 
 
@@ -798,12 +838,6 @@ def main():
         logging.info('🔰🔰🔰 正在检测CA证书 🔰🔰🔰')
         process = do_cert("cert/mitmproxy-ca-cert.p12", process, target_host, target_port)
 
-        ### 重启 mitmproxy
-        logging.info("🔰🔰🔰 正在重启 mitmdump 🔰🔰🔰")
-        process = restart_mitmproxy(process, target_port)
-        if not process:
-            raise RuntimeError("mitmdump 重启失败")
-
         ### 正在获取code
         logging.info('🔰🔰🔰 正在获取code，请打开或重新进入小程序。 🔰🔰🔰')
         code = get_code("bin/code.json")
@@ -818,9 +852,9 @@ def main():
 
         config['code'] = code
 
-        ### 开始执行签到流程
+        ### 开始执行签到签退流程
         logger.info("🔰🔰🔰 开始执行签到流程 🔰🔰🔰")
-        do_sign_in(config=config)
+        do_sign(config=config)
 
         ### 显示付款码
         show_qrcode()
