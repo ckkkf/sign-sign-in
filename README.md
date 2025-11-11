@@ -32,7 +32,7 @@
 
 ## 使用教程 之 新版软件启动方式（v1.0.4及以上）
 
-1. 进入下载页面：[点我下载最新版本](https://gitee.com/ckkk524334/sign-sign-in/releases)：
+1. 进入下载页面：[点我下载最新版本](https://gitee.com/ckkk524334/sign-sign-in/releases/latest)：
 
    ![76209221455](img/download.png)
 ​
