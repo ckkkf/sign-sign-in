@@ -9,8 +9,7 @@ from PySide6.QtCore import QThread, Signal
 
 from app.apis.sybsyw import login, get_plan, regeo, photo_sign_in_or_out
 from app.sign_flow import simple_sign_in_or_out
-from app.utils.commands import get_system_proxy, set_proxy, check_port_listening, reset_proxy, kill_process_tree, \
-    get_process_by_port, check_cert, bash
+from app.utils.commands import get_system_proxy, set_proxy, check_port_listening, reset_proxy, check_cert, bash
 from app.utils.files import read_and_varify_config, check_img
 
 
@@ -89,15 +88,6 @@ class SignTaskThread(QThread):
     def check_stop(self):
         if self.isInterruptionRequested(): raise RuntimeError("用户停止执行")
 
-    def start_mitm(self):
-        path = 'bin/mitmdump.exe'
-        script = 'bin/get_code.py'
-        if check_port_listening("127.0.0.1", 13140, 0.1):
-            proc = get_process_by_port(13140)
-            if proc: kill_process_tree(proc.pid)
-        subprocess.Popen([path, "-p", "13140", "-s", script, "--quiet"], creationflags=subprocess.CREATE_NO_WINDOW)
-        time.sleep(2)
-
     def wait_code(self, fpath, proxy):
         last = time.time()
         for _ in range(1200):
@@ -140,7 +130,7 @@ class SignTaskThread(QThread):
     def do_cert(self, process, host, port):
         ### 检查是否安装证书
         if check_cert():
-            logger.info("CA证书状态正常")
+            logging.info("CA证书状态正常")
             return process
 
         logging.warning("⚠️ 证书未安装")
@@ -170,7 +160,7 @@ class SignTaskThread(QThread):
         for i in range(count):
             try:
                 response = requests.get('http://mitm.it/cert/pem', proxies={"http": proxy, "https": proxy})
-                logger.info(f"正在下载证书... (第 {i + 1} 次尝试)")
+                logging.info(f"正在下载证书... (第 {i + 1} 次尝试)")
                 if response.status_code == 200:
                     # 自动创建 cert/ 目录
                     os.makedirs(os.path.dirname(file_name), exist_ok=True)
@@ -195,7 +185,7 @@ class SignTaskThread(QThread):
                 stdout = bash(f'certutil -user -addstore Root "{file_name}"')
                 # 再次检测
                 if stdout and '命令成功完成' in stdout and check_cert():
-                    logger.info("安装成功")
+                    logging.info("安装成功")
                     break
 
                 logging.warning("⚠️请点击[确定]以同意安装ssl证书，否则将无法使用本程序！")

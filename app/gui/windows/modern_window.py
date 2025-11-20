@@ -9,7 +9,7 @@ from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import QMainWindow, QWidget, QHBoxLayout, QFrame, QVBoxLayout, QLabel, QGridLayout, QPushButton, \
     QButtonGroup, QRadioButton, QProgressBar, QSizePolicy, QMessageBox, QApplication, QTextEdit
 
-from app.config.app import QQ_GROUP, VERSION
+from app.config.common import QQ_GROUP, VERSION, CONFIG_FILE
 from app.gui.components.log_viewer import QTextEditLogger
 from app.gui.dialogs.dialogs.config_dialog import ConfigDialog
 from app.gui.dialogs.sponsor_dialog import SponsorSubmitDialog
@@ -320,8 +320,8 @@ class ModernWindow(QMainWindow):
             self.lbls['cert'].setText("⚠️ 证书: <span style='color:#F4D03F'>异常</span>")
 
     def open_config(self):
-        if not os.path.exists('config.json'): return QMessageBox.warning(self, "Error", "config.json文件不存在")
-        ConfigDialog('config.json', self).exec()
+        if not os.path.exists(CONFIG_FILE): return QMessageBox.warning(self, "Error", "config.json文件不存在")
+        ConfigDialog(CONFIG_FILE, self).exec()
         return None
 
     def show_support(self):
@@ -357,7 +357,7 @@ class ModernWindow(QMainWindow):
             elif checked_id == 2:
                 opt = {"action": "拍照签到", "image": "bin/photo.jpg"}
 
-            self.worker = SignTaskThread('bin/config.json', opt)
+            self.worker = SignTaskThread(CONFIG_FILE, opt)
             self.worker.finished_signal.connect(self.on_done)
             self.worker.start()
         else:
