@@ -1,1 +1,0 @@
-pyinstaller --onefile sign_in.py

@@ -23,3 +23,9 @@ bin-release/
 /.idea/sign-sign-in.iml
 /.idea/vcs.xml
 /.idea/.gitignore
+
+*.iml
+test/
+build/
+dist/
+*.spec

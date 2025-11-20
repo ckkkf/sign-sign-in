@@ -1,0 +1,148 @@
+import json
+import os
+
+from PySide6.QtCore import QUrl
+from PySide6.QtGui import QDesktopServices
+from PySide6.QtWidgets import QDialog, QVBoxLayout, QScrollArea, QWidget, QFormLayout, QHBoxLayout, QLabel, QPushButton, \
+    QSpacerItem, QMessageBox, QLineEdit
+
+from app.utils.files import read_and_varify_config, save_json_file
+
+
+class ConfigDialog(QDialog):
+    def __init__(self, config_path, parent=None):
+        super().__init__(parent)
+        self.config_path = config_path
+        self.setWindowTitle("修改配置")
+        self.resize(600, 500)
+        self.original_data = read_and_varify_config(config_path)
+        self.current_data = json.loads(json.dumps(self.original_data))
+        self.inputs = {}
+        self.is_modified = False
+        self.setup_style()
+        self.setup_ui()
+
+    def setup_style(self):
+        self.setStyleSheet("""
+            QDialog { background: #1E1E1E; color: white; }
+            QLabel { color: #BBB; font-weight: bold; }
+            QLineEdit { background: #111; border: 1px solid #444; color: #DDD; padding: 6px; border-radius: 4px; }
+            QLineEdit:focus { border: 1px solid #007ACC; }
+            QPushButton { background: #333; color: #DDD; padding: 6px; border: 1px solid #555; border-radius: 4px; }
+            QPushButton:hover { background: #444; border-color: #007ACC; color: white; }
+            #LinkBtn { color: #58D68D; border: none; background: transparent; text-align: left; }
+            #LinkBtn:hover { text-decoration: underline; }
+        """)
+
+    def setup_ui(self):
+        layout = QVBoxLayout(self)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        content = QWidget()
+        form = QFormLayout(content)
+        form.setSpacing(10)
+
+        input_conf = self.current_data.get('input', {})
+        loc = input_conf.get('location', {})
+        dev = input_conf.get('device', {})
+
+        # ===========================================================
+        # 位置（标题 + 按钮 一行）
+        # ===========================================================
+        pos_row = QHBoxLayout()
+        lbl_pos = QLabel("位置")
+        lbl_pos.setStyleSheet("color: #007ACC; font-size: 11pt; margin-top: 10px; font-weight: bold;")
+
+        btn_loc = QPushButton("📍 获取坐标")
+        btn_loc.setObjectName("LinkBtn")
+        btn_loc.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://lbs.amap.com/tools/picker")))
+
+        pos_row.addWidget(lbl_pos)
+        pos_row.addStretch()
+        pos_row.addWidget(btn_loc)
+
+        form.addRow(pos_row)
+
+        # 经纬度
+        self.add_row(form, "经度", "lng", loc.get('longitude', ''))
+        self.add_row(form, "纬度", "lat", loc.get('latitude', ''))
+
+        # 区块底部空白
+        form.addItem(QSpacerItem(0, 15))
+
+        # ===========================================================
+        # 设备（标题 + 按钮 一行）
+        # ===========================================================
+        dev_row = QHBoxLayout()
+        lbl_dev = QLabel("设备")
+        lbl_dev.setStyleSheet("color: #007ACC; font-size: 11pt; margin-top: 10px; font-weight: bold;")
+
+        btn_ai = QPushButton("🤖 询问 AI")
+        btn_ai.setObjectName("LinkBtn")
+        btn_ai.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://www.doubao.com/chat/")))
+
+        dev_row.addWidget(lbl_dev)
+        dev_row.addStretch()
+        dev_row.addWidget(btn_ai)
+
+        form.addRow(dev_row)
+
+        # 设备参数
+        self.add_row(form, "品牌", "brand", dev.get('brand', ''))
+        self.add_row(form, "型号", "model", dev.get('model', ''))
+        self.add_row(form, "系统", "system", dev.get('system', ''))
+        self.add_row(form, "平台", "platform", dev.get('platform', ''))
+        self.add_row(form, "User-Agent", "userAgent", input_conf.get('userAgent', ''))
+
+        # 设备区块底部空白
+        form.addItem(QSpacerItem(0, 15))
+
+        # ===========================================================
+        # Scroll + 底部按钮区
+        # ===========================================================
+        scroll.setWidget(content)
+        layout.addWidget(scroll)
+
+        bot_layout = QHBoxLayout()
+        btn_open = QPushButton("📄 打开配置文件")
+        btn_open.clicked.connect(lambda: os.startfile(os.path.abspath(self.config_path)))
+        bot_layout.addWidget(btn_open)
+
+        btn_save = QPushButton("💾 保存并应用")
+        btn_save.setStyleSheet("background: #007ACC; font-weight: bold; border: none;")
+        btn_save.clicked.connect(self.save_config)
+        bot_layout.addWidget(btn_save)
+
+        layout.addLayout(bot_layout)
+
+    def add_sec(self, layout, title):
+        l = QLabel(title)
+        l.setStyleSheet("color: #007ACC; font-size: 11pt; margin-top: 10px;")
+        layout.addRow(l)
+
+    def add_row(self, layout, label, key, value):
+        le = QLineEdit(str(value))
+        le.textChanged.connect(lambda: setattr(self, 'is_modified', True))
+        layout.addRow(label, le)
+        self.inputs[key] = le
+
+    def save_config(self):
+        try:
+            inp = self.current_data['input']
+            inp['userAgent'] = self.inputs['userAgent'].text()
+            inp['location'] = {'longitude': self.inputs['lng'].text(), 'latitude': self.inputs['lat'].text()}
+            inp['device'] = {'brand': self.inputs['brand'].text(), 'model': self.inputs['model'].text(),
+                'system': self.inputs['system'].text(), 'platform': self.inputs['platform'].text()}
+            save_json_file(self.config_path, self.current_data)
+            self.is_modified = False
+            QMessageBox.information(self, "成功", "配置已保存")
+            self.accept()
+        except Exception as e:
+            QMessageBox.critical(self, "错误", str(e))
+
+    def closeEvent(self, e):
+        if self.is_modified:
+            if QMessageBox.question(self, "配置未保存", "是否保存配置的更改？如果不保存，你的更改将丢失",
+                                    QMessageBox.Yes | QMessageBox.No) == QMessageBox.Yes:
+                self.save_config()
+        e.accept()
