@@ -7,10 +7,11 @@ import time
 import requests
 from PySide6.QtCore import QThread, Signal
 
-from app.apis.sybsyw import login, get_plan, regeo, photo_sign_in_or_out
-from app.sign_flow import simple_sign_in_or_out
-from app.utils.commands import get_system_proxy, set_proxy, check_port_listening, reset_proxy, check_cert, bash
-from app.utils.files import read_and_varify_config, check_img
+from app.apis.sybsyw import login, get_plan, regeo, photo_sign_in_or_out, simple_sign_in_or_out
+from app.config.common import CODE_FILE, CERT_FILE, MITM_PROXY, MITMDUMP_FILE
+from app.utils.commands import get_system_proxy, set_proxy, check_port_listening, reset_proxy, check_cert, bash, \
+    get_process_by_port, kill_process_tree
+from app.utils.files import read_config, check_img
 
 
 class SignTaskThread(QThread):
@@ -22,10 +23,11 @@ class SignTaskThread(QThread):
         self.sign_option = sign_option
         self.mitm_process = None
         self.origin_proxy = None
-        self.target_port = 13140
-        self.target_host = "127.0.0.1"
-        self.code_file = "bin/code.json"
-        self.cert_file = "cert/mitmproxy-ca-cert.p12"
+        proxy_split = MITM_PROXY.split(':')
+        self.target_host = proxy_split[0]
+        self.target_port = proxy_split[1]
+        self.code_file = CODE_FILE
+        self.cert_file = CERT_FILE
 
     def run(self):
         try:
@@ -33,7 +35,7 @@ class SignTaskThread(QThread):
 
             ### 获取配置文件相关
             # 读取并校验配置文件
-            config = read_and_varify_config(self.config_file)
+            config = read_config(self.config_file)
             # 校验其他文件
             if self.sign_option['action'] == "拍照签到":
                 check_img()
@@ -88,6 +90,13 @@ class SignTaskThread(QThread):
     def check_stop(self):
         if self.isInterruptionRequested(): raise RuntimeError("用户停止执行")
 
+    def start_mitm(self):
+        if check_port_listening(self.target_host, self.target_port, 0.1):
+            proc = get_process_by_port(self.target_port)
+            if proc: kill_process_tree(proc.pid)
+        subprocess.Popen([MITMDUMP_FILE, "-p", self.target_port, "-s", CODE_FILE, "--quiet"], creationflags=subprocess.CREATE_NO_WINDOW)
+        time.sleep(1)
+
     def wait_code(self, fpath, proxy):
         last = time.time()
         for _ in range(1200):
@@ -127,16 +136,16 @@ class SignTaskThread(QThread):
             photo_sign_in_or_out(args=args, config=config, geo=geo, traineeId=plan_data[0]['dateList'][0]['traineeId'],
                                  opt=self.sign_option)
 
-    def do_cert(self, process, host, port):
+    def do_cert(self):
         ### 检查是否安装证书
         if check_cert():
             logging.info("CA证书状态正常")
-            return process
+            return
 
         logging.warning("⚠️ 证书未安装")
 
         ### 下载证书
-        self.download_cert(self.cert_file, f"{host}:{port}")
+        self.download_cert(self.cert_file, MITM_PROXY)
 
         ### 安装证书
         self.install_cert(self.cert_file)
@@ -146,11 +155,7 @@ class SignTaskThread(QThread):
 
         ### 重启 mitmproxy
         logging.info("🔰🔰🔰 正在重启 mitmdump 🔰🔰🔰")
-        process = self.restart_mitmproxy(process, port)
-        if not process:
-            raise RuntimeError("mitmdump 重启失败")
-
-        return process
+        self.start_mitm()
 
     def download_cert(self, file_name, proxy):
         # 发送 GET 请求下载文件获取 .p12 格式的证书

@@ -1,10 +1,18 @@
+import hashlib
+import random
+import re
+import time
+import urllib.parse
+
 from gmssl import sm2
+
+from app.utils.common import rand_str
+
 
 def get_device_code(openId, device):
     sm2_crypt = sm2.CryptSM2(
         public_key='04a3c35de075a2e86f28d52a41989a08e740a82fb96d43d9af8a5509e0a4e837ecb384c44fe1ee95f601ef36f3c892214d45c9b3f75b57556466876ad6052f0f1f',
         private_key=None, mode=1)
-    from utils.common import rand_str
     return sm2_crypt.encrypt(
         f'b|_{device["brand"]},{device["model"]},{device["system"]},{device["platform"]}aid|_wx9f1c2e0bbc10673ct|_{int(time.time() * 1000)}uid|_{rand_str()}oid|_{openId}'.encode()).hex().strip()
 

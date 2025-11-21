@@ -1,3 +1,6 @@
+from PySide6.QtWidgets import QMessageBox, QDialog, QVBoxLayout, QComboBox, QLabel, QLineEdit, QTextEdit, QPushButton
+
+
 class FeedbackDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)

@@ -11,6 +11,9 @@ QQ_GROUP = "859098272"
 # 后端接口
 API_URL = "http://httpbin.org/post"
 
+# 代理端口
+MITM_PROXY = "127.0.0.1:13140"
+
 # 项目根目录（openSource）
 BASE_DIR = get_base_dir()
 
@@ -25,6 +28,12 @@ MITMDUMP_FILE = os.path.join(RES_DIR, "mitm", "mitmdump.exe")
 
 # 配置文件目录（你如果想放 resources/config/ 也可以）
 CONFIG_FILE = os.path.join(RES_DIR, "config", "config.json")
+
+# code文件目录
+CODE_FILE = os.path.join(RES_DIR, "config", "code.json")
+
+# code文件目录
+CERT_FILE = os.path.join(RES_DIR, "cert", "mitmproxy-ca-cert.p12")
 
 # mitm addons
 ADDONS_DIR = os.path.join(APP_DIR, "mitm", "addons")

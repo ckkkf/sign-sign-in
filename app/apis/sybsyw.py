@@ -1,3 +1,12 @@
+import logging
+
+import requests
+
+from app.utils.common import get_timestamp
+from app.utils.files import get_img_file
+from app.utils.params import get_header_token, get_device_code
+
+
 def regeo(userAgent, location):
     logging.info('正在调用高德地图解析经纬度...')
     url = "https://restapi.amap.com/v3/geocode/regeo"
@@ -59,7 +68,7 @@ def get_plan(userAgent, args):
 
 
 def get_open_id(config, code):
-    logger.info("正在获取open_id...")
+    logging.info("正在获取open_id...")
     headers = {
         "v": "1.6.39",
         "xweb_xhr": "1",
@@ -80,7 +89,7 @@ def get_open_id(config, code):
 
 
 def wx_login(config, openIdData):
-    logger.info("正在进行微信登录...")
+    logging.info("正在进行微信登录...")
     data = {
         "openId": openIdData['openId'],
         "unionId": openIdData['unionId']
@@ -174,7 +183,7 @@ def watermark_info(args, config, traineeId):
 
     response = requests.post(url, headers=headers, cookies=cookies, data=data)
 
-    logger.info(f"{response} {response.text}")
+    logging.info(f"{response} {response.text}")
 
 
 def commonPostPolicy(args, config):
@@ -208,7 +217,7 @@ def commonPostPolicy(args, config):
 
     response = requests.post(url, headers=headers, cookies=cookies, data=data)
 
-    logger.info(f"{response} {response.text}")
+    logging.info(f"{response} {response.text}")
 
     if response.status_code != 200 or response.json()['code'] != "200":
         raise RuntimeError(f"commonPostPolicy请求异常, {response} {response.text}")
@@ -247,7 +256,7 @@ def aliyun_OSS(files, timestamp, policyData):
     }
 
     key = f"{policyData['dir']}/{timestamp}.jpg"
-    logger.info(f"key: {key}")
+    logging.info(f"key: {key}")
 
     data = {
         "key": key,
@@ -262,7 +271,7 @@ def aliyun_OSS(files, timestamp, policyData):
 
     response = requests.post(url, data=data, files=files, headers=headers)
 
-    logger.info(f"{response} {response.text}")
+    logging.info(f"{response} {response.text}")
 
     if response.status_code != 200:
         raise RuntimeError(f"aliyun_OSS请求异常, {response} {response.text}")
@@ -308,7 +317,7 @@ def post_new(args, config, traineeId, geo, imgUrl):
 
     response = requests.post(url, headers=headers, cookies=cookies, data=data)
 
-    logger.info(f"{response} {response.text}")
+    logging.info(f"{response} {response.text}")
 
     if response.status_code != 200 or response.json()['code'] != "200":
         raise RuntimeError(f"post_new请求异常, {response} {response.text}")
@@ -338,7 +347,56 @@ def deliver_value(args, config, traineeId):
     cookies = {"JSESSIONID": args['sessionId']}
 
     response = requests.post(url, headers=headers, cookies=cookies, data=data)
-    logger.info(f"{response} {response.text}")
+    logging.info(f"{response} {response.text}")
 
     if response.status_code != 200 or response.json()['code'] != "200":
         raise RuntimeError(f"deliver_value请求异常, {response} {response.text}")
+
+
+def simple_sign_in_or_out(args, geo, traineeId, config, opt):
+    logging.info(f'正在调用接口进行: {opt["action"]}...')
+    url = "https://xcx.xybsyw.com/student/clock/Post.action"
+    device = config['device']
+    data = {'punchInStatus': "0",  # 2：普通签到，1：普通签退
+            'clockStatus': str(opt['code']), 'traineeId': str(traineeId),
+            'adcode': geo['addressComponent']['adcode'],
+            'model': device['model'], 'brand': device['brand'], 'platform': device['platform'],
+            'system': device['system'], 'openId': args['openId'], 'unionId': args['unionId'],
+            'lng': config['location']['longitude'], 'lat': config['location']['latitude'],
+            'address': geo['formatted_address'], 'deviceName': device['model'], }
+    header_token = get_header_token(data)
+    headers = {'v': "1.6.39", 'wechat': "1",
+               'Referer': "https://servicewechat.com/wx9f1c2e0bbc10673c/534/page-frame.html",
+               'User-Agent': config['userAgent'],
+               'n': "content,deviceName,keyWord,blogBody,blogTitle,getType,responsibilities,street,text,reason,searchvalue,key,answers,leaveReason,personRemark,selfAppraisal,imgUrl,wxname,deviceId,avatarTempPath,file,file,model,brand,system,deviceId,platform,code,openId,unionid,clockDeviceToken,clockDevice,address,name,enterpriseEmail,responsibilities,practiceTarget,guardianName,guardianPhone,practiceDays,linkman,enterpriseName,companyIntroduction,accommodationStreet,accommodationLongitude,accommodationLatitude,internshipDestination,specialStatement,enterpriseStreet,insuranceName,insuranceFinancing,policyNumber,overtimeRemark,riskStatement,specialStatement",
+               'm': header_token['m'], 's': header_token['s'], 't': header_token['t'],
+               'encryptvalue': args['encryptValue'],
+               'devicecode': get_device_code(openId=args['openId'], device=config['device']), }
+    cookies = {"JSESSIONID": args['sessionId']}
+
+    try:
+        response = requests.post(url, data=data, headers=headers, cookies=cookies, timeout=5)
+        logging.info(f'📡 服务器响应: {response.text}')
+        json_resp = response.json()
+        msg = json_resp['msg']
+        code = json_resp['code']
+
+        info = ''
+
+        if code == "200":
+            if msg == 'success':
+                info = f'✅ {opt["action"]}成功！'
+                logging.info(info)
+            elif msg == '已经签到':
+                info = f'✅ 已经{opt["action"]}过了。'
+                logging.info(info)
+        elif code == "403":
+            logging.warning(f'⚠️ {msg}')
+        elif code == "202":
+            raise RuntimeError(f"配置错误，请检查device和userAgent参数 (Code 202): {msg}")
+        else:
+            raise RuntimeError(f'操作失败: {msg}')
+
+        return info
+    except Exception as e:
+        raise RuntimeError(f"签到请求异常: {e}")

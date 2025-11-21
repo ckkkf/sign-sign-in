@@ -25,25 +25,35 @@ class SponsorSubmitDialog(QDialog):
         lbl_desc.setStyleSheet("color: #70a1ff; margin-bottom: 5px;")
         layout.addWidget(lbl_desc)
 
-        # 二维码区域
+        import segno
+        import io
+
         qr_box = QHBoxLayout()
-        for name, color, url in [("微信", "#09BB07", "wxp://f2f01EiRAzk-cwnkJtbu5GMpj0Juf_dTWQr1DiUn5r25wlM"),
-                                 ("支付宝", "#00A0E9", "https://qr.alipay.com/fkx10780lnnieguozv3vhaa")]:
+        for name, color, url in [
+            ("微信", "#09BB07", "wxp://f2f01EiRAzk-cwnkJtbu5GMpj0Juf_dTWQr1DiUn5r25wlM"),
+            ("支付宝", "#00A0E9", "https://qr.alipay.com/fkx10780lnnieguozv3vhaa")
+        ]:
             vbox = QVBoxLayout()
             lbl_img = QLabel()
             lbl_img.setAlignment(Qt.AlignCenter)
-            img = qrcode.make(url)
-            img = img.resize((170, 170))  # 缩小二维码
+
+            # 生成二维码（不依赖 qrcode 库）
+            qr = segno.make(url)
             buf = io.BytesIO()
-            img.save(buf, format="PNG")
+            qr.save(buf, kind='png', scale=6)
+
             qimg = QImage.fromData(buf.getvalue())
             lbl_img.setPixmap(QPixmap.fromImage(qimg))
+
             vbox.addWidget(lbl_img)
+
             l = QLabel(name)
             l.setAlignment(Qt.AlignCenter)
             l.setStyleSheet(f"color: {color}; font-weight: bold;")
             vbox.addWidget(l)
+
             qr_box.addLayout(vbox)
+
         layout.addLayout(qr_box)
 
         # 表单区域
@@ -123,3 +133,12 @@ class SponsorSubmitDialog(QDialog):
             self.close()
         else:
             QMessageBox.warning(self, "失败", f"请求失败: {msg}")
+
+
+if __name__ == '__main__':
+    from PySide6.QtWidgets import QApplication
+
+    app = QApplication()
+    dlg = SponsorSubmitDialog()
+    dlg.show()
+    app.exec()

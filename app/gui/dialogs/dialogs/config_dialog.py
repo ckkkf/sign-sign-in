@@ -6,7 +6,8 @@ from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import QDialog, QVBoxLayout, QScrollArea, QWidget, QFormLayout, QHBoxLayout, QLabel, QPushButton, \
     QSpacerItem, QMessageBox, QLineEdit
 
-from app.utils.files import read_and_varify_config, save_json_file
+from app.gui.components.toast import ToastManager
+from app.utils.files import read_config, save_json_file
 
 
 class ConfigDialog(QDialog):
@@ -15,7 +16,7 @@ class ConfigDialog(QDialog):
         self.config_path = config_path
         self.setWindowTitle("修改配置")
         self.resize(600, 500)
-        self.original_data = read_and_varify_config(config_path)
+        self.original_data = read_config(config_path)
         self.current_data = json.loads(json.dumps(self.original_data))
         self.inputs = {}
         self.is_modified = False
@@ -135,14 +136,30 @@ class ConfigDialog(QDialog):
                 'system': self.inputs['system'].text(), 'platform': self.inputs['platform'].text()}
             save_json_file(self.config_path, self.current_data)
             self.is_modified = False
-            QMessageBox.information(self, "成功", "配置已保存")
-            self.accept()
+            # QMessageBox.information(self, "成功", "配置已保存")
+            ToastManager.instance().show("配置保存成功", "success")
+            # self.accept()
         except Exception as e:
             QMessageBox.critical(self, "错误", str(e))
 
     def closeEvent(self, e):
         if self.is_modified:
-            if QMessageBox.question(self, "配置未保存", "是否保存配置的更改？如果不保存，你的更改将丢失",
-                                    QMessageBox.Yes | QMessageBox.No) == QMessageBox.Yes:
+            reply = QMessageBox.question(
+                self,
+                "配置未保存",
+                "是否保存配置的更改？如果不保存，你的更改将丢失",
+                QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel,
+                QMessageBox.Cancel
+            )
+
+            if reply == QMessageBox.Yes:
                 self.save_config()
-        e.accept()
+                e.accept()
+            elif reply == QMessageBox.No:
+                e.accept()
+            else:  # Cancel
+                e.ignore()
+                return
+        else:
+            e.accept()
+

@@ -9,13 +9,15 @@ from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import QMainWindow, QWidget, QHBoxLayout, QFrame, QVBoxLayout, QLabel, QGridLayout, QPushButton, \
     QButtonGroup, QRadioButton, QProgressBar, QSizePolicy, QMessageBox, QApplication, QTextEdit
 
-from app.config.common import QQ_GROUP, VERSION, CONFIG_FILE
+from app.config.common import QQ_GROUP, VERSION, CONFIG_FILE, MITM_PROXY
 from app.gui.components.log_viewer import QTextEditLogger
+from app.gui.components.toast import Toast, ToastManager
 from app.gui.dialogs.dialogs.config_dialog import ConfigDialog
 from app.gui.dialogs.sponsor_dialog import SponsorSubmitDialog
 from app.mitm.loader import MitmLoaderThread
 from app.utils.commands import get_net_io, bash, get_network_type, get_local_ip, get_system_proxy, check_port_listening, \
     check_cert
+from app.utils.files import validate_config, read_config
 from app.workers.sign_task import SignTaskThread
 
 
@@ -63,18 +65,23 @@ class ModernWindow(QMainWindow):
         # QQ Group (click-to-copy)
         qq_lbl = QLabel(f"QQ交流群: {QQ_GROUP} (点我复制)")
         qq_lbl.setStyleSheet("""
-            color: #e056fd; 
+            color: #5865F2; 
             font-weight: bold; 
             font-size: 10pt; 
         """)
         qq_lbl.setCursor(Qt.PointingHandCursor)  # 小手指
         qq_lbl.setTextFormat(Qt.RichText)
         qq_lbl.setTextInteractionFlags(Qt.TextBrowserInteraction)
-        qq_lbl.mousePressEvent = lambda e: self.copy_group()
+        qq_lbl.mousePressEvent = lambda e: self.copy_log()
 
         l_vbox.addWidget(qq_lbl)
 
         # ------------------------- Status Box -------------------------
+        # 区域标签
+        label = QLabel("状态域")
+        label.setObjectName("SectionLabel")
+        l_vbox.addWidget(label)
+
         mon_box = QFrame()
         mon_box.setObjectName("MonitorBox")
         mon_grid = QGridLayout(mon_box)
@@ -104,15 +111,20 @@ class ModernWindow(QMainWindow):
         l_vbox.addWidget(mon_box)
 
         # ------------------------- Tools -------------------------
-        l_vbox.addWidget(QLabel("工具箱", objectName="SectionLabel"))
+        # 区域标签
+        label = QLabel("工具箱")
+        label.setObjectName("SectionLabel")
+        l_vbox.addWidget(label)
+
         t_grid = QGridLayout()
         t_grid.setSpacing(10)
-        tools = [("系统代理", lambda: bash('rundll32.exe shell32.dll,Control_RunDLL inetcpl.cpl,,4')),
-                 ("证书管理", lambda: bash('certmgr.msc')),
-                 ("编辑配置", self.open_config),
-                 ("刷新DNS", self.flush_dns),
-                 ("发送反馈", self.show_feedback),
-                 ("打开CMD", lambda: subprocess.Popen(["cmd.exe"], creationflags=subprocess.CREATE_NEW_CONSOLE)),  # New
+        tools = [("🔗 系统代理", lambda: bash('rundll32.exe shell32.dll,Control_RunDLL inetcpl.cpl,,4')),
+                 ("🔒 证书管理", lambda: bash('certmgr.msc')),
+                 ("📄 编辑配置", self.open_config),
+                 ("🔁 刷新DNS", self.flush_dns),
+                 ("📤 发送反馈", self.show_feedback),
+                 ("💻 打开CMD", lambda: subprocess.Popen(["cmd.exe"], creationflags=subprocess.CREATE_NEW_CONSOLE)),
+                 # New
                  ]
         for i, (name, func) in enumerate(tools):
             b = QPushButton(name)
@@ -122,7 +134,9 @@ class ModernWindow(QMainWindow):
         l_vbox.addLayout(t_grid)
 
         # ------------------------- Mode -------------------------
-        l_vbox.addWidget(QLabel("执行操作", objectName="SectionLabel"))
+        label = QLabel("执行操作")
+        label.setObjectName("SectionLabel")
+        l_vbox.addWidget(label)
 
         self.grp = QButtonGroup(self)
 
@@ -208,7 +222,7 @@ class ModernWindow(QMainWindow):
         btn_copy.clicked.connect(self.copy_log)
         btn_clear = QPushButton("清空")
         btn_clear.setObjectName("LogActionBtn")
-        btn_clear.clicked.connect(lambda: self.log.clear())
+        btn_clear.clicked.connect(lambda: self.clear_log())
         hh.addWidget(btn_copy)
         hh.addWidget(btn_clear)
         r_vbox.addWidget(head)
@@ -227,9 +241,17 @@ class ModernWindow(QMainWindow):
 
         self.update_status()
 
-    def copy_group(self):
-        QApplication.clipboard().setText(QQ_GROUP)
-        QMessageBox.information(self, "复制成功", "QQ群号已复制到剪贴板！")
+    def clear_log(self):
+        reply = QMessageBox.question(
+            self,
+            "确认操作",
+            "确定要清空日志吗？此操作不可恢复！",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+
+        if reply == QMessageBox.Yes:
+            self.log.clear()
 
     def setup_style(self):
         self.setStyleSheet("""
@@ -239,7 +261,7 @@ class ModernWindow(QMainWindow):
             #AppSubTitle { font-size: 9pt; color: #999; }
             #MonitorBox { background: #2D2D30; border-radius: 4px; border: 1px solid #3E3E42; }
             #StatusLabel { color: #CCC; font-family: Consolas; font-size: 9pt; }
-            #SectionLabel { color: #666; font-weight: bold; margin-top: 8px; }
+            #SectionLabel { color: #888; font-weight: bold; margin-top: 8px; }
 
             #ToolBtn { background: #333; color: #DDD; border: 1px solid #555; padding: 4px; border-radius: 3px; }
             #ToolBtn:hover { background: #444; border-color: #007ACC; }
@@ -308,7 +330,8 @@ class ModernWindow(QMainWindow):
         else:
             self.lbls['proxy'].setText("🔗 代理: <span style='color:#F4D03F'>直连</span>")
 
-        run = check_port_listening("127.0.0.1", 13140, 0.05)
+        proxy_split = MITM_PROXY.split(":")
+        run = check_port_listening(proxy_split[0], proxy_split[1], 0.05)
         if run:
             self.lbls['mitm'].setText("🛡️ Mitm: <span style='color:#58D68D'>运行中</span>")
         else:
@@ -336,11 +359,19 @@ class ModernWindow(QMainWindow):
 
     def copy_log(self):
         QApplication.clipboard().setText(self.log.toPlainText())
-        QMessageBox.information(self, "OK", "日志已复制到剪贴板！")
+        # QMessageBox.information(self, "OK", "日志已复制到剪贴板！")
+        ToastManager.instance().show("已复制到剪贴板", "success")
 
     def toggle(self):
         if not self.is_running:
             logging.info(f"\n{'=' * 20} 🟢 TASK {datetime.now().strftime('%H:%M')} {'=' * 20}")
+
+            # 验证数据
+            errMsg = validate_config(read_config(CONFIG_FILE))
+            if errMsg:
+                logging.warning(f"配置文件验证失败: {errMsg}")
+                QMessageBox.warning(self, "Error", errMsg)
+                return
 
             self.is_running = True
             self.btn_run.setText("停止运行")
@@ -370,7 +401,14 @@ class ModernWindow(QMainWindow):
         self.is_running = False
         self.btn_run.setEnabled(True)
         self.btn_run.setText("开始执行")
-        self.btn_run.setStyleSheet("")  # Reset style
+        self.btn_run.setStyleSheet("""
+            background: #007ACC;
+            color: white;
+            border-radius: 4px;
+            padding: 8px;
+            font-size: 11pt;
+            font-weight: bold;
+        """)
         self.prog.hide()
         self.grp.buttons()[0].setEnabled(True)
         self.grp.buttons()[1].setEnabled(True)
@@ -380,4 +418,6 @@ class ModernWindow(QMainWindow):
             # 成功后弹出赞助提交框
             SponsorSubmitDialog(self).exec()
         else:
-            if msg != "任务已停止": QMessageBox.critical(self, "提示", msg)
+            if msg != "任务已停止":
+                # QMessageBox.critical(self, "提示", msg)
+                ToastManager.instance().show(msg, "error")
