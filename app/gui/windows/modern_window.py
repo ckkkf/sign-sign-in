@@ -4,22 +4,22 @@ import subprocess
 import time
 from datetime import datetime
 
-from PySide6.QtCore import QTimer, Qt, QUrl
+from PySide6.QtCore import Qt, QUrl
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import QMainWindow, QWidget, QHBoxLayout, QFrame, QVBoxLayout, QLabel, QGridLayout, QPushButton, \
     QButtonGroup, QRadioButton, QProgressBar, QSizePolicy, QMessageBox, QApplication, QTextEdit
 
 from app.config.common import QQ_GROUP, VERSION, CONFIG_FILE, MITM_PROXY
 from app.gui.components.log_viewer import QTextEditLogger
-from app.gui.components.toast import Toast, ToastManager
+from app.gui.components.toast import ToastManager
 from app.gui.dialogs.dialogs.config_dialog import ConfigDialog
 from app.gui.dialogs.sponsor_dialog import SponsorSubmitDialog
 from app.mitm.service import MitmService
 from app.utils.commands import get_net_io, bash, get_network_type, get_local_ip, get_system_proxy, check_port_listening, \
     check_cert
 from app.utils.files import validate_config, read_config
-from app.workers.sign_task import SignTaskThread
 from app.workers.monitor_thread import MonitorThread
+from app.workers.sign_task import SignTaskThread
 
 
 class ModernWindow(QMainWindow):
@@ -101,10 +101,10 @@ class ModernWindow(QMainWindow):
         mon_grid.addWidget(self.lbls['pid'], 0, 1)
         mon_grid.addWidget(self.lbls['net'], 1, 0)
         mon_grid.addWidget(self.lbls['speed'], 1, 1)
-        mon_grid.addWidget(self.lbls['proxy'], 2, 0, 1, 2)  # span 2 cols
+        mon_grid.addWidget(self.lbls['proxy'], 2, 0)
+        mon_grid.addWidget(self.lbls['cert'], 2, 1)
         mon_grid.addWidget(self.lbls['mitm'], 3, 0)
-        mon_grid.addWidget(self.lbls['cert'], 3, 1)
-        mon_grid.addWidget(self.lbls['ip'], 4, 0, 1, 2)
+        mon_grid.addWidget(self.lbls['ip'], 3, 1)
 
         l_vbox.addWidget(mon_box)
 
@@ -116,19 +116,19 @@ class ModernWindow(QMainWindow):
 
         t_grid = QGridLayout()
         t_grid.setSpacing(10)
-        tools = [("🔗 系统代理", lambda: bash('rundll32.exe shell32.dll,Control_RunDLL inetcpl.cpl,,4')),
-                 ("🔒 证书管理", lambda: bash('certmgr.msc')),
-                 ("📄 编辑配置", self.open_config),
-                 ("🔁 刷新DNS", self.flush_dns),
-                 ("📤 发送反馈", self.show_feedback),
-                 ("💻 打开CMD", lambda: subprocess.Popen(["cmd.exe"], creationflags=subprocess.CREATE_NEW_CONSOLE)),
-                 # New
-                 ]
+        tools = [
+            ("🔗 系统代理", lambda: bash('rundll32.exe shell32.dll,Control_RunDLL inetcpl.cpl,,4')),
+            ("🔒 证书管理", lambda: bash('certmgr.msc')),
+            ("📄 编辑配置", self.open_config),
+            ("🔁 刷新DNS", self.flush_dns),
+            ("📤 发送反馈", self.show_feedback),
+            ("💻 打开CMD", lambda: subprocess.Popen(["cmd.exe"], creationflags=subprocess.CREATE_NEW_CONSOLE)),
+        ]
         for i, (name, func) in enumerate(tools):
             b = QPushButton(name)
             b.setObjectName("ToolBtn")
             b.clicked.connect(func)
-            t_grid.addWidget(b, i // 2, i % 2)
+            t_grid.addWidget(b, i // 3, i % 3)
         l_vbox.addLayout(t_grid)
 
         # ------------------------- Mode -------------------------
@@ -379,11 +379,13 @@ class ModernWindow(QMainWindow):
         SponsorSubmitDialog(self).exec()  # SupportDialog(self).exec()
 
     def show_feedback(self):
-        QMessageBox.information(self, "开发中", "该功能正在开发中！")  # FeedbackDialog(self).exec()
+        QMessageBox.information(self, "开发中", "该功能正在开发中！")
+        # FeedbackDialog(self).exec()
 
     def flush_dns(self):
         bash("ipconfig /flushdns")
         logging.info(f'DNS 刷新成功')
+        ToastManager.instance().show("DNS 刷新成功", "success")
 
     def copy_log(self):
         QApplication.clipboard().setText(self.log.toPlainText())

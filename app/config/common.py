@@ -35,6 +35,9 @@ CODE_FILE = os.path.join(RES_DIR, "config", "code.json")
 # code文件目录
 CERT_FILE = os.path.join(RES_DIR, "cert", "mitmproxy-ca-cert.p12")
 
+# 图片目录
+IMAGE_DIR = os.path.join(RES_DIR, "img")
+
 # mitm addons
 ADDONS_DIR = os.path.join(APP_DIR, "mitm", "addons")
 

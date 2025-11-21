@@ -8,9 +8,8 @@ import requests
 from PySide6.QtCore import QThread, Signal
 
 from app.apis.sybsyw import login, get_plan, regeo, photo_sign_in_or_out, simple_sign_in_or_out
-from app.config.common import CODE_FILE, CERT_FILE, MITM_PROXY, MITMDUMP_FILE
-from app.utils.commands import get_system_proxy, set_proxy, check_port_listening, reset_proxy, check_cert, bash, \
-    get_process_by_port, kill_process_tree
+from app.config.common import CODE_FILE, CERT_FILE, MITM_PROXY
+from app.utils.commands import get_system_proxy, set_proxy, check_port_listening, reset_proxy, check_cert, bash
 from app.utils.files import read_config, check_img
 
 

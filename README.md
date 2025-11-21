@@ -30,14 +30,14 @@
 
 1. 进入下载页面：[点我下载最新版本](https://gitee.com/ckkk524334/sign-sign-in/releases)：
 
-   ![76209221455](resources/img/download.png)
+   ![76209221455](img/download.png)
 ​
 
 2. 解压下载的压缩包。
 
 
 3. 修改配置文件 config.json，如果不知道怎么获取经纬度，推荐网站 👉 https://api.map.baidu.com/lbsapi/getpoint/
-![img.png](resources/img/config-new.png)
+![img.png](img/config-new.png)
 
 
 4. 双击 sign_in.exe 运行即可。
@@ -48,13 +48,13 @@
 
 1. 进入下载页面：[点我下载最新版本](https://gitee.com/ckkk524334/sign-sign-in/releases)：
 
-![下载此压缩包](resources/img/download.png)
+![下载此压缩包](img/download.png)
 
 ​
 
 2. 解压下载的压缩包：
 
-![可见这些文件](resources/img/files.png)
+![可见这些文件](img/files.png)
 
 ​
 
@@ -64,18 +64,18 @@
 
 4. 打开刚刚安装的 Reqable 抓包工具并安装证书，点击“证书-安装根证书到本机”安装证书：
 
-![证书-安装根证书到本机”](resources/img/certificate.png)
+![证书-安装根证书到本机”](img/certificate.png)
 
 
 5. 点击 “工具 -- 断点” ：
 
-![输入图片说明](resources/img/breakpoint.png)
+![输入图片说明](img/breakpoint.png)
 
 ​
 
 6. 勾选左上角 “启动断点” 按钮，并点击左下角 “新建”：
 
-![输入图片说明](resources/img/breakpointList.png)
+![输入图片说明](img/breakpointList.png)
 
 ​
 
@@ -90,34 +90,34 @@
 
    点击 “完成” ：
 
-   ![填写](resources/img/createBreakpoint.png)
+   ![填写](img/createBreakpoint.png)
 
    ​
 
 8. 返回主页面，点击 “启动” 开始抓包：
 
-![启动](resources/img/begin.png)
+![启动](img/begin.png)
 
 ​
 
 9. 进入校友邦小程序，观察 Reqable 抓包工具是否有信息，是否自动弹出 “断点执行器” 页面:
 
-![断点执行器](resources/img/body.png)
+![断点执行器](img/body.png)
 
 ​
 
 10. 若没有自动弹出 “断点执行器” 页面，则可尝试点击“代理-系统代理”开启系统代理，或点击 “代理 -- 二级代理” 开启二级代理，让
     “地球图标” 或 ”飞机图标“ 为绿色即为成功开启：
 
-![地球图标](resources/img/earth.png)
+![地球图标](img/earth.png)
 
-![飞机图标](resources/img/plane.png)
+![飞机图标](img/plane.png)
 
 ​
 
 11. 若自动弹出 “断点执行器” 页面，则可点击请求体，复制 “code=” 后面的一长串（注意不要包含 “code=” ）:
 
-![断点执行器](resources/img/getCode.png)
+![断点执行器](img/getCode.png)
 
 ​
 
@@ -126,31 +126,31 @@
     若成功抓取到code，请复制后点击 “停止” 抓取，否则会拦截脚本的请求！！！！
     若成功抓取到code，请复制后点击 “停止” 抓取，否则会拦截脚本的请求！！！！
 
-![76196689828](resources/img/end.png)
+![76196689828](img/end.png)
 
 13. 使用记事本或其他文本编辑软件打开刚才解压出来的 config.json 文件:
 
-![config.json](resources/img/config.png)
+![config.json](img/config.png)
 
 ​
 
 14. 将刚才复制的 code 填入 code 对应后方的双引号中:
 
-![config.json](resources/img/configCode.png)
+![config.json](img/configCode.png)
 
 15. 根据下图填写其他信息，别忘了保存，别忘了保存，别忘了保存！！！
 
-![填写其他信息](resources/img/configExplain.png)
+![填写其他信息](img/configExplain.png)
 
 16. 双击运行 sign_in.exe，根据控制台日志修改:
 
-![双击sign_in.exe](resources/img/exe.png)
+![双击sign_in.exe](img/exe.png)
 
 使用教程至此结束！
 
 若有任何疑问，请前往 issues 并携带日志或报错截图提问：
 
-![76196375822](resources/img/issues.png)
+![76196375822](img/issues.png)
 
 ## 使用教程 之 源码启动方式（非开发者可忽略）
 
@@ -179,8 +179,8 @@
 
 开发不易，若能您对您有帮助，是我们的荣幸，若您手头有余，在自己有可乐喝的前提下，可以考虑请我喝瓶冰露：
 
-<img src="resources/img/wx.jpg" width="220px" />
-<img src="resources/img/zfb.jpg" width="200px" />
+<img src="img/wx.jpg" width="220px" />
+<img src="img/zfb.jpg" width="200px" />
 
 本项目为学习与技术研究用途而开发，旨在帮助开发者了解 自动化流程、HTTP 请求分析、网络代理、脚本化任务调度 等相关技术。
 任何使用本项目进行非授权访问、数据抓取、批量刷任务、破坏系统、商业运营等行为均与本项目作者无关。
