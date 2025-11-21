@@ -7,13 +7,16 @@ from datetime import datetime
 from PySide6.QtCore import Qt, QUrl
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import QMainWindow, QWidget, QHBoxLayout, QFrame, QVBoxLayout, QLabel, QGridLayout, QPushButton, \
-    QButtonGroup, QRadioButton, QProgressBar, QSizePolicy, QMessageBox, QApplication, QTextEdit
+    QButtonGroup, QRadioButton, QProgressBar, QSizePolicy, QMessageBox, QApplication, QTextEdit, QDialog
 
 from app.config.common import QQ_GROUP, VERSION, CONFIG_FILE, MITM_PROXY
 from app.gui.components.log_viewer import QTextEditLogger
 from app.gui.components.toast import ToastManager
 from app.gui.dialogs.dialogs.config_dialog import ConfigDialog
+from app.gui.dialogs.image_manager_dialog import ImageManagerDialog
+from app.gui.dialogs.photo_sign_dialog import PhotoSignDialog
 from app.gui.dialogs.sponsor_dialog import SponsorSubmitDialog
+from app.gui.dialogs.weekly_journal_dialog import WeeklyJournalDialog
 from app.mitm.service import MitmService
 from app.utils.commands import get_net_io, bash, get_network_type, get_local_ip, get_system_proxy, check_port_listening, \
     check_cert
@@ -29,6 +32,7 @@ class ModernWindow(QMainWindow):
         self.setWindowTitle(f"🔰 Sign Sign In {VERSION} - 实习打卡助手")
         self.resize(900, 580)  # 紧凑高度
         self.is_running = False
+        self.photo_image_path = None
 
         # 自动守护：monitor 会调用 mitm.start()
         self.mitm = MitmService()
@@ -123,6 +127,7 @@ class ModernWindow(QMainWindow):
             ("🔁 刷新DNS", self.flush_dns),
             ("📤 发送反馈", self.show_feedback),
             ("💻 打开CMD", lambda: subprocess.Popen(["cmd.exe"], creationflags=subprocess.CREATE_NEW_CONSOLE)),
+            ("🖼 图片管理", self.open_image_manager),
         ]
         for i, (name, func) in enumerate(tools):
             b = QPushButton(name)
@@ -130,6 +135,11 @@ class ModernWindow(QMainWindow):
             b.clicked.connect(func)
             t_grid.addWidget(b, i // 3, i % 3)
         l_vbox.addLayout(t_grid)
+
+        btn_journal = QPushButton("提交周记")
+        btn_journal.setObjectName("BtnJournal")
+        btn_journal.clicked.connect(self.open_weekly_journal)
+        l_vbox.addWidget(btn_journal)
 
         # ------------------------- Mode -------------------------
         label = QLabel("执行操作")
@@ -286,6 +296,8 @@ class ModernWindow(QMainWindow):
 
             #BtnGit { background: transparent; color: #888; border: 1px solid #444; border-radius: 4px; padding: 4px; margin-top: 4px;}
             #BtnGit:hover { color: white; border-color: #666; }
+            #BtnJournal { background: #3E3E42; color: #DDD; border-radius: 4px; padding: 6px; font-weight: bold; }
+            #BtnJournal:hover { background: #4B4B50; color: white; }
 
             #TermHeader { color: #CCC; font-weight: bold;}
             #LogView { background: #1E1E1E; border: none; color: #CCC; font-family: Consolas; font-size: 9pt; padding: 8px; }
@@ -392,10 +404,30 @@ class ModernWindow(QMainWindow):
         # QMessageBox.information(self, "OK", "日志已复制到剪贴板！")
         ToastManager.instance().show("已复制到剪贴板", "success")
 
+    def open_image_manager(self):
+        ImageManagerDialog(self).exec()
+
+    def open_weekly_journal(self):
+        try:
+            config = read_config(CONFIG_FILE)
+        except Exception as exc:
+            QMessageBox.warning(self, "提示", f"读取配置失败：{exc}")
+            return
+        WeeklyJournalDialog(config.get("model", {}), self).exec()
+
     def toggle(self):
         if not self.is_running:
             logging.info("")
             logging.info(f"{'=' * 20} 🟢 TASK {datetime.now().strftime('%H:%M')} {'=' * 20}")
+
+            checked_id = self.grp.checkedId()
+            photo_image = None
+            if checked_id == 2:
+                dialog = PhotoSignDialog(self)
+                if dialog.exec() != QDialog.Accepted:
+                    logging.info("用户取消了拍照签到操作")
+                    return
+                photo_image = dialog.selected_image
 
             # 验证数据
             errMsg = validate_config(read_config(CONFIG_FILE))
@@ -408,16 +440,15 @@ class ModernWindow(QMainWindow):
             self.btn_run.setText("停止运行")
             self.btn_run.setStyleSheet("background: #C0392B;")
             self.prog.show()
-            self.grp.buttons()[0].setEnabled(False)
-            self.grp.buttons()[1].setEnabled(False)
+            for btn in self.grp.buttons():
+                btn.setEnabled(False)
 
-            checked_id = self.grp.checkedId()
             if checked_id == 0:
                 opt = {"action": "普通签到", "code": "2"}
             elif checked_id == 1:
                 opt = {"action": "普通签退", "code": "1"}
             elif checked_id == 2:
-                opt = {"action": "拍照签到", "image": "bin/photo.jpg"}
+                opt = {"action": "拍照签到", "image_path": photo_image}
 
             self.worker = SignTaskThread(CONFIG_FILE, opt)
             self.worker.finished_signal.connect(self.on_done)
@@ -441,8 +472,8 @@ class ModernWindow(QMainWindow):
             font-weight: bold;
         """)
         self.prog.hide()
-        self.grp.buttons()[0].setEnabled(True)
-        self.grp.buttons()[1].setEnabled(True)
+        for btn in self.grp.buttons():
+            btn.setEnabled(True)
 
         if success:
             # 成功后弹出赞助提交框

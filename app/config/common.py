@@ -38,6 +38,13 @@ CERT_FILE = os.path.join(RES_DIR, "cert", "mitmproxy-ca-cert.p12")
 # 图片目录
 IMAGE_DIR = os.path.join(RES_DIR, "img")
 
+# 周记目录
+JOURNAL_DIR = os.path.join(RES_DIR, "journals")
+JOURNAL_HISTORY_FILE = os.path.join(JOURNAL_DIR, "history.json")
+
+# 周记服务器（开发者维护，无需用户配置）
+JOURNAL_SERVER_BASE = "https://langoo.cn"
+
 # mitm addons
 ADDONS_DIR = os.path.join(APP_DIR, "mitm", "addons")
 

@@ -148,13 +148,15 @@ def photo_sign_in_or_out(args, config, geo, traineeId, opt):
 
     timestamp = get_timestamp()
 
-    files = get_img_file(timestamp)
-
-    ossData = aliyun_OSS(files=files, timestamp=timestamp, policyData=policyData)
-
-    post_new(args=args, config=config, traineeId=traineeId, geo=geo, imgUrl=ossData['key'])
-
-    deliver_value(args=args, config=config, traineeId=traineeId)
+    files = get_img_file(timestamp, opt.get('image_path'))
+    try:
+        ossData = aliyun_OSS(files=files, timestamp=timestamp, policyData=policyData)
+        post_new(args=args, config=config, traineeId=traineeId, geo=geo, imgUrl=ossData['key'])
+        deliver_value(args=args, config=config, traineeId=traineeId)
+    finally:
+        file_obj = files.get("file", [None, None, None])[1]
+        if file_obj:
+            file_obj.close()
 
 
 def watermark_info(args, config, traineeId):

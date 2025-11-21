@@ -8,6 +8,7 @@ from PySide6.QtWidgets import QDialog, QVBoxLayout, QScrollArea, QWidget, QFormL
 
 from app.gui.components.toast import ToastManager
 from app.utils.files import read_config, save_json_file
+from app.utils.model_client import test_model_connection, ModelConfigurationError
 
 
 class ConfigDialog(QDialog):
@@ -18,6 +19,7 @@ class ConfigDialog(QDialog):
         self.resize(600, 500)
         self.original_data = read_config(config_path)
         self.current_data = json.loads(json.dumps(self.original_data))
+        self.current_data.setdefault('model', {"baseUrl": "", "apiKey": "", "model": ""})
         self.inputs = {}
         self.is_modified = False
         self.setup_style()
@@ -46,6 +48,7 @@ class ConfigDialog(QDialog):
         input_conf = self.current_data.get('input', {})
         loc = input_conf.get('location', {})
         dev = input_conf.get('device', {})
+        model_conf = self.current_data.get('model', {})
 
         # ===========================================================
         # 位置（标题 + 按钮 一行）
@@ -99,6 +102,26 @@ class ConfigDialog(QDialog):
         form.addItem(QSpacerItem(0, 15))
 
         # ===========================================================
+        # 模型接入
+        # ===========================================================
+        model_row = QHBoxLayout()
+        lbl_model = QLabel("模型接入")
+        lbl_model.setStyleSheet("color: #007ACC; font-size: 11pt; margin-top: 10px; font-weight: bold;")
+        btn_test = QPushButton("🧪 测试连通性")
+        btn_test.setObjectName("LinkBtn")
+        btn_test.clicked.connect(self.test_model)
+        model_row.addWidget(lbl_model)
+        model_row.addStretch()
+        model_row.addWidget(btn_test)
+        form.addRow(model_row)
+
+        self.add_row(form, "Base URL", "model_baseUrl", model_conf.get('baseUrl', ''))
+        self.add_row(form, "API Key", "model_apiKey", model_conf.get('apiKey', ''))
+        self.add_row(form, "模型名称", "model_model", model_conf.get('model', ''))
+
+        form.addItem(QSpacerItem(0, 15))
+
+        # ===========================================================
         # Scroll + 底部按钮区
         # ===========================================================
         scroll.setWidget(content)
@@ -134,6 +157,10 @@ class ConfigDialog(QDialog):
             inp['location'] = {'longitude': self.inputs['lng'].text(), 'latitude': self.inputs['lat'].text()}
             inp['device'] = {'brand': self.inputs['brand'].text(), 'model': self.inputs['model'].text(),
                 'system': self.inputs['system'].text(), 'platform': self.inputs['platform'].text()}
+            model_conf = self.current_data.setdefault('model', {})
+            model_conf['baseUrl'] = self.inputs['model_baseUrl'].text().strip()
+            model_conf['apiKey'] = self.inputs['model_apiKey'].text().strip()
+            model_conf['model'] = self.inputs['model_model'].text().strip()
             save_json_file(self.config_path, self.current_data)
             self.is_modified = False
             # QMessageBox.information(self, "成功", "配置已保存")
@@ -141,6 +168,20 @@ class ConfigDialog(QDialog):
             # self.accept()
         except Exception as e:
             QMessageBox.critical(self, "错误", str(e))
+
+    def test_model(self):
+        cfg = {
+            "baseUrl": self.inputs.get('model_baseUrl').text().strip() if 'model_baseUrl' in self.inputs else "",
+            "apiKey": self.inputs.get('model_apiKey').text().strip() if 'model_apiKey' in self.inputs else "",
+            "model": self.inputs.get('model_model').text().strip() if 'model_model' in self.inputs else "",
+        }
+        try:
+            reply = test_model_connection(cfg)
+            QMessageBox.information(self, "测试成功", reply)
+        except ModelConfigurationError as exc:
+            QMessageBox.warning(self, "配置不完整", str(exc))
+        except Exception as exc:
+            QMessageBox.critical(self, "测试失败", str(exc))
 
     def closeEvent(self, e):
         if self.is_modified:

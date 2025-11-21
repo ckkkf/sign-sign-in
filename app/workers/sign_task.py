@@ -37,7 +37,7 @@ class SignTaskThread(QThread):
             config = read_config(self.config_file)
             # 校验其他文件
             if self.sign_option['action'] == "拍照签到":
-                check_img()
+                check_img(self.sign_option.get("image_path"))
             # 删除旧code文件
             if os.path.exists(self.code_file):
                 os.remove(self.code_file)

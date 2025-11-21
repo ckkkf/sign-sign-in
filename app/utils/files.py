@@ -1,10 +1,24 @@
 import json
 import logging
+import mimetypes
 import os
+import shutil
+from datetime import datetime
+from typing import Dict, List
+
+from app.config.common import IMAGE_DIR, JOURNAL_DIR, JOURNAL_HISTORY_FILE
+
+IMAGE_EXTS = {'.png', '.jpg', '.jpeg', '.bmp', '.gif', '.webp'}
+
+
+def ensure_dir(directory: str) -> None:
+    if directory:
+        os.makedirs(directory, exist_ok=True)
 
 
 def save_json_file(file_path: str, params: dict) -> None:
     try:
+        ensure_dir(os.path.dirname(file_path))
         with open(file_path, 'w', encoding='utf-8') as file:
             json.dump(params, file, ensure_ascii=False, indent=4)
     except Exception as e:
@@ -58,18 +72,102 @@ def validate_config(data: dict):
     return None
 
 
-def check_img():
-    img_path = "img.png"
-
-    if not os.path.exists(img_path):
-        raise RuntimeError(f"图片文件{img_path}不存在")
-
-    return img_path
+def _is_allowed_image(path: str) -> bool:
+    ext = os.path.splitext(path)[1].lower()
+    return ext in IMAGE_EXTS
 
 
-def get_img_file(timestamp):
-    img_path = check_img()
+def ensure_image_dir() -> str:
+    ensure_dir(IMAGE_DIR)
+    return IMAGE_DIR
 
+
+def list_images() -> List[str]:
+    directory = ensure_image_dir()
+    if not os.path.exists(directory):
+        return []
+    files = []
+    for fname in os.listdir(directory):
+        fpath = os.path.join(directory, fname)
+        if os.path.isfile(fpath) and _is_allowed_image(fpath):
+            files.append(fpath)
+    return sorted(files)
+
+
+def import_image(src_path: str) -> str:
+    if not src_path or not os.path.exists(src_path):
+        raise RuntimeError("请选择要导入的图片")
+    if not _is_allowed_image(src_path):
+        raise RuntimeError("仅支持导入 PNG/JPG/JPEG/BMP/GIF/WEBP 图片")
+    ensure_image_dir()
+    base = os.path.basename(src_path)
+    name, ext = os.path.splitext(base)
+    counter = 1
+    dest_name = base
+    while os.path.exists(os.path.join(IMAGE_DIR, dest_name)):
+        dest_name = f"{name}_{counter}{ext}"
+        counter += 1
+    dest_path = os.path.join(IMAGE_DIR, dest_name)
+    shutil.copy2(src_path, dest_path)
+    return dest_path
+
+
+def delete_image(image_path: str) -> None:
+    if not image_path:
+        raise RuntimeError("请选择要删除的图片")
+    abs_path = os.path.abspath(image_path)
+    ensure_image_dir()
+    image_dir_abs = os.path.abspath(IMAGE_DIR)
+    if os.path.commonpath([abs_path, image_dir_abs]) != image_dir_abs:
+        raise RuntimeError("只能删除图片目录中的文件")
+    if os.path.exists(abs_path):
+        os.remove(abs_path)
+
+
+def check_img(img_path: str):
+    if not img_path:
+        raise RuntimeError("请先为拍照签到选择图片")
+    ensure_image_dir()
+    abs_path = os.path.abspath(img_path)
+    if not os.path.exists(abs_path):
+        raise RuntimeError(f"图片文件 {abs_path} 不存在")
+    if not _is_allowed_image(abs_path):
+        raise RuntimeError("请选择支持的图片格式")
+    return abs_path
+
+
+def get_img_file(timestamp, img_path: str):
+    target = check_img(img_path)
+    mime, _ = mimetypes.guess_type(target)
+    if not mime:
+        mime = "image/jpeg"
+    ext = os.path.splitext(target)[1] or ".jpg"
     return {
-        "file": (f"{timestamp}.png", open(img_path, "rb"), "image/png")
+        "file": (f"{timestamp}{ext}", open(target, "rb"), mime)
     }
+
+
+def load_journal_history() -> Dict[str, List[dict]]:
+    if not os.path.exists(JOURNAL_HISTORY_FILE):
+        return {"generated": [], "submitted": []}
+    with open(JOURNAL_HISTORY_FILE, 'r', encoding='utf-8') as f:
+        data = json.load(f)
+    data.setdefault("generated", [])
+    data.setdefault("submitted", [])
+    return data
+
+
+def append_journal_entry(section: str, content: str) -> dict:
+    if section not in {"generated", "submitted"}:
+        raise ValueError("section must be generated or submitted")
+    entry = {
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "content": content
+    }
+    data = load_journal_history()
+    data.setdefault(section, [])
+    data[section].insert(0, entry)
+    data[section] = data[section][:50]
+    ensure_dir(JOURNAL_DIR)
+    save_json_file(JOURNAL_HISTORY_FILE, data)
+    return entry
