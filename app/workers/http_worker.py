@@ -1,17 +1,24 @@
+from typing import Any, Dict, Optional
+
+import requests
+from PySide6.QtCore import QThread, Signal
+
+
 class HttpWorker(QThread):
     result_signal = Signal(bool, str)
 
-    def __init__(self, url, data):
+    def __init__(self, url: str, data: Dict[str, Any], headers: Optional[Dict[str, str]] = None, timeout: int = 10):
         super().__init__()
         self.url = url
         self.data = data
+        self.headers = headers or {}
+        self.timeout = timeout
 
     def run(self):
         try:
-            response = requests.post(self.url, json=self.data, timeout=5)
-            if response.status_code == 200:
-                self.result_signal.emit(True, f"✅ 成功: {response.text[:200]}")
-            else:
-                self.result_signal.emit(False, f"❌ 状态码 {response.status_code}: {response.text[:200]}")
-        except Exception as e:
-            self.result_signal.emit(False, str(e))
+            response = requests.post(self.url, json=self.data, headers=self.headers, timeout=self.timeout)
+            response.raise_for_status()
+            text = (response.text or "").strip()
+            self.result_signal.emit(True, text[:200] or "success")
+        except Exception as exc:
+            self.result_signal.emit(False, str(exc))

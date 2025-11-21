@@ -11,10 +11,10 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QPushButton,
     QFileDialog,
-    QMessageBox,
     QWidget,
     QSpacerItem,
     QSizePolicy,
+    QMessageBox,
 )
 
 from app.config.common import IMAGE_DIR
@@ -28,8 +28,55 @@ class ImageManagerDialog(QDialog):
         self.setWindowTitle("图片管理")
         self.resize(720, 480)
         self.setAttribute(Qt.WA_DeleteOnClose)
+        self._setup_style()
         self._setup_ui()
         self._load_images()
+
+    def _setup_style(self):
+        self.setStyleSheet("""
+            QDialog {
+                background: #101014;
+                color: #EAEAEA;
+            }
+            QListWidget {
+                background: #16161C;
+                border: 1px solid #23232A;
+                border-radius: 12px;
+                padding: 12px;
+            }
+            QListWidget::item {
+                padding: 12px 6px;
+                margin: 4px;
+                border-radius: 10px;
+            }
+            QListWidget::item:selected {
+                background: #3F72FF;
+                color: white;
+            }
+            QLabel {
+                color: #9FA4B8;
+            }
+            QPushButton {
+                background: #1F1F27;
+                border: 1px solid #2C2C36;
+                border-radius: 18px;
+                padding: 8px 18px;
+                color: #E0E0E6;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                border-color: #5C6BFF;
+                color: white;
+            }
+            #PrimaryBtn {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #5568FE, stop:1 #8E4BFF);
+                border: none;
+            }
+            #PrimaryBtn:hover {
+                opacity: 0.9;
+            }
+        """)
 
     def _setup_ui(self):
         layout = QVBoxLayout(self)
@@ -77,6 +124,7 @@ class ImageManagerDialog(QDialog):
             self.list_widget.addItem(item)
         if not paths:
             self.preview_label.setText("图片目录为空，点击“导入图片”上传。")
+            ToastManager.instance().show("图片库为空，请先导入", "info")
         else:
             self.preview_label.setText("请选择一张图片预览")
 
@@ -102,18 +150,19 @@ class ImageManagerDialog(QDialog):
     def _import_image(self):
         file_path, _ = QFileDialog.getOpenFileName(self, "选择图片", "", "Images (*.png *.jpg *.jpeg *.bmp *.gif *.webp)")
         if not file_path:
+            ToastManager.instance().show("已取消导入", "info")
             return
         try:
             new_path = import_image(file_path)
             ToastManager.instance().show(f"已导入 {os.path.basename(new_path)}", "success")
             self._load_images()
         except Exception as exc:
-            QMessageBox.critical(self, "导入失败", str(exc))
+            ToastManager.instance().show(str(exc), "error")
 
     def _delete_image(self):
         path = self._current_image()
         if not path:
-            QMessageBox.information(self, "提示", "请选择要删除的图片")
+            ToastManager.instance().show("请选择要删除的图片", "warning")
             return
         reply = QMessageBox.question(self, "确认删除", f"确认删除 {os.path.basename(path)} 吗？", QMessageBox.Yes | QMessageBox.No)
         if reply != QMessageBox.Yes:
@@ -123,5 +172,5 @@ class ImageManagerDialog(QDialog):
             ToastManager.instance().show("图片已删除", "success")
             self._load_images()
         except Exception as exc:
-            QMessageBox.critical(self, "删除失败", str(exc))
+            ToastManager.instance().show(str(exc), "error")
 

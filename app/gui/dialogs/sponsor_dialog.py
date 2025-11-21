@@ -1,9 +1,23 @@
 import io
 
-import qrcode
-from PySide6.QtGui import QImage, QPixmap, Qt
-from PySide6.QtWidgets import QMessageBox, QDialog, QVBoxLayout, QLabel, QHBoxLayout, QFrame, QFormLayout, QLineEdit, \
-    QDoubleSpinBox, QPushButton, QSizePolicy
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QImage, QPixmap
+from PySide6.QtWidgets import (
+    QDialog,
+    QVBoxLayout,
+    QLabel,
+    QHBoxLayout,
+    QFrame,
+    QFormLayout,
+    QLineEdit,
+    QDoubleSpinBox,
+    QPushButton,
+    QTextEdit,
+)
+
+from app.config.common import API_URL, VERSION
+from app.gui.components.toast import ToastManager
+from app.workers.http_worker import HttpWorker
 
 
 class SponsorSubmitDialog(QDialog):
@@ -12,133 +26,181 @@ class SponsorSubmitDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("加入赞助榜")
-        self.resize(500, 450)
-        self.setStyleSheet("background: #252526; color: white;")
-        self.setup_ui()
+        self.resize(560, 520)
+        self.setAttribute(Qt.WA_DeleteOnClose)
+        self.worker = None
+        self._setup_style()
+        self._setup_ui()
 
-    def setup_ui(self):
+    def _setup_style(self):
+        self.setStyleSheet("""
+            QDialog {
+                background: #0F111C;
+                color: #E8EBFF;
+            }
+            QLabel {
+                color: #9BA3C6;
+            }
+            #DescLabel {
+                color: #BAC3FF;
+                font-size: 10.5pt;
+                line-height: 1.6;
+            }
+            QFrame#Card {
+                background: #16192A;
+                border: 1px solid #2A2F45;
+                border-radius: 14px;
+                padding: 16px;
+            }
+            QLineEdit, QTextEdit, QDoubleSpinBox {
+                background: #1E2238;
+                border: 1px solid #2F3654;
+                border-radius: 10px;
+                padding: 10px 12px;
+                color: #F5F6FF;
+            }
+            QLineEdit:focus, QTextEdit:focus, QDoubleSpinBox:focus {
+                border-color: #7C89FF;
+                box-shadow: 0 0 12px rgba(124,137,255,0.25);
+            }
+            QTextEdit {
+                min-height: 90px;
+            }
+            QPushButton#PrimaryBtn {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #FF8A5C, stop:1 #F24FB3);
+                color: white;
+                border: none;
+                border-radius: 22px;
+                padding: 10px 20px;
+                font-weight: bold;
+                letter-spacing: 1px;
+            }
+            QPushButton#OutlinedBtn {
+                background: transparent;
+                border: 1px solid #3A4062;
+                color: #9BA3C6;
+                border-radius: 22px;
+                padding: 10px 16px;
+                font-weight: bold;
+            }
+            QPushButton#PrimaryBtn:disabled {
+                background: #353B5A;
+                color: #7B80A3;
+            }
+        """)
+
+    def _setup_ui(self):
         layout = QVBoxLayout(self)
+        layout.setSpacing(16)
 
-        lbl_desc = QLabel(
-            "开发不易，若能您对您有帮助，是我们的荣幸，若您手头有余，在自己有可乐喝的前提下，可以考虑请我喝瓶冰露，可以留一下您的昵称，以便添加到赞助感谢榜。")
-        lbl_desc.setWordWrap(True)
-        lbl_desc.setStyleSheet("color: #70a1ff; margin-bottom: 5px;")
-        layout.addWidget(lbl_desc)
+        desc = QLabel("感谢每一份支持，我们会将昵称与祝福同步到赞助墙，记录这份心意。")
+        desc.setObjectName("DescLabel")
+        desc.setWordWrap(True)
+        layout.addWidget(desc)
+
+        qr_card = QFrame()
+        qr_card.setObjectName("Card")
+        qr_layout = QHBoxLayout(qr_card)
+        qr_layout.setSpacing(20)
 
         import segno
-        import io
 
-        qr_box = QHBoxLayout()
         for name, color, url in [
-            ("微信", "#09BB07", "wxp://f2f01EiRAzk-cwnkJtbu5GMpj0Juf_dTWQr1DiUn5r25wlM"),
-            ("支付宝", "#00A0E9", "https://qr.alipay.com/fkx10780lnnieguozv3vhaa")
+            ("微信", "#61DB57", "wxp://f2f01EiRAzk-cwnkJtbu5GMpj0Juf_dTWQr1DiUn5r25wlM"),
+            ("支付宝", "#3AA0FF", "https://qr.alipay.com/fkx10780lnnieguozv3vhaa"),
         ]:
-            vbox = QVBoxLayout()
-            lbl_img = QLabel()
-            lbl_img.setAlignment(Qt.AlignCenter)
-
-            # 生成二维码（不依赖 qrcode 库）
+            column = QVBoxLayout()
+            column.setSpacing(8)
+            lbl_img = QLabel(alignment=Qt.AlignCenter)
             qr = segno.make(url)
-            buf = io.BytesIO()
-            qr.save(buf, kind='png', scale=6)
-
-            qimg = QImage.fromData(buf.getvalue())
+            buffer = io.BytesIO()
+            qr.save(buffer, kind="png", scale=5)
+            qimg = QImage.fromData(buffer.getvalue())
             lbl_img.setPixmap(QPixmap.fromImage(qimg))
+            column.addWidget(lbl_img)
 
-            vbox.addWidget(lbl_img)
+            caption = QLabel(name, alignment=Qt.AlignCenter)
+            caption.setStyleSheet(f"color: {color}; font-weight: bold; font-size: 11pt;")
+            column.addWidget(caption)
+            qr_layout.addLayout(column)
 
-            l = QLabel(name)
-            l.setAlignment(Qt.AlignCenter)
-            l.setStyleSheet(f"color: {color}; font-weight: bold;")
-            vbox.addWidget(l)
+        layout.addWidget(qr_card)
 
-            qr_box.addLayout(vbox)
+        form_card = QFrame()
+        form_card.setObjectName("Card")
+        form_layout = QFormLayout(form_card)
+        form_layout.setSpacing(14)
 
-        layout.addLayout(qr_box)
-
-        # 表单区域
-        form = QFrame()
-        fl = QFormLayout(form)
         self.le_name = QLineEdit()
-        self.le_name.setStyleSheet("background: #333; border: 1px solid #555; padding: 6px;")
-        fl.addRow("昵称:", self.le_name)
+        self.le_name.setPlaceholderText("显示在赞助墙的昵称")
+        form_layout.addRow("赞助昵称", self.le_name)
+
+        self.le_contact = QLineEdit()
+        self.le_contact.setPlaceholderText("可选：QQ / 微信 / 邮箱")
+        form_layout.addRow("联系方式", self.le_contact)
 
         self.sb_amount = QDoubleSpinBox()
-        self.sb_amount.setRange(0.00, 10000)
+        self.sb_amount.setRange(1.00, 10000.00)
         self.sb_amount.setPrefix("￥")
-        self.sb_amount.setValue(0.00)
-        self.sb_amount.setStyleSheet("background: #333; border: 1px solid #555; padding: 6px;")
-        fl.addRow("金额:", self.sb_amount)
-        layout.addWidget(form)
+        self.sb_amount.setDecimals(2)
+        self.sb_amount.setValue(5.00)
+        form_layout.addRow("赞助金额", self.sb_amount)
 
-        # 按钮区域（占满一行）
+        self.txt_message = QTextEdit()
+        self.txt_message.setPlaceholderText("想对作者说的话、署名或展示链接，可选")
+        form_layout.addRow("留言", self.txt_message)
+
+        layout.addWidget(form_card)
+
         btn_row = QHBoxLayout()
-        btn_row.setSpacing(15)  # 两个按钮之间的间距
+        btn_row.addStretch()
 
-        # 提交按钮
-        self.btn_submit = QPushButton("提交")
-        self.btn_submit.setStyleSheet("""
-            QPushButton {
-                background: #E64A19;
-                color: white;
-                border: none;
-                padding: 8px 0;
-                font-weight: bold;
-                border-radius: 6px;
-                font-size: 15px;
-            }
-        """)
+        self.btn_submit = QPushButton("提交赞助信息")
+        self.btn_submit.setObjectName("PrimaryBtn")
         self.btn_submit.clicked.connect(self.submit)
-        self.btn_submit.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)  # ⭐ 自动拉伸
         btn_row.addWidget(self.btn_submit)
 
-        # 关闭按钮
-        self.btn_close = QPushButton("关闭")
-        self.btn_close.setStyleSheet("""
-            QPushButton {
-                background: #9E9E9E;
-                color: white;
-                border: none;
-                padding: 8px 0;
-                font-weight: bold;
-                border-radius: 6px;
-                font-size: 15px;
-            }
-        """)
-        self.btn_close.clicked.connect(self.close)
-        self.btn_close.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)  # ⭐ 自动拉伸
-        btn_row.addWidget(self.btn_close)
+        btn_close = QPushButton("关闭")
+        btn_close.setObjectName("OutlinedBtn")
+        btn_close.clicked.connect(self.close)
+        btn_row.addWidget(btn_close)
 
         layout.addLayout(btn_row)
 
-    def submit(self):
-        QMessageBox.information(self, "开发中", "该功能正在开发中！")
-        return
+        version = QLabel(f"当前版本：{VERSION}", alignment=Qt.AlignRight)
+        version.setStyleSheet("color:#5C6287; font-size:9pt;")
+        layout.addWidget(version)
 
-        if not self.le_name.text(): return QMessageBox.warning(self, "提示", "请输入昵称")
+    def submit(self):
+        name = self.le_name.text().strip()
+        amount = float(self.sb_amount.value())
+        if not name:
+            ToastManager.instance().show("请填写赞助昵称", "warning")
+            return
+        if amount <= 0:
+            ToastManager.instance().show("赞助金额需大于 0", "warning")
+            return
+
+        payload = {
+            "type": "sponsor",
+            "name": name,
+            "contact": self.le_contact.text().strip(),
+            "amount": amount,
+            "message": self.txt_message.toPlainText().strip(),
+        }
 
         self.btn_submit.setEnabled(False)
-        self.btn_submit.setText("正在请求服务器...")
-
-        self.worker = HttpWorker(API_URL,
-                                 {"type": "sponsor", "name": self.le_name.text(), "amount": self.sb_amount.value()})
+        self.btn_submit.setText("提交中...")
+        self.worker = HttpWorker(API_URL, payload)
         self.worker.result_signal.connect(self.on_finished)
         self.worker.start()
 
-    def on_finished(self, success, msg):
+    def on_finished(self, success: bool, msg: str):
         self.btn_submit.setEnabled(True)
-        self.btn_submit.setText("提交并上榜")
+        self.btn_submit.setText("提交赞助信息")
         if success:
-            QMessageBox.information(self, "成功", f"提交成功！\n{msg}")
+            ToastManager.instance().show("信息提交成功，感谢支持！", "success")
             self.close()
         else:
-            QMessageBox.warning(self, "失败", f"请求失败: {msg}")
-
-
-if __name__ == '__main__':
-    from PySide6.QtWidgets import QApplication
-
-    app = QApplication()
-    dlg = SponsorSubmitDialog()
-    dlg.show()
-    app.exec()
+            ToastManager.instance().show(f"提交失败：{msg}", "error")

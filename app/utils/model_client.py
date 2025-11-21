@@ -1,3 +1,5 @@
+import json
+
 import requests
 
 
@@ -16,7 +18,12 @@ def _normalize_endpoint(base_url: str) -> str:
     return f"{base}/v1/chat/completions"
 
 
-def call_chat_model(model_cfg: dict, prompt: str, system_prompt: str = "你是一个实习助手") -> str:
+def call_chat_model(
+    model_cfg: dict,
+    prompt: str,
+    system_prompt: str = "你是一个实习助手",
+    on_delta=None,
+) -> str:
     if not model_cfg:
         raise ModelConfigurationError("未配置模型参数")
 
@@ -35,6 +42,7 @@ def call_chat_model(model_cfg: dict, prompt: str, system_prompt: str = "你是�
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": prompt}
         ],
+        "stream": True,
         "temperature": 0.3,
         "max_tokens": 800
     }
@@ -44,17 +52,56 @@ def call_chat_model(model_cfg: dict, prompt: str, system_prompt: str = "你是�
         "Content-Type": "application/json"
     }
 
-    response = requests.post(endpoint, headers=headers, json=payload, timeout=30)
-    response.raise_for_status()
-    data = response.json()
-    choices = data.get("choices")
-    if not choices:
-        raise RuntimeError("模型未返回内容")
-    message = choices[0].get("message") or {}
-    content = message.get("content")
-    if not content:
+    chunks = []
+
+    with requests.post(
+        endpoint,
+        headers=headers,
+        json=payload,
+        timeout=(10, 120),
+        stream=True,
+    ) as response:
+        response.raise_for_status()
+        for raw_line in response.iter_lines(decode_unicode=True):
+            if not raw_line:
+                continue
+            line = raw_line.strip()
+            if not line:
+                continue
+            if line.startswith("data:"):
+                line = line[5:].strip()
+            if line == "[DONE]":
+                break
+            try:
+                data = json.loads(line)
+            except json.JSONDecodeError:
+                # 非流式或一次性返回
+                try:
+                    data = json.loads(response.text)
+                except Exception as exc:
+                    raise RuntimeError(f"无法解析模型响应：{exc}") from exc
+                line = None
+
+            if not isinstance(data, dict):
+                continue
+
+            choices = data.get("choices") or []
+            if not choices:
+                continue
+
+            delta = choices[0].get("delta") or choices[0].get("message") or {}
+            content = delta.get("content")
+            if not content:
+                continue
+
+            chunks.append(content)
+            if on_delta:
+                on_delta(content)
+
+    final_text = "".join(chunks).strip()
+    if not final_text:
         raise RuntimeError("模型响应内容为空")
-    return content.strip()
+    return final_text
 
 
 def test_model_connection(model_cfg: dict) -> str:
@@ -63,4 +110,5 @@ def test_model_connection(model_cfg: dict) -> str:
         "请用一句中文回复：模型连通性测试成功。",
         "你是一个测试助手，用一句中文复述用户信息。"
     )
+
 

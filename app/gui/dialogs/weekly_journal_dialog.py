@@ -1,4 +1,5 @@
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QTextCursor
 from PySide6.QtWidgets import (
     QDialog,
     QVBoxLayout,
@@ -8,13 +9,15 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QLabel,
-    QMessageBox,
     QSplitter,
     QWidget,
     QFrame,
+    QLineEdit,
+    QMessageBox,
 )
+from PySide6.QtWidgets import QApplication
 
-from app.config.common import JOURNAL_SERVER_BASE
+from app.config.common import JOURNAL_SERVER_BASE, SYSTEM_PROMPT
 from app.gui.components.toast import ToastManager
 from app.gui.dialogs.journal_auth_dialog import JournalAuthDialog
 from app.utils.files import load_journal_history, append_journal_entry
@@ -31,6 +34,7 @@ class WeeklyJournalDialog(QDialog):
         self.server_base = JOURNAL_SERVER_BASE
         self.auth_info = None
         self.history = {"generated": [], "submitted": []}
+        self._ai_busy = False
         self._setup_styles()
         self._setup_ui()
         self._load_history()
@@ -60,6 +64,27 @@ class WeeklyJournalDialog(QDialog):
         server_layout.addWidget(btn_fetch)
         layout.addWidget(server_frame)
 
+        prompt_frame = QFrame()
+        prompt_frame.setObjectName("PromptCard")
+        prompt_layout = QHBoxLayout(prompt_frame)
+        prompt_layout.setContentsMargins(18, 10, 18, 10)
+        prompt_layout.setSpacing(12)
+
+        self.role_input = QLineEdit()
+        self.role_input.setPlaceholderText("请输入你的职业/岗位（例：前端实习生）")
+        self.role_input.setObjectName("PromptInput")
+
+        self.journal_type_input = QLineEdit()
+        self.journal_type_input.setPlaceholderText("请输入周记类型或主题（例：产品研发周记）")
+        self.journal_type_input.setObjectName("PromptInput")
+
+        prompt_layout.addWidget(QLabel("职业提示"))
+        prompt_layout.addWidget(self.role_input)
+        prompt_layout.addSpacing(6)
+        prompt_layout.addWidget(QLabel("周记类型"))
+        prompt_layout.addWidget(self.journal_type_input)
+        layout.addWidget(prompt_frame)
+
         splitter = QSplitter(Qt.Vertical)
 
         editor_container = QWidget()
@@ -71,9 +96,9 @@ class WeeklyJournalDialog(QDialog):
         editor_layout.addWidget(self.editor)
 
         btn_row = QHBoxLayout()
-        btn_ai = QPushButton("AI 自动生成")
-        btn_ai.clicked.connect(self._generate_with_ai)
-        btn_ai.setObjectName("PrimaryBtn")
+        self.btn_ai = QPushButton("AI 自动生成")
+        self.btn_ai.clicked.connect(self._generate_with_ai)
+        self.btn_ai.setObjectName("PrimaryBtn")
 
         btn_submit = QPushButton("提交周记")
         btn_submit.setObjectName("SuccessBtn")
@@ -83,7 +108,7 @@ class WeeklyJournalDialog(QDialog):
         btn_clear.setObjectName("GhostBtn")
         btn_clear.clicked.connect(self.editor.clear)
 
-        btn_row.addWidget(btn_ai)
+        btn_row.addWidget(self.btn_ai)
         btn_row.addWidget(btn_submit)
         btn_row.addWidget(btn_clear)
         btn_row.addStretch()
@@ -137,22 +162,51 @@ class WeeklyJournalDialog(QDialog):
 
     def _generate_with_ai(self):
         prompt_context = self.editor.toPlainText().strip()
+        role = self.role_input.text().strip()
+        journal_type = self.journal_type_input.text().strip()
+
+        if not self._confirm_generation(role, journal_type):
+            return
+
         base_prompt = (
             "请扮演实习生，根据以下笔记生成不少于300字的中文周记，包含本周工作、收获与下周计划。"
             if prompt_context else
             "请随机生成一份通用的实习周记，包含工作内容、问题反思与下周目标。"
         )
         prompt = f"{base_prompt}\n\n笔记：{prompt_context}" if prompt_context else base_prompt
+
+        extra_hints = []
+        if role:
+            extra_hints.append(f"职业/岗位：{role}")
+        if journal_type:
+            extra_hints.append(f"周记类型：{journal_type}")
+        if extra_hints:
+            prompt = f"{prompt}\n\n{'; '.join(extra_hints)}"
+
+        self._set_ai_busy(True)
+        self.editor.clear()
+
+        def handle_delta(delta: str):
+            cursor = self.editor.textCursor()
+            cursor.movePosition(QTextCursor.End)
+            cursor.insertText(delta)
+            self.editor.setTextCursor(cursor)
+            QApplication.processEvents()
+
         try:
-            content = call_chat_model(self.model_config, prompt, "你是一个专业的周记助手。")
+            content = call_chat_model(self.model_config, prompt, SYSTEM_PROMPT, on_delta=handle_delta)
         except ModelConfigurationError as cfg_err:
-            QMessageBox.warning(self, "模型配置不完整", str(cfg_err))
+            ToastManager.instance().show(str(cfg_err), "warning")
+            self._set_ai_busy(False)
             return
         except Exception as exc:
-            QMessageBox.critical(self, "生成失败", f"调用模型失败：{exc}")
+            ToastManager.instance().show(f"调用模型失败：{exc}", "error")
+            self._set_ai_busy(False)
             return
 
-        self.editor.setPlainText(content)
+        self._set_ai_busy(False)
+        if not content.strip():
+            return
         append_journal_entry("generated", content)
         ToastManager.instance().show("AI 周记已生成", "success")
         self._load_history()
@@ -160,7 +214,7 @@ class WeeklyJournalDialog(QDialog):
     def _submit_journal(self):
         content = self.editor.toPlainText().strip()
         if not content:
-            QMessageBox.information(self, "提示", "请先输入或生成周记内容")
+            ToastManager.instance().show("请先输入或生成周记内容", "info")
             return
         append_journal_entry("submitted", content)
         ToastManager.instance().show("周记已提交并记录", "success")
@@ -189,6 +243,18 @@ class WeeklyJournalDialog(QDialog):
                 font-size: 12pt;
                 color: #EAEAEA;
             }
+            QLineEdit#PromptInput {
+                background: #1A1C24;
+                border: 1px solid #2F3145;
+                border-radius: 8px;
+                padding: 10px;
+                color: #F5F6FF;
+                font-size: 10pt;
+            }
+            QLineEdit#PromptInput:focus {
+                border-color: #5865F2;
+                box-shadow: 0 0 12px rgba(88,101,242,0.35);
+            }
             QListWidget {
                 background: #151515;
                 border: 1px solid #222;
@@ -205,6 +271,11 @@ class WeeklyJournalDialog(QDialog):
                 background: #1B1B1F;
                 border: 1px solid #2D2D32;
                 border-radius: 10px;
+            }
+            #PromptCard {
+                background: rgba(24,27,42,0.95);
+                border: 1px solid #2E3147;
+                border-radius: 12px;
             }
             #ServerStatus {
                 font-weight: bold;
@@ -249,7 +320,7 @@ class WeeklyJournalDialog(QDialog):
     def _prompt_login(self):
         base = self._server_base()
         if not base:
-            QMessageBox.information(self, "提示", "请先在配置中填写周记服务器地址")
+            ToastManager.instance().show("未配置周记服务器地址", "warning")
             return
         dialog = JournalAuthDialog(base, self)
         if dialog.exec() == QDialog.Accepted and dialog.auth_result:
@@ -275,20 +346,20 @@ class WeeklyJournalDialog(QDialog):
     def _fetch_from_server(self):
         base = self._server_base()
         if not base:
-            QMessageBox.information(self, "提示", "请先在配置中填写周记服务器地址")
+            ToastManager.instance().show("未配置周记服务器地址", "warning")
             return
         if not self._ensure_login():
             return
         try:
             entries = fetch_journals(base, self.auth_info['token'])
         except JournalServerError as exc:
-            QMessageBox.warning(self, "获取失败", str(exc))
+            ToastManager.instance().show(str(exc), "warning")
             return
         except Exception as exc:
-            QMessageBox.critical(self, "获取失败", str(exc))
+            ToastManager.instance().show(str(exc), "error")
             return
         if not entries:
-            QMessageBox.information(self, "提示", "服务器没有可用的周记内容")
+            ToastManager.instance().show("服务器没有可用的周记内容", "info")
             return
         content = self._select_entry(entries)
         if not content:
@@ -342,4 +413,33 @@ class WeeklyJournalDialog(QDialog):
             if item:
                 return item.data(Qt.UserRole)
         return None
+
+    def _set_ai_busy(self, busy: bool):
+        if busy:
+            self.btn_ai.setEnabled(False)
+            self.btn_ai.setText("AI 正在生成...")
+            if not self._ai_busy:
+                QApplication.setOverrideCursor(Qt.WaitCursor)
+            self._ai_busy = True
+        else:
+            self.btn_ai.setEnabled(True)
+            self.btn_ai.setText("AI 自动生成")
+            if self._ai_busy:
+                QApplication.restoreOverrideCursor()
+                self._ai_busy = False
+
+    def _confirm_generation(self, role: str, journal_type: str) -> bool:
+        summary = (
+            f"职业/岗位：{role or '未填写'}\n"
+            f"周记类型：{journal_type or '未填写'}\n\n"
+            "请确认这些提示词信息无误，是否继续生成？"
+        )
+        reply = QMessageBox.question(
+            self,
+            "确认提示词",
+            summary,
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.Yes,
+        )
+        return reply == QMessageBox.Yes
 

@@ -13,6 +13,7 @@ from app.config.common import QQ_GROUP, VERSION, CONFIG_FILE, MITM_PROXY
 from app.gui.components.log_viewer import QTextEditLogger
 from app.gui.components.toast import ToastManager
 from app.gui.dialogs.dialogs.config_dialog import ConfigDialog
+from app.gui.dialogs.feedback_dialog import FeedbackDialog
 from app.gui.dialogs.image_manager_dialog import ImageManagerDialog
 from app.gui.dialogs.photo_sign_dialog import PhotoSignDialog
 from app.gui.dialogs.sponsor_dialog import SponsorSubmitDialog
@@ -30,7 +31,7 @@ class ModernWindow(QMainWindow):
         super().__init__()
 
         self.setWindowTitle(f"🔰 Sign Sign In {VERSION} - 实习打卡助手")
-        self.resize(900, 580)  # 紧凑高度
+        self.resize(900, 540)  # 进一步收紧高度
         self.is_running = False
         self.photo_image_path = None
 
@@ -225,12 +226,16 @@ class ModernWindow(QMainWindow):
         hh.addWidget(QLabel(" >_ SYSTEM LOG", objectName="TermHeader"))
         hh.addStretch()
 
-        btn_copy = QPushButton("复制")
+        btn_copy = QPushButton("⧉ 复制日志")
         btn_copy.setObjectName("LogActionBtn")
+        btn_copy.setCursor(Qt.PointingHandCursor)
         btn_copy.clicked.connect(self.copy_log)
-        btn_clear = QPushButton("清空")
+        btn_copy.setToolTip("复制全部日志到剪贴板")
+        btn_clear = QPushButton("🗑 清空日志")
         btn_clear.setObjectName("LogActionBtn")
         btn_clear.clicked.connect(lambda: self.clear_log())
+        btn_clear.setCursor(Qt.PointingHandCursor)
+        btn_clear.setToolTip("清空当前日志显示内容")
         hh.addWidget(btn_copy)
         hh.addWidget(btn_clear)
         r_vbox.addWidget(head)
@@ -261,50 +266,140 @@ class ModernWindow(QMainWindow):
 
     def setup_style(self):
         self.setStyleSheet("""
-            QMainWindow { background: #1E1E1E; }
-            #LeftPanel { background: #252526; border-right: 1px solid #333; }
-            #AppTitle { font-family: "Segoe UI"; font-size: 18pt; font-weight: bold; color: white; }
-            #AppSubTitle { font-size: 9pt; color: #999; }
-            #MonitorBox { background: #2D2D30; border-radius: 4px; border: 1px solid #3E3E42; }
-            #StatusLabel { color: #CCC; font-family: Consolas; font-size: 9pt; }
-            #SectionLabel { color: #888; font-weight: bold; margin-top: 8px; }
-
-            #ToolBtn { background: #333; color: #DDD; border: 1px solid #555; padding: 4px; border-radius: 3px; }
-            #ToolBtn:hover { background: #444; border-color: #007ACC; }
-
-            QRadioButton { color: #888; font-size: 10pt; }
-            /* 选中文字 */
-            QRadioButton:checked { color: white; font-weight: bold; }
-            /* 未选中时的圆形 */
-            QRadioButton::indicator { 
-                width: 14px;
-                height: 14px;
-                border-radius: 7px;            /* <-- 圆形关键 */
-                border: 2px solid #666;        /* 空心圆的外圈 */
+            QMainWindow { background: #0F111A; }
+            #LeftPanel {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #151928, stop:1 #0E111C);
+                border-right: 1px solid #1F2233;
+            }
+            #RightPanel {
+                background: #11131D;
+                border-left: 1px solid #1A1D2B;
+            }
+            #AppTitle {
+                font-family: "Segoe UI Semibold";
+                font-size: 20pt;
+                color: #F2F4FF;
+            }
+            #AppSubTitle {
+                font-size: 10pt;
+                color: #7D86A7;
+            }
+            #MonitorBox {
+                background: #151826;
+                border-radius: 12px;
+                border: 1px solid #1E2235;
+                padding: 4px;
+            }
+            #StatusLabel {
+                color: #D7DBFF;
+                font-family: Consolas;
+                font-size: 9.5pt;
+            }
+            #SectionLabel {
+                color: #6C7395;
+                font-weight: bold;
+                margin-top: 8px;
+                letter-spacing: 1px;
+            }
+            #ToolBtn {
+                background: #191B2A;
+                color: #D0D5FF;
+                border: 1px solid #22263A;
+                padding: 6px;
+                border-radius: 10px;
+                font-weight: 600;
+            }
+            #ToolBtn:hover {
+                border-color: #4F6BFF;
+                color: white;
+            }
+            QRadioButton {
+                color: #9EA4C4;
+                font-size: 10pt;
+            }
+            QRadioButton:checked {
+                color: #F4F6FF;
+                font-weight: bold;
+            }
+            QRadioButton::indicator {
+                width: 16px;
+                height: 16px;
+                border-radius: 8px;
+                border: 2px solid #4F5675;
                 background: transparent;
             }
-            /* 悬停时边框变亮 */
-            QRadioButton::indicator:hover { border-color: #AAA; }
-            /* 选中状态（蓝色实心圆） */
-            QRadioButton::indicator:checked { background: #007ACC; border: 2px solid #007ACC; }
-
-
-            #BtnStart { background: #007ACC; color: white; border-radius: 4px; padding: 8px; font-size: 11pt; font-weight: bold; }
-            #BtnStart:hover { background: #0062A3; }
-            #BtnDonate { background: transparent; color: #888; border: 1px solid #444; border-radius: 4px; padding: 4px; margin-top: 4px;}
-            #BtnDonate:hover { color: white; border-color: #666; }
-
-            #BtnGit { background: transparent; color: #888; border: 1px solid #444; border-radius: 4px; padding: 4px; margin-top: 4px;}
-            #BtnGit:hover { color: white; border-color: #666; }
-            #BtnJournal { background: #3E3E42; color: #DDD; border-radius: 4px; padding: 6px; font-weight: bold; }
-            #BtnJournal:hover { background: #4B4B50; color: white; }
-
-            #TermHeader { color: #CCC; font-weight: bold;}
-            #LogView { background: #1E1E1E; border: none; color: #CCC; font-family: Consolas; font-size: 9pt; padding: 8px; }
-            #LogActionBtn { background: #444; color: white; border: none; padding: 2px 8px; border-radius: 2px; margin-left: 5px; }
-
-            QProgressBar { background: #333; border: none; height: 3px; }
-            QProgressBar::chunk { background: #007ACC; }
+            QRadioButton::indicator:hover { border-color: #7C84AA; }
+            QRadioButton::indicator:checked {
+                background: #5C7CFF;
+                border: 2px solid #5C7CFF;
+            }
+            #BtnStart {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #3D7CFF, stop:1 #7A4DFF);
+                color: white;
+                border-radius: 20px;
+                padding: 10px;
+                font-size: 12pt;
+                font-weight: bold;
+                border: none;
+            }
+            #BtnStart:hover { opacity: 0.92; }
+            #BtnDonate, #BtnGit {
+                background: transparent;
+                color: #7E86A8;
+                border: 1px solid #2F3450;
+                border-radius: 18px;
+                padding: 6px 14px;
+                font-weight: bold;
+            }
+            #BtnDonate:hover, #BtnGit:hover {
+                border-color: #5865F2;
+                color: #F5F7FF;
+            }
+            #BtnJournal {
+                background: rgba(92, 124, 255, 0.15);
+                color: #B8C1FF;
+                border-radius: 14px;
+                padding: 8px 14px;
+                font-weight: bold;
+                border: 1px dashed rgba(92,124,255,0.4);
+            }
+            #BtnJournal:hover {
+                background: rgba(92, 124, 255, 0.25);
+                color: white;
+            }
+            #TermHeader { color: #AAB1D6; font-weight: bold;}
+            #LogView {
+                background: #08090F;
+                border: none;
+                color: #C4C9EF;
+                font-family: Consolas;
+                font-size: 9.5pt;
+                padding: 12px;
+            }
+            #LogActionBtn {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                    stop:0 #1B2035, stop:1 #2B3558);
+                color: #F1F3FF;
+                border: 1px solid #2F3654;
+                padding: 6px 14px;
+                border-radius: 16px;
+                margin-left: 5px;
+                font-weight: 600;
+                letter-spacing: 0.5px;
+            }
+            #LogActionBtn:hover { border-color: #7A89FF; color: white; }
+            QProgressBar {
+                background: #1A1D2C;
+                border: none;
+                height: 4px;
+                border-radius: 2px;
+            }
+            QProgressBar::chunk {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #4FACFF, stop:1 #9B59FF);
+            }
         """)
 
     def update_status_v1(self):
@@ -332,7 +427,7 @@ class ModernWindow(QMainWindow):
         proxy = get_system_proxy()
 
         if proxy == "127.0.0.1:13140":
-            self.lbls['proxy'].setText(f"🔗 代理: <span style='color:#58D68D'>{proxy} (Target)</span>")
+            self.lbls['proxy'].setText(f"🔗 代理: <span style='color:#58D68D'>{proxy}</span>")
         elif proxy:
             self.lbls['proxy'].setText(f"🔗 代理: <span style='color:#F4D03F'>{proxy}</span>")
         else:
@@ -366,7 +461,7 @@ class ModernWindow(QMainWindow):
 
         proxy = data['proxy']
         if proxy == "127.0.0.1:13140":
-            self.lbls['proxy'].setText(f"🔗 代理: <span style='color:#58D68D'>{proxy} (Target)</span>")
+            self.lbls['proxy'].setText(f"🔗 代理: <span style='color:#58D68D'>{proxy}</span>")
         elif proxy:
             self.lbls['proxy'].setText(f"🔗 代理: <span style='color:#F4D03F'>{proxy}</span>")
         else:
@@ -383,7 +478,9 @@ class ModernWindow(QMainWindow):
         )
 
     def open_config(self):
-        if not os.path.exists(CONFIG_FILE): return QMessageBox.warning(self, "Error", "config.json文件不存在")
+        if not os.path.exists(CONFIG_FILE):
+            ToastManager.instance().show("config.json 文件不存在", "error")
+            return
         ConfigDialog(CONFIG_FILE, self).exec()
         return None
 
@@ -391,8 +488,7 @@ class ModernWindow(QMainWindow):
         SponsorSubmitDialog(self).exec()  # SupportDialog(self).exec()
 
     def show_feedback(self):
-        QMessageBox.information(self, "开发中", "该功能正在开发中！")
-        # FeedbackDialog(self).exec()
+        FeedbackDialog(self).exec()
 
     def flush_dns(self):
         bash("ipconfig /flushdns")
@@ -411,7 +507,7 @@ class ModernWindow(QMainWindow):
         try:
             config = read_config(CONFIG_FILE)
         except Exception as exc:
-            QMessageBox.warning(self, "提示", f"读取配置失败：{exc}")
+            ToastManager.instance().show(f"读取配置失败：{exc}", "error")
             return
         WeeklyJournalDialog(config.get("model", {}), self).exec()
 
@@ -433,7 +529,7 @@ class ModernWindow(QMainWindow):
             errMsg = validate_config(read_config(CONFIG_FILE))
             if errMsg:
                 logging.warning(f"配置文件验证失败: {errMsg}")
-                QMessageBox.warning(self, "Error", errMsg)
+                ToastManager.instance().show(errMsg, "warning")
                 return
 
             self.is_running = True
@@ -480,5 +576,4 @@ class ModernWindow(QMainWindow):
             SponsorSubmitDialog(self).exec()
         else:
             if msg != "任务已停止":
-                # QMessageBox.critical(self, "提示", msg)
                 ToastManager.instance().show(msg, "error")

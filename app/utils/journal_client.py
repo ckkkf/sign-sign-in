@@ -49,11 +49,10 @@ def login(base_url: str, username: str, password: str) -> Dict[str, Any]:
         raise JournalServerError("请输入用户名和密码")
     url = _build_url(base_url, "/api/auth/login")
     payload = _request_json("post", url, data={"username": username, "password": password})
-    token = payload.get("token") or payload.get("data", {}).get("token")
+    token = payload.get("data")
     if not token:
         raise JournalServerError("登录失败：服务器未返回 token")
-    user = payload.get("user") or payload.get("data", {}).get("user") or {"username": username}
-    return {"token": token, "user": user}
+    return {"token": token, "user": username}
 
 
 def fetch_journals(base_url: str, token: str) -> List[Dict[str, Any]]:

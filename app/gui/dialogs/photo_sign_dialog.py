@@ -12,7 +12,6 @@ from PySide6.QtWidgets import (
     QPushButton,
     QHBoxLayout,
     QFileDialog,
-    QMessageBox,
     QDialogButtonBox,
 )
 
@@ -28,9 +27,50 @@ class PhotoSignDialog(QDialog):
         self.resize(640, 520)
         self.setAttribute(Qt.WA_DeleteOnClose)
         self.selected_image = None
+        self._setup_style()
         self._setup_ui()
         self._load_images()
         self._select_random_image()
+
+    def _setup_style(self):
+        self.setStyleSheet("""
+            QDialog {
+                background: #121218;
+                color: #E2E2E7;
+            }
+            QLabel {
+                color: #9DA2BA;
+            }
+            QListWidget {
+                background: #17171F;
+                border: 1px solid #2A2A32;
+                border-radius: 12px;
+                padding: 10px;
+            }
+            QListWidget::item {
+                border-radius: 8px;
+                margin: 4px;
+            }
+            QListWidget::item:selected {
+                background: #2E74FF;
+                color: white;
+            }
+            QPushButton {
+                background: #232333;
+                border: 1px solid #2F2F40;
+                border-radius: 18px;
+                padding: 6px 16px;
+                color: #D5D7E2;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                border-color: #5865F2;
+                color: white;
+            }
+            QDialogButtonBox QPushButton {
+                min-width: 90px;
+            }
+        """)
 
     def _setup_ui(self):
         layout = QVBoxLayout(self)
@@ -54,7 +94,7 @@ class PhotoSignDialog(QDialog):
         btn_manager = QPushButton("打开图片管理")
         btn_manager.clicked.connect(self._open_manager)
         btn_server = QPushButton("从服务器获取（预留）")
-        btn_server.clicked.connect(lambda: QMessageBox.information(self, "提示", "该功能预留，敬请期待！"))
+        btn_server.clicked.connect(lambda: ToastManager.instance().show("从服务器获取功能预留中", "info"))
 
         for btn in (btn_random, btn_import, btn_manager, btn_server):
             btn_row.addWidget(btn)
@@ -102,6 +142,7 @@ class PhotoSignDialog(QDialog):
         if not getattr(self, "_images", None):
             self.preview.setText("图片目录为空，请先导入图片。")
             self.selected_image = None
+            ToastManager.instance().show("暂无可用图片，请先导入", "info")
             return
         path = random.choice(self._images)
         self.selected_image = path
@@ -113,6 +154,7 @@ class PhotoSignDialog(QDialog):
     def _import_image(self):
         file_path, _ = QFileDialog.getOpenFileName(self, "选择图片", "", "Images (*.png *.jpg *.jpeg *.bmp *.gif *.webp)")
         if not file_path:
+            ToastManager.instance().show("已取消导入", "info")
             return
         try:
             new_path = import_image(file_path)
@@ -120,7 +162,7 @@ class PhotoSignDialog(QDialog):
             self._load_images()
             self._set_preview(new_path)
         except Exception as exc:
-            QMessageBox.critical(self, "导入失败", str(exc))
+            ToastManager.instance().show(str(exc), "error")
 
     def _open_manager(self):
         dialog = ImageManagerDialog(self)
@@ -131,7 +173,7 @@ class PhotoSignDialog(QDialog):
 
     def _accept(self):
         if not self.selected_image:
-            QMessageBox.warning(self, "提示", "请选择一张用于签到的图片")
+            ToastManager.instance().show("请选择一张用于签到的图片", "warning")
             return
         self.accept()
 

@@ -27,14 +27,57 @@ class ConfigDialog(QDialog):
 
     def setup_style(self):
         self.setStyleSheet("""
-            QDialog { background: #1E1E1E; color: white; }
-            QLabel { color: #BBB; font-weight: bold; }
-            QLineEdit { background: #111; border: 1px solid #444; color: #DDD; padding: 6px; border-radius: 4px; }
-            QLineEdit:focus { border: 1px solid #007ACC; }
-            QPushButton { background: #333; color: #DDD; padding: 6px; border: 1px solid #555; border-radius: 4px; }
-            QPushButton:hover { background: #444; border-color: #007ACC; color: white; }
-            #LinkBtn { color: #58D68D; border: none; background: transparent; text-align: left; }
+            QDialog {
+                background: #0F111A;
+                color: #E6E9FF;
+            }
+            QLabel {
+                color: #8E95B4;
+                font-weight: 600;
+            }
+            QWidget#FormContainer {
+                background: #151828;
+                border: 1px solid #232841;
+                border-radius: 16px;
+                padding: 12px 18px;
+            }
+            QLineEdit {
+                background: #1C2033;
+                border: 1px solid #2F3654;
+                color: #F5F6FF;
+                padding: 10px;
+                border-radius: 10px;
+            }
+            QLineEdit:focus {
+                border-color: #6E7BFF;
+                box-shadow: 0 0 12px rgba(110,123,255,0.24);
+            }
+            QPushButton {
+                background: #1F2336;
+                color: #D5D9FF;
+                padding: 8px 16px;
+                border: 1px solid #2F3452;
+                border-radius: 12px;
+                font-weight: 600;
+            }
+            QPushButton:hover {
+                border-color: #7C89FF;
+                color: white;
+            }
+            #LinkBtn {
+                color: #58D68D;
+                border: none;
+                background: transparent;
+                text-align: left;
+                font-weight: bold;
+            }
             #LinkBtn:hover { text-decoration: underline; }
+            QPushButton#Primary {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #4E8BFF, stop:1 #7A5BFF);
+                color: white;
+                border: none;
+            }
         """)
 
     def setup_ui(self):
@@ -42,8 +85,10 @@ class ConfigDialog(QDialog):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         content = QWidget()
-        form = QFormLayout(content)
+        content.setObjectName("FormContainer")
+        form = QFormLayout()
         form.setSpacing(10)
+        content.setLayout(form)
 
         input_conf = self.current_data.get('input', {})
         loc = input_conf.get('location', {})
@@ -133,7 +178,7 @@ class ConfigDialog(QDialog):
         bot_layout.addWidget(btn_open)
 
         btn_save = QPushButton("💾 保存并应用")
-        btn_save.setStyleSheet("background: #007ACC; font-weight: bold; border: none;")
+        btn_save.setObjectName("Primary")
         btn_save.clicked.connect(self.save_config)
         bot_layout.addWidget(btn_save)
 
