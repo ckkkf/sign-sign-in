@@ -14,29 +14,27 @@ from app.gui.components.log_viewer import QTextEditLogger
 from app.gui.components.toast import Toast, ToastManager
 from app.gui.dialogs.dialogs.config_dialog import ConfigDialog
 from app.gui.dialogs.sponsor_dialog import SponsorSubmitDialog
-from app.mitm.loader import MitmLoaderThread
+from app.mitm.service import MitmService
 from app.utils.commands import get_net_io, bash, get_network_type, get_local_ip, get_system_proxy, check_port_listening, \
     check_cert
 from app.utils.files import validate_config, read_config
 from app.workers.sign_task import SignTaskThread
+from app.workers.monitor_thread import MonitorThread
 
 
 class ModernWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle(f"Sign Sign In {VERSION} - 实习打卡助手")
+
+        self.setWindowTitle(f"🔰 Sign Sign In {VERSION} - 实习打卡助手")
         self.resize(900, 580)  # 紧凑高度
         self.is_running = False
 
-        self.loader = MitmLoaderThread()
-        self.loader.start()
-
-        self.monitor_timer = QTimer(self)
-        self.monitor_timer.timeout.connect(self.update_status)
-        self.monitor_timer.start(1000)
-
-        self.last_io = get_net_io()
-        self.last_time = time.time()
+        # 自动守护：monitor 会调用 mitm.start()
+        self.mitm = MitmService()
+        self.monitor = MonitorThread(self.mitm)
+        self.monitor.data_signal.connect(self.update_status)
+        self.monitor.start()
 
         self.setup_style()
         self.init_ui()
@@ -55,10 +53,10 @@ class ModernWindow(QMainWindow):
         l_vbox.setContentsMargins(15, 20, 15, 20)
         l_vbox.setSpacing(10)
 
-        title = QLabel("Sign Sign In")
+        title = QLabel("🔰 Sign Sign In")
         title.setObjectName("AppTitle")
         l_vbox.addWidget(title)
-        sub = QLabel("自动化实习签到系统")
+        sub = QLabel("—— 自动化实习签到系统")
         sub.setObjectName("AppSubTitle")
         l_vbox.addWidget(sub)
 
@@ -94,7 +92,7 @@ class ModernWindow(QMainWindow):
         self.lbls = {}
         keys = ["time", "pid", "net", "speed", "proxy", "mitm", "cert", "ip"]
         for k in keys:
-            l = QLabel("...")
+            l = QLabel("-")
             l.setObjectName("StatusLabel")
             l.setTextFormat(Qt.RichText)
             self.lbls[k] = l
@@ -239,8 +237,6 @@ class ModernWindow(QMainWindow):
         self.log_h.setFormatter(logging.Formatter('%(asctime)s - %(message)s', "%H:%M:%S"))
         logging.getLogger().addHandler(self.log_h)
 
-        self.update_status()
-
     def clear_log(self):
         reply = QMessageBox.question(
             self,
@@ -299,7 +295,7 @@ class ModernWindow(QMainWindow):
             QProgressBar::chunk { background: #007ACC; }
         """)
 
-    def update_status(self):
+    def update_status_v1(self):
         self.lbls['time'].setText(f"🕔 当前时间: <span style='color:#FFF'>{datetime.now().strftime('%H:%M:%S')}</span>")
         self.lbls['pid'].setText(f"🟢 PID: <span style='color:#58D68D'>{os.getpid()}</span>")
 
@@ -331,16 +327,48 @@ class ModernWindow(QMainWindow):
             self.lbls['proxy'].setText("🔗 代理: <span style='color:#F4D03F'>直连</span>")
 
         proxy_split = MITM_PROXY.split(":")
-        run = check_port_listening(proxy_split[0], proxy_split[1], 0.05)
+        run = check_port_listening(proxy_split[0], int(proxy_split[1]), 0.05)
         if run:
             self.lbls['mitm'].setText("🛡️ Mitm: <span style='color:#58D68D'>运行中</span>")
         else:
-            self.lbls['mitm'].setText("⚙️ Mitm: <span style='color:#888'>未启动</span>")
+            self.lbls['mitm'].setText("⚙️ Mitm: <span style='color:#F4D03F'>未启动</span>")
 
         if check_cert():
             self.lbls['cert'].setText("🔒 证书: <span style='color:#58D68D'>正常</span>")
         else:
             self.lbls['cert'].setText("⚠️ 证书: <span style='color:#F4D03F'>异常</span>")
+
+    def update_status(self, data):
+        self.lbls['time'].setText(f"🕔 当前时间: <span style='color:#FFF'>{datetime.now().strftime('%H:%M:%S')}</span>")
+        self.lbls['pid'].setText(f"🟢 PID: <span style='color:#58D68D'>{os.getpid()}</span>")
+
+        # 使用后台线程传来的数据
+        self.lbls['net'].setText(f"📶 网络: <span style='color:#58D68D'>{data['net']}</span>")
+
+        self.lbls['speed'].setText(
+            f"🚀 速率: <span style='color:#58D68D'>↓ {data['speed_d']:.0f}K</span>"
+            f" <span style='color:#58D68D'>↑ {data['speed_u']:.0f}K</span>"
+        )
+
+        self.lbls['ip'].setText(f"💻 IP: <span style='color:#FFF'>{data['ip']}</span>")
+
+        proxy = data['proxy']
+        if proxy == "127.0.0.1:13140":
+            self.lbls['proxy'].setText(f"🔗 代理: <span style='color:#58D68D'>{proxy} (Target)</span>")
+        elif proxy:
+            self.lbls['proxy'].setText(f"🔗 代理: <span style='color:#F4D03F'>{proxy}</span>")
+        else:
+            self.lbls['proxy'].setText("🔗 代理: <span style='color:#F4D03F'>直连</span>")
+
+        self.lbls['mitm'].setText(
+            "🛡️ Mitm: <span style='color:#58D68D'>运行中</span>" if data['mitm']
+            else "⚙️ Mitm: <span style='color:#F4D03F'>未启动</span>"
+        )
+
+        self.lbls['cert'].setText(
+            "🔒 证书: <span style='color:#58D68D'>正常</span>" if data['cert']
+            else "⚠️ 证书: <span style='color:#F4D03F'>异常</span>"
+        )
 
     def open_config(self):
         if not os.path.exists(CONFIG_FILE): return QMessageBox.warning(self, "Error", "config.json文件不存在")
@@ -364,7 +392,8 @@ class ModernWindow(QMainWindow):
 
     def toggle(self):
         if not self.is_running:
-            logging.info(f"\n{'=' * 20} 🟢 TASK {datetime.now().strftime('%H:%M')} {'=' * 20}")
+            logging.info("")
+            logging.info(f"{'=' * 20} 🟢 TASK {datetime.now().strftime('%H:%M')} {'=' * 20}")
 
             # 验证数据
             errMsg = validate_config(read_config(CONFIG_FILE))
@@ -412,7 +441,6 @@ class ModernWindow(QMainWindow):
         self.prog.hide()
         self.grp.buttons()[0].setEnabled(True)
         self.grp.buttons()[1].setEnabled(True)
-        self.update_status()
 
         if success:
             # 成功后弹出赞助提交框

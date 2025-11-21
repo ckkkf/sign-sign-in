@@ -50,10 +50,11 @@ class SignTaskThread(QThread):
             self.origin_proxy = set_proxy(target_proxy)
 
             ### mitmdump
-            if not check_port_listening(self.target_host, self.target_port):
-                logging.warning("⚠️ 服务未响应，尝试重启...")
-                self.start_mitm()
-            logging.info("🛡️ 代理服务正常")
+            if not check_port_listening(self.target_host, int(self.target_port)):
+                # 不再在这里强行启动，让后台 MonitorThread 负责自启
+                raise RuntimeError("mitmdump未运行，请稍等几秒后重新点击开始（后台会自动尝试启动mitmdump）")
+            else:
+                logging.info("🛡️ 代理服务正常")
 
             ### cert
             self.do_cert()
@@ -85,17 +86,10 @@ class SignTaskThread(QThread):
             logging.error(f"❌ 异常: {e}")
             self.finished_signal.emit(False, str(e))
         finally:
-            reset_proxy(self.origin_proxy, f"127.0.0.1:{self.target_port}")
+            reset_proxy(self.origin_proxy, f"{self.target_host}:{self.target_port}")
 
     def check_stop(self):
         if self.isInterruptionRequested(): raise RuntimeError("用户停止执行")
-
-    def start_mitm(self):
-        if check_port_listening(self.target_host, self.target_port, 0.1):
-            proc = get_process_by_port(self.target_port)
-            if proc: kill_process_tree(proc.pid)
-        subprocess.Popen([MITMDUMP_FILE, "-p", self.target_port, "-s", CODE_FILE, "--quiet"], creationflags=subprocess.CREATE_NO_WINDOW)
-        time.sleep(1)
 
     def wait_code(self, fpath, proxy):
         last = time.time()
@@ -154,8 +148,7 @@ class SignTaskThread(QThread):
         # stop_mitmproxy(process)
 
         ### 重启 mitmproxy
-        logging.info("🔰🔰🔰 正在重启 mitmdump 🔰🔰🔰")
-        self.start_mitm()
+        logging.info("🔰🔰🔰 证书安装完成，请稍等，后台将自动重启 mitmdump 🔰🔰🔰")
 
     def download_cert(self, file_name, proxy):
         # 发送 GET 请求下载文件获取 .p12 格式的证书
