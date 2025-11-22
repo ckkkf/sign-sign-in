@@ -23,7 +23,7 @@ from app.utils.commands import get_net_io, bash, get_network_type, get_local_ip,
     check_cert
 from app.utils.files import validate_config, read_config
 from app.workers.monitor_thread import MonitorThread
-from app.workers.sign_task import SignTaskThread
+from app.workers.sign_task import SignTaskThread, GetCodeAndSessionThread
 
 
 class ModernWindow(QMainWindow):
@@ -33,7 +33,9 @@ class ModernWindow(QMainWindow):
         self.setWindowTitle(f"🔰 Sign Sign In {VERSION} - 实习打卡助手")
         self.resize(900, 540)  # 进一步收紧高度
         self.is_running = False
+        self.is_getting_code = False
         self.photo_image_path = None
+        self.btn_get_code_original_style = None  # 保存按钮原始样式
 
         # 自动守护：monitor 会调用 mitm.start()
         self.mitm = MitmService()
@@ -56,7 +58,7 @@ class ModernWindow(QMainWindow):
         left.setObjectName("LeftPanel")
         l_vbox = QVBoxLayout(left)
         l_vbox.setContentsMargins(15, 20, 15, 20)
-        l_vbox.setSpacing(10)
+        l_vbox.setSpacing(5)
 
         title = QLabel("🔰 Sign Sign In")
         title.setObjectName("AppTitle")
@@ -89,13 +91,13 @@ class ModernWindow(QMainWindow):
         mon_box.setObjectName("MonitorBox")
         mon_grid = QGridLayout(mon_box)
         mon_grid.setContentsMargins(10, 10, 10, 10)
-        mon_grid.setSpacing(8)
+        mon_grid.setSpacing(5)
         # Set Equal Column Width
         mon_grid.setColumnStretch(0, 1)
         mon_grid.setColumnStretch(1, 1)
 
         self.lbls = {}
-        keys = ["time", "pid", "net", "speed", "proxy", "mitm", "cert", "ip"]
+        keys = ["time", "pid", "net", "speed", "proxy", "mitm", "cert", "ip", "session"]
         for k in keys:
             l = QLabel("-")
             l.setObjectName("StatusLabel")
@@ -110,6 +112,7 @@ class ModernWindow(QMainWindow):
         mon_grid.addWidget(self.lbls['cert'], 2, 1)
         mon_grid.addWidget(self.lbls['mitm'], 3, 0)
         mon_grid.addWidget(self.lbls['ip'], 3, 1)
+        mon_grid.addWidget(self.lbls['session'], 4, 0, 1, 2)  # 跨两列
 
         l_vbox.addWidget(mon_box)
 
@@ -120,7 +123,7 @@ class ModernWindow(QMainWindow):
         l_vbox.addWidget(label)
 
         t_grid = QGridLayout()
-        t_grid.setSpacing(10)
+        t_grid.setSpacing(8)
         tools = [
             ("🔗 系统代理", lambda: bash('rundll32.exe shell32.dll,Control_RunDLL inetcpl.cpl,,4')),
             ("🔒 证书管理", lambda: bash('certmgr.msc')),
@@ -134,10 +137,10 @@ class ModernWindow(QMainWindow):
             b = QPushButton(name)
             b.setObjectName("ToolBtn")
             b.clicked.connect(func)
-            t_grid.addWidget(b, i // 3, i % 3)
+            t_grid.addWidget(b, i // 4, i % 4)
         l_vbox.addLayout(t_grid)
 
-        btn_journal = QPushButton("提交周记")
+        btn_journal = QPushButton("提交周记（测试）")
         btn_journal.setObjectName("BtnJournal")
         btn_journal.clicked.connect(self.open_weekly_journal)
         l_vbox.addWidget(btn_journal)
@@ -161,25 +164,12 @@ class ModernWindow(QMainWindow):
 
         # 第一行：签到 + 签退
         mode_row1 = QHBoxLayout()
-        mode_row1.setSpacing(30)
+        mode_row1.setSpacing(10)
         mode_row1.addWidget(rb_in)
         mode_row1.addWidget(rb_out)
+        mode_row1.addWidget(rb_img_in)
         mode_row1.addStretch()
         l_vbox.addLayout(mode_row1)
-
-        # 两行之间增加空隙（建议 10 像素）
-        l_vbox.addSpacing(10)
-
-        # 第二行：单独的“实习图片签到”
-        mode_row2 = QHBoxLayout()
-        mode_row2.setSpacing(30)
-        mode_row2.addWidget(rb_img_in)
-        mode_row2.addStretch()
-        l_vbox.addLayout(mode_row2)
-
-        # 下方留空
-        l_vbox.addSpacing(20)
-        l_vbox.addStretch()
 
         # ------------------------- Progress -------------------------
         self.prog = QProgressBar()
@@ -188,25 +178,48 @@ class ModernWindow(QMainWindow):
         self.prog.hide()
         l_vbox.addWidget(self.prog)
 
+        # ------------------------- Get Code and Session Button -------------------------
+        btn_row1 = QHBoxLayout()
+        self.btn_get_code = QPushButton("获取code")
+        self.btn_get_code.setObjectName("BtnGetCode")
+        self.btn_get_code.clicked.connect(self.get_code_and_session)
+        # 保存原始样式
+        self.btn_get_code_original_style = """
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                stop:0 #28A745, stop:1 #20C997);
+            color: white;
+            border-radius: 20px;
+            padding: 10px;
+            font-size: 12pt;
+            font-weight: bold;
+            border: none;
+        """
+        btn_row1.addWidget(self.btn_get_code)
+        btn_row1.setContentsMargins(0, 10, 0, 10)  # 左 上 右 下
+        btn_row1.setSpacing(5)
+
+        l_vbox.addLayout(btn_row1)
+
+
         # ------------------------- Main Buttons -------------------------
         self.btn_run = QPushButton("开始执行")
         self.btn_run.setObjectName("BtnStart")
         self.btn_run.clicked.connect(self.toggle)
-        l_vbox.addWidget(self.btn_run)
+        btn_row1.addWidget(self.btn_run)
 
-        btn_row = QHBoxLayout()
+        btn_row2 = QHBoxLayout()
 
         btn_don = QPushButton("支持作者")
         btn_don.setObjectName("BtnDonate")
         btn_don.clicked.connect(self.show_support)
-        btn_row.addWidget(btn_don)
+        btn_row2.addWidget(btn_don)
 
         btn_git = QPushButton("开源仓库")
         btn_git.setObjectName("BtnGit")
         btn_git.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://gitee.com/ckkk524334/sign-sign-in")))
-        btn_row.addWidget(btn_git)
+        btn_row2.addWidget(btn_git)
 
-        l_vbox.addLayout(btn_row)
+        l_vbox.addLayout(btn_row2)
 
         # ------------------------- Right Panel -------------------------
         right = QFrame()
@@ -251,6 +264,9 @@ class ModernWindow(QMainWindow):
         self.log_h = QTextEditLogger(self.log)
         self.log_h.setFormatter(logging.Formatter('%(asctime)s - %(message)s', "%H:%M:%S"))
         logging.getLogger().addHandler(self.log_h)
+        
+        # 初始化JSESSIONID显示
+        self._update_session_display()
 
     def clear_log(self):
         reply = QMessageBox.question(
@@ -334,6 +350,17 @@ class ModernWindow(QMainWindow):
                 background: #5C7CFF;
                 border: 2px solid #5C7CFF;
             }
+            #BtnGetCode {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #28A745, stop:1 #20C997);
+                color: white;
+                border-radius: 20px;
+                padding: 10px;
+                font-size: 12pt;
+                font-weight: bold;
+                border: none;
+            }
+            #BtnGetCode:hover { opacity: 0.92; }
             #BtnStart {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
                     stop:0 #3D7CFF, stop:1 #7A4DFF);
@@ -360,8 +387,8 @@ class ModernWindow(QMainWindow):
             #BtnJournal {
                 background: rgba(92, 124, 255, 0.15);
                 color: #B8C1FF;
-                border-radius: 14px;
-                padding: 8px 14px;
+                border-radius: 8px;
+                padding: 8px;
                 font-weight: bold;
                 border: 1px dashed rgba(92,124,255,0.4);
             }
@@ -511,8 +538,88 @@ class ModernWindow(QMainWindow):
             return
         WeeklyJournalDialog(config.get("model", {}), self).exec()
 
+    def get_code_and_session(self):
+        """获取Code和JSESSIONID"""
+        if self.is_getting_code:
+            if hasattr(self, 'code_worker'):
+                self.btn_get_code.setEnabled(False)
+                self.btn_get_code.setText("停止中...")
+                self.code_worker.requestInterruption()
+            return
+
+        # 验证数据
+        try:
+            errMsg = validate_config(read_config(CONFIG_FILE))
+            if errMsg:
+                ToastManager.instance().show(errMsg, "warning")
+                return
+        except Exception as e:
+            ToastManager.instance().show(f"读取配置失败: {e}", "error")
+            return
+
+        self.is_getting_code = True
+        self.btn_get_code.setText("停止获取")
+        self.btn_get_code.setStyleSheet("background: #C0392B; color: white; border-radius: 20px; padding: 10px; font-size: 12pt; font-weight: bold; border: none;")
+        self.prog.show()
+        self.btn_run.setEnabled(False)
+        for btn in self.grp.buttons():
+            btn.setEnabled(False)
+
+        self.code_worker = GetCodeAndSessionThread(CONFIG_FILE)
+        self.code_worker.finished_signal.connect(self.on_get_code_done)
+        self.code_worker.start()
+
+    def on_get_code_done(self, success, msg):
+        """获取Code和JSESSIONID完成"""
+        self.is_getting_code = False
+        self.btn_get_code.setEnabled(True)
+        self.btn_get_code.setText("获取code")
+        # 恢复原始样式
+        self.btn_get_code.setStyleSheet(self.btn_get_code_original_style)
+        self.prog.hide()
+        self.btn_run.setEnabled(True)
+        for btn in self.grp.buttons():
+            btn.setEnabled(True)
+
+        if success:
+            ToastManager.instance().show("获取成功！", "success")
+            # 更新JSESSIONID显示
+            self._update_session_display()
+        else:
+            if msg != "任务已停止":
+                ToastManager.instance().show(msg, "error")
+
+    def _update_session_display(self):
+        """更新JSESSIONID显示"""
+        from app.utils.files import load_session_cache
+        from datetime import datetime
+        import time
+        
+        cache = load_session_cache()
+        if cache and cache.get('sessionId'):
+            session_id = cache['sessionId']
+            timestamp = cache.get('timestamp', 0)
+            if timestamp:
+                dt = datetime.fromtimestamp(timestamp)
+                time_str = dt.strftime("%Y-%m-%d %H:%M:%S")
+                display_id = session_id[:10] + "..." if len(session_id) > 10 else session_id
+                self.lbls['session'].setText(f"🗝️ SESSION: <span style='color:#58D68D'>{display_id}...</span><span style='color:#58D68D'>({time_str})</span>")
+            else:
+                self.lbls['session'].setText(f"🗝️ SESSION: <span style='color:#58D68D'>{session_id[:10]}...</span>")
+        else:
+            self.lbls['session'].setText("🗝️ SESSION: <span style='color:#F4D03F'>未获取</span>")
+
     def toggle(self):
         if not self.is_running:
+            # 检查是否有有效的JSESSIONID，如果有就直接使用，不需要code
+            from app.utils.files import get_valid_session_cache
+            
+            has_session = get_valid_session_cache() is not None
+            
+            if not has_session:
+                ToastManager.instance().show("请先点击'获取code'按钮以获取JSESSIONID", "warning")
+                return
+
             logging.info("")
             logging.info(f"{'=' * 20} 🟢 TASK {datetime.now().strftime('%H:%M')} {'=' * 20}")
 
@@ -536,6 +643,7 @@ class ModernWindow(QMainWindow):
             self.btn_run.setText("停止运行")
             self.btn_run.setStyleSheet("background: #C0392B;")
             self.prog.show()
+            self.btn_get_code.setEnabled(False)
             for btn in self.grp.buttons():
                 btn.setEnabled(False)
 
@@ -568,6 +676,7 @@ class ModernWindow(QMainWindow):
             font-weight: bold;
         """)
         self.prog.hide()
+        self.btn_get_code.setEnabled(True)
         for btn in self.grp.buttons():
             btn.setEnabled(True)
 

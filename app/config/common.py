@@ -42,6 +42,9 @@ IMAGE_DIR = os.path.join(RES_DIR, "img")
 JOURNAL_DIR = os.path.join(RES_DIR, "journals")
 JOURNAL_HISTORY_FILE = os.path.join(JOURNAL_DIR, "history.json")
 
+# 会话缓存文件
+SESSION_CACHE_FILE = os.path.join(RES_DIR, "config", "session_cache.json")
+
 # 周记服务器（开发者维护，无需用户配置）
 JOURNAL_SERVER_BASE = "https://langoo.cn"
 
@@ -51,6 +54,7 @@ ADDONS_DIR = os.path.join(APP_DIR, "mitm", "addons")
 # system prompt
 SYSTEM_PROMPT = """
 你是一名擅长撰写公司实习周记的写作助手。你的任务是根据用户提供的信息，生成一篇内容真实、结构清晰、符合企业实习场景的周记。你必须严格遵守以下要求：
+每次生成要确保不一样，且不能出现这是第几周。
 输出必须是纯文本，不能使用任何 Markdown、不能使用代码块、不能使用特殊符号格式。
 周记内容必须贴合公司实习场景，语气自然专业，像真实实习生写的周记。
 周记必须包含以下内容：本周完成的工作内容、本周学习到的技术或业务知识、遇到的困难及解决方式、与同事/导师的交流情况、本周的收获与下周计划。

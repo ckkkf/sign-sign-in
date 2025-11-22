@@ -6,7 +6,7 @@ import shutil
 from datetime import datetime
 from typing import Dict, List
 
-from app.config.common import IMAGE_DIR, JOURNAL_DIR, JOURNAL_HISTORY_FILE
+from app.config.common import IMAGE_DIR, JOURNAL_DIR, JOURNAL_HISTORY_FILE, SESSION_CACHE_FILE
 
 IMAGE_EXTS = {'.png', '.jpg', '.jpeg', '.bmp', '.gif', '.webp'}
 
@@ -171,3 +171,59 @@ def append_journal_entry(section: str, content: str) -> dict:
     ensure_dir(JOURNAL_DIR)
     save_json_file(JOURNAL_HISTORY_FILE, data)
     return entry
+
+
+def load_session_cache() -> dict:
+    """加载会话缓存"""
+    if not os.path.exists(SESSION_CACHE_FILE):
+        return {}
+    try:
+        with open(SESSION_CACHE_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def save_session_cache(session_id: str, encrypt_value: str, open_id: str, union_id: str, trainee_id: str = None):
+    """保存会话缓存，默认过期时间为24小时"""
+    import time
+    cache = {
+        "sessionId": session_id,
+        "encryptValue": encrypt_value,
+        "openId": open_id,
+        "unionId": union_id,
+        "traineeId": trainee_id,
+        "timestamp": int(time.time()),
+        "expire_seconds": 24 * 3600  # 24小时
+    }
+    ensure_dir(os.path.dirname(SESSION_CACHE_FILE))
+    save_json_file(SESSION_CACHE_FILE, cache)
+
+
+def get_valid_session_cache() -> dict:
+    """获取有效的会话缓存，如果过期则返回None"""
+    import time
+    cache = load_session_cache()
+    if not cache:
+        return None
+    
+    timestamp = cache.get("timestamp", 0)
+    expire_seconds = cache.get("expire_seconds", 24 * 3600)
+    
+    if time.time() - timestamp > expire_seconds:
+        # 缓存已过期
+        return None
+    
+    return {
+        "sessionId": cache.get("sessionId"),
+        "encryptValue": cache.get("encryptValue"),
+        "openId": cache.get("openId"),
+        "unionId": cache.get("unionId"),
+        "traineeId": cache.get("traineeId")
+    }
+
+
+def clear_session_cache():
+    """清除会话缓存"""
+    if os.path.exists(SESSION_CACHE_FILE):
+        os.remove(SESSION_CACHE_FILE)

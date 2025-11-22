@@ -118,10 +118,32 @@ def wx_login(config, openIdData):
         raise RuntimeError(f"登录失败: {e}")
 
 
-def login(config):
+def login(config, use_cache=True):
+    """
+    登录函数，支持JSESSIONID缓存
+    :param config: 配置信息
+    :param use_cache: 是否使用缓存，如果为True且缓存有效则直接返回缓存
+    :return: 登录结果字典
+    """
+    from app.utils.files import get_valid_session_cache, save_session_cache
+
+    # 尝试使用缓存
+    if use_cache:
+        cached = get_valid_session_cache()
+        if cached:
+            logging.info('✅ 使用缓存的JSESSIONID')
+            return {
+                'openId': cached['openId'],
+                'unionId': cached['unionId'],
+                'encryptValue': cached['encryptValue'],
+                'sessionId': cached['sessionId'],
+                'traineeId': cached.get('traineeId')
+            }
+
     logging.info('正在执行登录流程...')
-    code = config['code']
-    if not code or code == '': raise RuntimeError('❌ Code为空，请重新获取！')
+    code = config.get('code')
+    if not code or code == '':
+        raise RuntimeError('❌ Code为空，请重新获取！')
 
     ### 获取open_id、union_id等信息
     openIdData = get_open_id(config=config, code=code)
@@ -129,12 +151,24 @@ def login(config):
     ### 获取登录参数encryptValue、sessionId
     login_data = wx_login(config=config, openIdData=openIdData)
 
-    return {
+    result = {
         'openId': openIdData['openId'],
         'unionId': openIdData['unionId'],
         'encryptValue': login_data['encryptValue'],
         'sessionId': login_data['sessionId'],
     }
+
+    # 保存到缓存
+    save_session_cache(
+        session_id=result['sessionId'],
+        encrypt_value=result['encryptValue'],
+        open_id=result['openId'],
+        union_id=result['unionId'],
+        trainee_id=result.get('traineeId')
+    )
+    logging.info('✅ 登录成功，已缓存JSESSIONID')
+
+    return result
 
 
 # ------------------------------拍照签到----------------------------------------
@@ -402,3 +436,139 @@ def simple_sign_in_or_out(args, geo, traineeId, config, opt):
         return info
     except Exception as e:
         raise RuntimeError(f"签到请求异常: {e}")
+
+
+# ------------------------------周记相关接口----------------------------------------
+
+
+def load_blog_year(args, config):
+    """加载周记年份和月份"""
+    logging.info('正在加载周记年份和月份...')
+    url = "https://xcx.xybsyw.com/student/blog/LoadBlogDate!weekYear.action"
+
+    data = {
+        "traineeId": str(args.get('traineeId', ''))
+    }
+
+    header_token = get_header_token(data)
+    headers = {
+        "content-type": "application/x-www-form-urlencoded",
+        "encryptvalue": args['encryptValue'],
+        "m": header_token['m'],
+        "n": "content,deviceName,keyWord,blogBody,blogTitle,getType,responsibilities,street,text,reason,searchvalue,key,answers,leaveReason,personRemark,selfAppraisal,imgUrl,wxname,deviceId,avatarTempPath,file,file,model,brand,system,deviceId,platform,code,openId,unionid,clockDeviceToken,clockDevice,address,name,enterpriseEmail,responsibilities,practiceTarget,guardianName,guardianPhone,practiceDays,linkman,enterpriseName,companyIntroduction,accommodationStreet,accommodationLongitude,accommodationLatitude,internshipDestination,specialStatement,enterpriseStreet,insuranceName,insuranceFinancing,policyNumber,overtimeRemark,riskStatement,specialStatement",
+        "referer": "https://servicewechat.com/wx9f1c2e0bbc10673c/539/page-frame.html",
+        "s": header_token['s'],
+        "t": header_token['t'],
+        "user-agent": config['userAgent'],
+        "v": "1.6.39",
+        "wechat": "1",
+        "xweb_xhr": "1"
+    }
+    cookies = {
+        "JSESSIONID": args['sessionId']
+    }
+
+    try:
+        response = requests.post(url, headers=headers, cookies=cookies, data=data, timeout=10)
+        res = response.json()
+
+        logging.info(f'加载周记年份和月份：{res.get('data', 'Unknown error')}')
+        if res.get('code') == '200' and 'data' in res:
+            return res['data']
+        else:
+            raise RuntimeError(f"加载年份月份失败: {res.get('msg', 'Unknown error')}")
+    except Exception as e:
+        raise RuntimeError(f"加载年份月份请求异常: {e}")
+
+
+def load_blog_date(args, config, year, month):
+    """加载指定年月下的周信息"""
+    logging.info(f'正在加载{year}年{month}月的周信息...')
+    url = "https://xcx.xybsyw.com/student/blog/LoadBlogDate!week.action"
+
+    data = {
+        "year": str(year),
+        "month": str(month),
+        "traineeId": str(args.get('traineeId', '')),
+        "id": ""
+    }
+
+    header_token = get_header_token(data)
+    headers = {
+        "content-type": "application/x-www-form-urlencoded",
+        "encryptvalue": args['encryptValue'],
+        "m": header_token['m'],
+        "n": "content,deviceName,keyWord,blogBody,blogTitle,getType,responsibilities,street,text,reason,searchvalue,key,answers,leaveReason,personRemark,selfAppraisal,imgUrl,wxname,deviceId,avatarTempPath,file,file,model,brand,system,deviceId,platform,code,openId,unionid,clockDeviceToken,clockDevice,address,name,enterpriseEmail,responsibilities,practiceTarget,guardianName,guardianPhone,practiceDays,linkman,enterpriseName,companyIntroduction,accommodationStreet,accommodationLongitude,accommodationLatitude,internshipDestination,specialStatement,enterpriseStreet,insuranceName,insuranceFinancing,policyNumber,overtimeRemark,riskStatement,specialStatement",
+        "referer": "https://servicewechat.com/wx9f1c2e0bbc10673c/539/page-frame.html",
+        "s": header_token['s'],
+        "t": header_token['t'],
+        "user-agent": config['userAgent'],
+        "v": "1.6.39",
+        "wechat": "1",
+        "xweb_xhr": "1"
+    }
+    cookies = {
+        "JSESSIONID": args['sessionId']
+    }
+
+    try:
+        response = requests.post(url, headers=headers, cookies=cookies, data=data, timeout=10)
+        res = response.json()
+        logging.info(f'加载周信息：{res.get('msg', 'Unknown error')}')
+        if res.get('code') == '200' and 'data' in res:
+            return res['data']
+        else:
+            raise RuntimeError(f"加载周信息失败: {res.get('msg', 'Unknown error')}")
+    except Exception as e:
+        raise RuntimeError(f"加载周信息请求异常: {e}")
+
+
+def submit_blog(args, config, blog_title, blog_body, start_date, end_date, blog_open_type, trainee_id):
+    """提交周记"""
+    logging.info('正在提交周记...')
+    url = "https://xcx.xybsyw.com/student/blog/Blog!save.action"
+
+    data = {
+        "blogType": "1",
+        "blogTitle": blog_title,
+        "blogBody": blog_body,
+        "blogOpenType": str(blog_open_type),  # 查看权限：1-公开，2-仅自己
+        "traineeId": str(trainee_id),
+        "isDraft": "0",
+        "startDate": start_date,
+        "endDate": end_date,
+        "backgroundTemplateId": "0",
+        "fileJson": "[{\"fileName\":\"\"}]",
+        "blogId": "undefined"
+    }
+
+    header_token = get_header_token(data)
+    headers = {
+        "content-type": "application/x-www-form-urlencoded",
+        "devicecode": get_device_code(openId=args['openId'], device=config['device']),
+        "encryptvalue": args['encryptValue'],
+        "m": header_token['m'],
+        "n": "content,deviceName,keyWord,blogBody,blogTitle,getType,responsibilities,street,text,reason,searchvalue,key,answers,leaveReason,personRemark,selfAppraisal,imgUrl,wxname,deviceId,avatarTempPath,file,file,model,brand,system,deviceId,platform,code,openId,unionid,clockDeviceToken,clockDevice,address,name,enterpriseEmail,responsibilities,practiceTarget,guardianName,guardianPhone,practiceDays,linkman,enterpriseName,companyIntroduction,accommodationStreet,accommodationLongitude,accommodationLatitude,internshipDestination,specialStatement,enterpriseStreet,insuranceName,insuranceFinancing,policyNumber,overtimeRemark,riskStatement,specialStatement",
+        "referer": "https://servicewechat.com/wx9f1c2e0bbc10673c/539/page-frame.html",
+        "s": header_token['s'],
+        "t": header_token['t'],
+        "user-agent": config['userAgent'],
+        "v": "1.6.39",
+        "wechat": "1",
+        "xweb_xhr": "1"
+    }
+    cookies = {
+        "JSESSIONID": args['sessionId']
+    }
+
+    try:
+        response = requests.post(url, headers=headers, cookies=cookies, data=data, timeout=10)
+        res = response.json()
+        logging.info(f"提交周记结果: {res}")
+        if res.get('code') == '200':
+            logging.info(f"提交周记成功: {res.get('msg', 'Unknown error')}")
+            return res.get('data')
+        else:
+            raise RuntimeError(f"提交周记失败: {res.get('msg', 'Unknown error')}")
+    except Exception as e:
+        raise RuntimeError(f"提交周记请求异常: {e}")
