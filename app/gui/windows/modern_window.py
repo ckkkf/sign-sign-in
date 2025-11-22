@@ -9,8 +9,7 @@ from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import QMainWindow, QWidget, QHBoxLayout, QFrame, QVBoxLayout, QLabel, QGridLayout, QPushButton, \
     QButtonGroup, QRadioButton, QProgressBar, QSizePolicy, QMessageBox, QApplication, QTextEdit, QDialog
 
-from app.apis.xybsyw import handle_invalid_session
-from app.config.common import QQ_GROUP, VERSION, CONFIG_FILE, MITM_PROXY
+from app.config.common import QQ_GROUP, VERSION, CONFIG_FILE, MITM_PROXY, API_URL
 from app.gui.components.log_viewer import QTextEditLogger
 from app.gui.components.toast import ToastManager
 from app.gui.dialogs.dialogs.config_dialog import ConfigDialog
@@ -18,13 +17,15 @@ from app.gui.dialogs.feedback_dialog import FeedbackDialog
 from app.gui.dialogs.image_manager_dialog import ImageManagerDialog
 from app.gui.dialogs.photo_sign_dialog import PhotoSignDialog
 from app.gui.dialogs.sponsor_dialog import SponsorSubmitDialog
+from app.gui.dialogs.update_dialog import UpdateDialog
 from app.gui.dialogs.weekly_journal_dialog import WeeklyJournalDialog
 from app.mitm.service import MitmService
 from app.utils.commands import get_net_io, bash, get_network_type, get_local_ip, get_system_proxy, check_port_listening, \
     check_cert
-from app.utils.files import validate_config, read_config, clear_session_cache
+from app.utils.files import validate_config, read_config
 from app.workers.monitor_thread import MonitorThread
 from app.workers.sign_task import SignTaskThread, GetCodeAndSessionThread
+from app.workers.update_worker import UpdateCheckWorker
 
 
 class ModernWindow(QMainWindow):
@@ -133,6 +134,7 @@ class ModernWindow(QMainWindow):
             ("📤 发送反馈", self.show_feedback),
             ("💻 打开CMD", lambda: subprocess.Popen(["cmd.exe"], creationflags=subprocess.CREATE_NEW_CONSOLE)),
             ("🖼 图片管理", self.open_image_manager),
+            ("🔄 检查更新", self.check_update),
         ]
         for i, (name, func) in enumerate(tools):
             b = QPushButton(name)
@@ -201,7 +203,6 @@ class ModernWindow(QMainWindow):
 
         l_vbox.addLayout(btn_row1)
 
-
         # ------------------------- Main Buttons -------------------------
         self.btn_run = QPushButton("开始执行")
         self.btn_run.setObjectName("BtnStart")
@@ -265,9 +266,13 @@ class ModernWindow(QMainWindow):
         self.log_h = QTextEditLogger(self.log)
         self.log_h.setFormatter(logging.Formatter('%(asctime)s - %(message)s', "%H:%M:%S"))
         logging.getLogger().addHandler(self.log_h)
-        
+
         # 初始化JSESSIONID显示
         self._update_session_display()
+
+        # 启动时自动检查更新（延迟2秒，避免阻塞启动）
+        from PySide6.QtCore import QTimer
+        QTimer.singleShot(2000, self.check_update_silent)
 
     def clear_log(self):
         reply = QMessageBox.question(
@@ -504,7 +509,7 @@ class ModernWindow(QMainWindow):
             "🔒 证书: <span style='color:#58D68D'>正常</span>" if data['cert']
             else "⚠️ 证书: <span style='color:#F4D03F'>异常</span>"
         )
-        
+
         # 更新session显示，确保清除过期session后状态栏能及时更新
         self._update_session_display()
 
@@ -534,6 +539,43 @@ class ModernWindow(QMainWindow):
     def open_image_manager(self):
         ImageManagerDialog(self).exec()
 
+    def check_update(self, silent: bool = False):
+        """检查更新"""
+        if hasattr(self, 'update_worker') and self.update_worker.isRunning():
+            if not silent:
+                ToastManager.instance().show("正在检查更新，请稍候...", "info")
+            return
+
+        self.update_worker = UpdateCheckWorker(API_URL + "/api/check-update", VERSION)
+        self.update_worker.result_signal.connect(
+            lambda success, data: self.on_update_check_result(success, data, silent)
+        )
+        self.update_worker.start()
+
+        if not silent:
+            ToastManager.instance().show("正在检查更新...", "info")
+
+    def check_update_silent(self):
+        """静默检查更新（启动时调用）"""
+        self.check_update(silent=True)
+
+    def on_update_check_result(self, success: bool, data: dict, silent: bool = False):
+        """更新检查结果处理"""
+        if not success:
+            error_msg = data.get("error", "检查更新失败")
+            if not silent:
+                ToastManager.instance().show(f"检查更新失败：{error_msg}", "error")
+            return
+
+        has_update = data.get("has_update", False)
+        if has_update:
+            # 有新版本，显示更新对话框
+            UpdateDialog(data, self).exec()
+        else:
+            # 无新版本
+            if not silent:
+                ToastManager.instance().show("当前已是最新版本！", "success")
+
     def open_weekly_journal(self):
         """打开周记对话框，先检查jsessionid是否有效"""
         try:
@@ -541,7 +583,7 @@ class ModernWindow(QMainWindow):
         except Exception as exc:
             ToastManager.instance().show(f"读取配置失败：{exc}", "error")
             return
-        
+
         # 检查jsessionid是否有效
         try:
             from app.apis.xybsyw import login, get_plan
@@ -560,7 +602,7 @@ class ModernWindow(QMainWindow):
                 return
             # 其他错误不影响打开对话框
             logging.warning(f"检查jsessionid时出现错误: {e}")
-        
+
         WeeklyJournalDialog(config.get("model", {}), self).exec()
 
     def get_code_and_session(self):
@@ -584,7 +626,8 @@ class ModernWindow(QMainWindow):
 
         self.is_getting_code = True
         self.btn_get_code.setText("停止获取")
-        self.btn_get_code.setStyleSheet("background: #C0392B; color: white; border-radius: 20px; padding: 10px; font-size: 12pt; font-weight: bold; border: none;")
+        self.btn_get_code.setStyleSheet(
+            "background: #C0392B; color: white; border-radius: 20px; padding: 10px; font-size: 12pt; font-weight: bold; border: none;")
         self.prog.show()
         self.btn_run.setEnabled(False)
         for btn in self.grp.buttons():
@@ -618,8 +661,7 @@ class ModernWindow(QMainWindow):
         """更新JSESSIONID显示"""
         from app.utils.files import load_session_cache
         from datetime import datetime
-        import time
-        
+
         cache = load_session_cache()
         if cache and cache.get('sessionId'):
             session_id = cache['sessionId']
@@ -628,7 +670,8 @@ class ModernWindow(QMainWindow):
                 dt = datetime.fromtimestamp(timestamp)
                 time_str = dt.strftime("%Y-%m-%d %H:%M:%S")
                 display_id = session_id[:10] + "..." if len(session_id) > 10 else session_id
-                self.lbls['session'].setText(f"🗝️ SESSION: <span style='color:#58D68D'>{display_id}...</span><span style='color:#58D68D'>({time_str})</span>")
+                self.lbls['session'].setText(
+                    f"🗝️ SESSION: <span style='color:#58D68D'>{display_id}...</span><span style='color:#58D68D'>({time_str})</span>")
             else:
                 self.lbls['session'].setText(f"🗝️ SESSION: <span style='color:#58D68D'>{session_id[:10]}...</span>")
         else:
@@ -638,15 +681,15 @@ class ModernWindow(QMainWindow):
         if not self.is_running:
             # 检查是否有有效的JSESSIONID，如果有就直接使用，不需要code
             from app.utils.files import get_valid_session_cache
-            
+
             has_session = get_valid_session_cache() is not None
-            
+
             if not has_session:
                 ToastManager.instance().show("请先点击'获取code'按钮以获取JSESSIONID", "warning")
                 return
 
             logging.info("")
-            logging.info(f"{'=' * 20} 🟢 TASK {datetime.now().strftime('%H:%M')} {'=' * 20}")
+            logging.info(f"{'=' * 10} 🟢 TASK {datetime.now().strftime('%H:%M')} {'=' * 10}")
 
             checked_id = self.grp.checkedId()
             photo_image = None
@@ -709,8 +752,15 @@ class ModernWindow(QMainWindow):
         self._update_session_display()
 
         if success:
-            # 成功后弹出赞助提交框
-            SponsorSubmitDialog(self).exec()
+            # 成功后弹出赞助提交框（检查是否设置了不再显示）
+            try:
+                config = read_config(CONFIG_FILE)
+                settings = config.get("settings", {})
+                if not settings.get("dont_show_sponsor", False):
+                    SponsorSubmitDialog(self).exec()
+            except Exception:
+                # 如果读取配置失败，默认显示
+                SponsorSubmitDialog(self).exec()
         else:
             if msg != "任务已停止":
                 ToastManager.instance().show(msg, "error")

@@ -3,7 +3,7 @@ import time
 import platform
 import subprocess
 
-from app.config.common import MITMDUMP_FILE, ADDONS_DIR, MITM_PROXY
+from app.config.common import MITM_DIR, ADDONS_DIR, MITM_PROXY
 from app.utils.commands import check_port_listening, get_process_by_port, kill_process_tree
 
 
@@ -30,7 +30,7 @@ class MitmService:
         # 启动
         subprocess.Popen(
             [
-                MITMDUMP_FILE,
+                os.path.join(MITM_DIR, "mitmdump.exe"),
                 "-p", str(self.port),
                 "-s", self.addon,
                 "--quiet"

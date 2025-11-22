@@ -29,3 +29,6 @@ test/
 build/
 dist/
 *.spec
+release/
+resources/config/session_cache.json
+resources/img/

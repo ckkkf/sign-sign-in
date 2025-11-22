@@ -16,9 +16,10 @@ from PySide6.QtWidgets import (
     QTextEdit,
 )
 
-from app.config.common import API_URL, VERSION
+from app.config.common import API_URL, VERSION, CONFIG_FILE
 from app.gui.components.toast import ToastManager
 from app.workers.http_worker import HttpWorker
+from app.utils.files import save_json_file, read_config
 
 
 class SponsorSubmitDialog(QDialog):
@@ -198,6 +199,27 @@ class SponsorSubmitDialog(QDialog):
         self.btn_submit.clicked.connect(self.submit)
         btn_row.addWidget(self.btn_submit)
 
+        # 不再显示按钮
+        btn_dont_show = QPushButton("不再显示")
+        btn_dont_show.setObjectName("OutlinedBtn")
+        btn_dont_show.setStyleSheet("""
+            QPushButton#OutlinedBtn {
+                background: transparent;
+                border: 1px solid #3A4062;
+                color: #9BA3C6;
+                border-radius: 22px;
+                padding: 10px 16px;
+                font-weight: bold;
+                font-size: 9pt;
+            }
+            QPushButton#OutlinedBtn:hover {
+                border-color: #7C89FF;
+                color: #F5F6FF;
+            }
+        """)
+        btn_dont_show.clicked.connect(self.dont_show_again)
+        btn_row.addWidget(btn_dont_show)
+
         btn_close = QPushButton("关闭")
         btn_close.setObjectName("OutlinedBtn")
         btn_close.clicked.connect(self.close)
@@ -243,3 +265,16 @@ class SponsorSubmitDialog(QDialog):
             self.close()
         else:
             ToastManager.instance().show(f"提交失败：{msg}", "error")
+
+    def dont_show_again(self):
+        """保存不再显示设置"""
+        try:
+            config = read_config(CONFIG_FILE)
+            if "settings" not in config:
+                config["settings"] = {}
+            config["settings"]["dont_show_sponsor"] = True
+            save_json_file(CONFIG_FILE, config)
+            ToastManager.instance().show("已设置不再显示赞助页面", "success")
+            self.close()
+        except Exception as e:
+            ToastManager.instance().show(f"保存设置失败：{e}", "error")

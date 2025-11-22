@@ -1,5 +1,4 @@
 import os
-
 from core.paths import get_base_dir
 
 # 项目信息
@@ -9,9 +8,9 @@ VERSION = "v1.1.0"
 QQ_GROUP = "859098272"
 
 # 后端接口
-API_URL = "http://127.0.0.1:8080"
+API_URL = "https://langoo.cn"
 
-# 代理端口
+# 代理地址
 MITM_PROXY = "127.0.0.1:13140"
 
 # 项目根目录（openSource）
@@ -24,7 +23,7 @@ APP_DIR = os.path.join(BASE_DIR, "app")
 RES_DIR = os.path.join(BASE_DIR, "resources")
 
 # mitmdump
-MITMDUMP_FILE = os.path.join(RES_DIR, "mitm", "mitmdump.exe")
+MITM_DIR = os.path.join(RES_DIR, "mitm")
 
 # 配置文件目录（你如果想放 resources/config/ 也可以）
 CONFIG_FILE = os.path.join(RES_DIR, "config", "config.json")
@@ -46,7 +45,7 @@ JOURNAL_HISTORY_FILE = os.path.join(JOURNAL_DIR, "history.json")
 SESSION_CACHE_FILE = os.path.join(RES_DIR, "config", "session_cache.json")
 
 # mitm addons
-ADDONS_DIR = os.path.join(APP_DIR, "mitm", "addons")
+ADDONS_DIR = os.path.join(MITM_DIR, "addons")
 
 # system prompt
 SYSTEM_PROMPT = """
