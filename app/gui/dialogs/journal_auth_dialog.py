@@ -28,7 +28,7 @@ class JournalAuthDialog(QDialog):
     def _setup_ui(self):
         layout = QVBoxLayout(self)
         self.tabs = QTabWidget()
-        intro = QLabel("登录后即可同步周记草稿与提交记录，注册仅需设置用户名与密码。")
+        intro = QLabel("登录即可免费享受我付费的Ai接口，也是减少了大家再进行繁琐的配置了吧，不登陆自行接入api也可以哦~")
         intro.setWordWrap(True)
         intro.setObjectName("IntroLabel")
         layout.addWidget(intro)
@@ -131,6 +131,8 @@ class JournalAuthDialog(QDialog):
         return widget
 
     def _handle_login(self):
+        ToastManager.instance().show("该功能开发中", "error")
+        return
         try:
             result = login(self.base_url, self.login_user.text().strip(), self.login_pass.text().strip())
         except JournalServerError as exc:
@@ -144,6 +146,8 @@ class JournalAuthDialog(QDialog):
         self.accept()
 
     def _handle_register(self):
+        ToastManager.instance().show("该功能开发中", "error")
+        return
         username = self.reg_user.text().strip()
         password = self.reg_pass.text().strip()
         confirm = self.reg_pass_confirm.text().strip()

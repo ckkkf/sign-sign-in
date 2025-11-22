@@ -9,6 +9,7 @@ from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import QMainWindow, QWidget, QHBoxLayout, QFrame, QVBoxLayout, QLabel, QGridLayout, QPushButton, \
     QButtonGroup, QRadioButton, QProgressBar, QSizePolicy, QMessageBox, QApplication, QTextEdit, QDialog
 
+from app.apis.xybsyw import handle_invalid_session
 from app.config.common import QQ_GROUP, VERSION, CONFIG_FILE, MITM_PROXY
 from app.gui.components.log_viewer import QTextEditLogger
 from app.gui.components.toast import ToastManager
@@ -21,7 +22,7 @@ from app.gui.dialogs.weekly_journal_dialog import WeeklyJournalDialog
 from app.mitm.service import MitmService
 from app.utils.commands import get_net_io, bash, get_network_type, get_local_ip, get_system_proxy, check_port_listening, \
     check_cert
-from app.utils.files import validate_config, read_config
+from app.utils.files import validate_config, read_config, clear_session_cache
 from app.workers.monitor_thread import MonitorThread
 from app.workers.sign_task import SignTaskThread, GetCodeAndSessionThread
 
@@ -503,6 +504,9 @@ class ModernWindow(QMainWindow):
             "🔒 证书: <span style='color:#58D68D'>正常</span>" if data['cert']
             else "⚠️ 证书: <span style='color:#F4D03F'>异常</span>"
         )
+        
+        # 更新session显示，确保清除过期session后状态栏能及时更新
+        self._update_session_display()
 
     def open_config(self):
         if not os.path.exists(CONFIG_FILE):
@@ -531,11 +535,32 @@ class ModernWindow(QMainWindow):
         ImageManagerDialog(self).exec()
 
     def open_weekly_journal(self):
+        """打开周记对话框，先检查jsessionid是否有效"""
         try:
             config = read_config(CONFIG_FILE)
         except Exception as exc:
             ToastManager.instance().show(f"读取配置失败：{exc}", "error")
             return
+        
+        # 检查jsessionid是否有效
+        try:
+            from app.apis.xybsyw import login, get_plan
+            # 尝试使用缓存的登录信息
+            try:
+                login_args = login(config['input'], use_cache=True)
+            except Exception:
+                ToastManager.instance().show("JSESSIONID已失效，请先执行签到操作以获取新的登录信息", "warning")
+                return
+            # 尝试获取计划来验证session
+            get_plan(userAgent=config['input']['userAgent'], args=login_args)
+        except Exception as e:
+            error_msg = str(e)
+            if "失效" in error_msg or "205" in error_msg or "未登录" in error_msg:
+                ToastManager.instance().show("JSESSIONID已失效，请先执行签到操作以获取新的登录信息", "warning")
+                return
+            # 其他错误不影响打开对话框
+            logging.warning(f"检查jsessionid时出现错误: {e}")
+        
         WeeklyJournalDialog(config.get("model", {}), self).exec()
 
     def get_code_and_session(self):
@@ -679,6 +704,9 @@ class ModernWindow(QMainWindow):
         self.btn_get_code.setEnabled(True)
         for btn in self.grp.buttons():
             btn.setEnabled(True)
+
+        # 更新session显示，确保清除过期session后状态栏能及时更新
+        self._update_session_display()
 
         if success:
             # 成功后弹出赞助提交框

@@ -3,8 +3,27 @@ import logging
 import requests
 
 from app.utils.common import get_timestamp
-from app.utils.files import get_img_file
+from app.utils.files import get_img_file, clear_session_cache
 from app.utils.params import get_header_token, get_device_code
+
+
+def check_session_validity(response_json):
+    """
+    检查响应是否表示会话已失效
+    当响应类似 {'code': '205', 'data': None, 'msg': '未登录', ...} 时返回True
+    """
+    if isinstance(response_json, dict):
+        code = response_json.get('code')
+        msg = response_json.get('msg', '')
+        if code == '205' or (code == 205) or '未登录' in str(msg):
+            return False
+    return True
+
+
+def handle_invalid_session():
+    """处理失效的会话：清除缓存并提示"""
+    clear_session_cache()
+    logging.warning('❌ JSESSIONID已失效，已清除缓存，请重新获取code')
 
 
 def regeo(userAgent, location):
@@ -59,6 +78,9 @@ def get_plan(userAgent, args):
     try:
         response = requests.post(url, headers=headers, cookies=cookies, data=data, timeout=5)
         res = response.json()
+        if not check_session_validity(res):
+            handle_invalid_session()
+            raise RuntimeError('❌ JSESSIONID已失效，请重新获取code')
         if 'data' in res and res['data']:
             return res['data']
         else:
@@ -82,7 +104,7 @@ def get_open_id(config, code):
         response = requests.post(url=url, headers=headers, data={"code": code}, allow_redirects=False, timeout=5)
         json_data = response.json()
         if json_data.get('code') == '202':
-            raise RuntimeError('Code已失效，请重启小程序')
+            raise RuntimeError('code已失效，请重启小程序')
         return json_data['data']
     except Exception as e:
         raise RuntimeError(f"获取OpenID失败: {e}")
@@ -414,6 +436,11 @@ def simple_sign_in_or_out(args, geo, traineeId, config, opt):
         response = requests.post(url, data=data, headers=headers, cookies=cookies, timeout=5)
         logging.info(f'📡 服务器响应: {response.text}')
         json_resp = response.json()
+        
+        if not check_session_validity(json_resp):
+            handle_invalid_session()
+            raise RuntimeError('❌ JSESSIONID已失效，请重新获取code')
+        
         msg = json_resp['msg']
         code = json_resp['code']
 
@@ -471,6 +498,10 @@ def load_blog_year(args, config):
     try:
         response = requests.post(url, headers=headers, cookies=cookies, data=data, timeout=10)
         res = response.json()
+        
+        if not check_session_validity(res):
+            handle_invalid_session()
+            raise RuntimeError('❌ JSESSIONID已失效，请重新获取code')
 
         logging.info(f'加载周记年份和月份：{res.get('data', 'Unknown error')}')
         if res.get('code') == '200' and 'data' in res:
@@ -514,6 +545,11 @@ def load_blog_date(args, config, year, month):
     try:
         response = requests.post(url, headers=headers, cookies=cookies, data=data, timeout=10)
         res = response.json()
+        
+        if not check_session_validity(res):
+            handle_invalid_session()
+            raise RuntimeError('❌ JSESSIONID已失效，请重新获取code')
+        
         logging.info(f'加载周信息：{res.get('msg', 'Unknown error')}')
         if res.get('code') == '200' and 'data' in res:
             return res['data']
@@ -564,6 +600,11 @@ def submit_blog(args, config, blog_title, blog_body, start_date, end_date, blog_
     try:
         response = requests.post(url, headers=headers, cookies=cookies, data=data, timeout=10)
         res = response.json()
+        
+        if not check_session_validity(res):
+            handle_invalid_session()
+            raise RuntimeError('❌ JSESSIONID已失效，请重新获取code')
+        
         logging.info(f"提交周记结果: {res}")
         if res.get('code') == '200':
             logging.info(f"提交周记成功: {res.get('msg', 'Unknown error')}")

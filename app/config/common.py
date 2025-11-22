@@ -9,7 +9,7 @@ VERSION = "v1.1.0"
 QQ_GROUP = "859098272"
 
 # 后端接口
-API_URL = "http://httpbin.org/post"
+API_URL = "http://127.0.0.1:8080"
 
 # 代理端口
 MITM_PROXY = "127.0.0.1:13140"
@@ -44,9 +44,6 @@ JOURNAL_HISTORY_FILE = os.path.join(JOURNAL_DIR, "history.json")
 
 # 会话缓存文件
 SESSION_CACHE_FILE = os.path.join(RES_DIR, "config", "session_cache.json")
-
-# 周记服务器（开发者维护，无需用户配置）
-JOURNAL_SERVER_BASE = "https://langoo.cn"
 
 # mitm addons
 ADDONS_DIR = os.path.join(APP_DIR, "mitm", "addons")

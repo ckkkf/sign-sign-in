@@ -19,15 +19,14 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtWidgets import QApplication
 
-from app.config.common import JOURNAL_SERVER_BASE, SYSTEM_PROMPT, CONFIG_FILE
+from app.config.common import API_URL, SYSTEM_PROMPT, CONFIG_FILE
 from app.gui.components.toast import ToastManager
 from app.gui.dialogs.journal_auth_dialog import JournalAuthDialog
-from app.utils.files import load_journal_history, append_journal_entry, read_config
+from app.utils.files import load_journal_history, append_journal_entry, read_config, clear_session_cache
 import logging
 from app.utils.model_client import call_chat_model, ModelConfigurationError
 from app.utils.journal_client import fetch_journals, JournalServerError
-from app.apis.xybsyw import login, get_plan, load_blog_year, load_blog_date, submit_blog
-
+from app.apis.xybsyw import login, get_plan, load_blog_year, load_blog_date, submit_blog, handle_invalid_session
 
 class AIGenerationThread(QThread):
     """AI生成周记的异步线程"""
@@ -100,7 +99,7 @@ class WeeklyJournalDialog(QDialog):
         self.setWindowTitle("提交周记")
         self.resize(900, 650)
         self.model_config = model_config or {}
-        self.server_base = JOURNAL_SERVER_BASE
+        self.server_base = API_URL
         self.auth_info = None
         self.history = {"generated": [], "submitted": []}
         self._ai_busy = False
@@ -119,7 +118,7 @@ class WeeklyJournalDialog(QDialog):
         self._setup_styles()
         self._setup_ui()
         self._load_history()
-        self._init_xybsyw_data()
+        # 不再自动加载年月数据，提示用户手动点击按钮加载
 
     def closeEvent(self, event):
         """窗口关闭时清理资源"""
@@ -136,27 +135,6 @@ class WeeklyJournalDialog(QDialog):
         layout.setSpacing(8)
         layout.setContentsMargins(12, 12, 12, 12)
 
-        prompt_frame = QFrame()
-        prompt_frame.setObjectName("PromptCard")
-        prompt_layout = QHBoxLayout(prompt_frame)
-        prompt_layout.setContentsMargins(12, 8, 12, 8)
-        prompt_layout.setSpacing(10)
-
-        self.role_input = QLineEdit()
-        self.role_input.setPlaceholderText("请输入你的职业/岗位（例：前端实习生）")
-        self.role_input.setObjectName("PromptInput")
-
-        self.journal_type_input = QLineEdit()
-        self.journal_type_input.setPlaceholderText("请输入周记类型或主题（例：产品研发周记）")
-        self.journal_type_input.setObjectName("PromptInput")
-
-        prompt_layout.addWidget(QLabel("职业提示"))
-        prompt_layout.addWidget(self.role_input)
-        prompt_layout.addSpacing(6)
-        prompt_layout.addWidget(QLabel("周记类型"))
-        prompt_layout.addWidget(self.journal_type_input)
-        layout.addWidget(prompt_frame)
-
         # 周记配置区域
         config_frame = QFrame()
         config_frame.setObjectName("ConfigCard")
@@ -166,54 +144,47 @@ class WeeklyJournalDialog(QDialog):
 
         config_row1 = QHBoxLayout()
         config_row1.setSpacing(8)
+        
+        # 添加加载年月按钮
+        btn_load_data = QPushButton("加载年月")
+        btn_load_data.setObjectName("LoadDataBtn")
+        btn_load_data.setToolTip("点击加载可用的年份和月份")
+        btn_load_data.clicked.connect(self._load_year_month_data)
+        config_row1.addWidget(btn_load_data)
+        self.btn_load_data = btn_load_data
+        
         config_row1.addWidget(QLabel("绑定年份:"))
         self.year_combo = QComboBox()
         self.year_combo.setObjectName("ConfigCombo")
         self.year_combo.currentIndexChanged.connect(self._on_year_changed)
         config_row1.addWidget(self.year_combo)
         
-        # 只保留两个刷新按钮：刷新年份（会刷新所有）和刷新周（只刷新周）
-        btn_refresh_year = QPushButton("🔄")
-        btn_refresh_year.setObjectName("SmallBtn")
-        btn_refresh_year.setToolTip("重新获取年份和月份（会同时刷新周）")
-        btn_refresh_year.clicked.connect(self._refresh_year_data)
-        config_row1.addWidget(btn_refresh_year)
-        self.btn_refresh_year = btn_refresh_year
-        
-        config_row1.addSpacing(6)
+        config_row1.addSpacing(3)
         config_row1.addWidget(QLabel("月份:"))
         self.month_combo = QComboBox()
         self.month_combo.setObjectName("ConfigCombo")
         self.month_combo.currentIndexChanged.connect(self._on_month_changed)
         config_row1.addWidget(self.month_combo)
         
-        config_row1.addSpacing(6)
+        config_row1.addSpacing(3)
         config_row1.addWidget(QLabel("周:"))
         self.week_combo = QComboBox()
-        self.week_combo.setObjectName("ConfigCombo")
+        self.week_combo.setObjectName("WeekCombo")
         config_row1.addWidget(self.week_combo)
         
-        btn_refresh_week = QPushButton("🔄")
-        btn_refresh_week.setObjectName("SmallBtn")
-        btn_refresh_week.setToolTip("重新获取周信息")
-        btn_refresh_week.clicked.connect(self._refresh_week_data)
-        config_row1.addWidget(btn_refresh_week)
-        self.btn_refresh_week = btn_refresh_week
-        
+        config_row1.setSpacing(3)
+        config_row1.addWidget(QLabel("查看权限:"))
+        self.permission_combo = QComboBox()
+        self.permission_combo.setObjectName("ConfigCombo")
+        self.permission_combo.addItem("仅老师和同学可见", 0)
+        self.permission_combo.addItem("全网可见", 1)
+        self.permission_combo.addItem("仅老师可见", 2)
+        self.permission_combo.setCurrentIndex(2)  # 默认仅老师可见
+        config_row1.addWidget(self.permission_combo)
+
         config_row1.addStretch()
         config_layout.addLayout(config_row1)
 
-        config_row2 = QHBoxLayout()
-        config_row2.setSpacing(8)
-        config_row2.addWidget(QLabel("查看权限:"))
-        self.permission_combo = QComboBox()
-        self.permission_combo.setObjectName("ConfigCombo")
-        self.permission_combo.addItem("公开", 1)
-        self.permission_combo.addItem("仅自己可见", 2)
-        self.permission_combo.setCurrentIndex(1)  # 默认仅自己可见
-        config_row2.addWidget(self.permission_combo)
-        config_row2.addStretch()
-        config_layout.addLayout(config_row2)
 
         layout.addWidget(config_frame)
 
@@ -238,22 +209,33 @@ class WeeklyJournalDialog(QDialog):
         self.editor.setPlaceholderText("在此输入或生成本周周记内容...")
         editor_layout.addWidget(self.editor)
 
-        # 按钮行：包含登录状态、登录按钮、从服务器获取、AI生成、提交、清空
+        # 职业提示（移到编辑区域下面）
+        role_frame = QFrame()
+        role_frame.setObjectName("RoleCard")
+        role_layout = QHBoxLayout(role_frame)
+        role_layout.setContentsMargins(8, 6, 8, 6)
+        role_layout.setSpacing(8)
+        role_layout.addWidget(QLabel("AI提示词:"))
+        self.role_input = QLineEdit()
+        self.role_input.setPlaceholderText("请描述你的实习职业/岗位（例：前端实习生）")
+        self.role_input.setObjectName("PromptInput")
+        role_layout.addWidget(self.role_input)
+        editor_layout.addWidget(role_frame)
+
+        # 按钮行：包含登录状态、从服务器获取、AI生成、提交、清空
         btn_row = QHBoxLayout()
         btn_row.setSpacing(8)
         
         self.server_status = QLabel("未登录周记服务器")
         self.server_status.setObjectName("ServerStatus")
-        self.server_status.setStyleSheet("color: #AAA; font-size: 9pt; padding: 0 8px;")
-        
-        btn_login = QPushButton("登录/注册")
-        btn_login.setObjectName("LoginBtn")
-        btn_login.clicked.connect(self._prompt_login)
+        self.server_status.setStyleSheet("color: #AAA; font-size: 9pt; padding: 0 8px; cursor: pointer;")
+        self.server_status.mousePressEvent = self._on_server_status_clicked
         
         btn_fetch = QPushButton("从服务器获取")
         btn_fetch.setObjectName("FetchBtn")
         btn_fetch.clicked.connect(self._fetch_from_server)
         
+        # AI按钮移到最左侧
         self.btn_ai = QPushButton("AI 自动生成")
         self.btn_ai.clicked.connect(self._generate_with_ai)
         self.btn_ai.setObjectName("PrimaryBtn")
@@ -266,11 +248,10 @@ class WeeklyJournalDialog(QDialog):
         btn_clear.setObjectName("GhostBtn")
         btn_clear.clicked.connect(self._clear_all)
 
-        btn_row.addWidget(self.server_status)
-        btn_row.addWidget(btn_login)
-        btn_row.addWidget(btn_fetch)
-        btn_row.addStretch()
         btn_row.addWidget(self.btn_ai)
+        btn_row.addStretch()
+        btn_row.addWidget(self.server_status)
+        btn_row.addWidget(btn_fetch)
         btn_row.addWidget(btn_submit)
         btn_row.addWidget(btn_clear)
         editor_layout.addLayout(btn_row)
@@ -332,9 +313,8 @@ class WeeklyJournalDialog(QDialog):
 
         prompt_context = self.editor.toPlainText().strip()
         role = self.role_input.text().strip()
-        journal_type = self.journal_type_input.text().strip()
 
-        if not self._confirm_generation(role, journal_type):
+        if not self._confirm_generation(role):
             return
 
         base_prompt = (
@@ -344,13 +324,8 @@ class WeeklyJournalDialog(QDialog):
         )
         prompt = f"{base_prompt}\n\n笔记：{prompt_context}" if prompt_context else base_prompt
 
-        extra_hints = []
         if role:
-            extra_hints.append(f"职业/岗位：{role}")
-        if journal_type:
-            extra_hints.append(f"周记类型：{journal_type}")
-        if extra_hints:
-            prompt = f"{prompt}\n\n{'; '.join(extra_hints)}"
+            prompt = f"{prompt}\n\n职业/岗位：{role}"
 
         self._set_ai_busy(True)
         self.editor.clear()
@@ -386,18 +361,21 @@ class WeeklyJournalDialog(QDialog):
         ToastManager.instance().show(message, toast_type)
         self._ai_thread = None
 
-    def _init_xybsyw_data(self):
-        """初始化xybsyw相关数据（异步）"""
+    def _load_year_month_data(self):
+        """加载年月数据（用户手动触发）"""
         try:
-            self.config = read_config(CONFIG_FILE)
+            if not self.config:
+                self.config = read_config(CONFIG_FILE)
             # 在子线程中加载数据，避免阻塞UI
             self._load_data_thread = LoadYearDataThread(self.config)
             self._load_data_thread.finished_signal.connect(self._on_year_data_loaded)
             self._load_data_thread.error_signal.connect(self._on_year_data_error)
             self._load_data_thread.start()
+            self.btn_load_data.setEnabled(False)
+            self.btn_load_data.setText("加载中...")
         except Exception as e:
-            logging.error(f"初始化xybsyw数据失败: {e}")
-            ToastManager.instance().show(f"初始化失败: {str(e)}", "warning")
+            logging.error(f"加载年月数据失败: {e}")
+            ToastManager.instance().show(f"加载失败: {str(e)}", "warning")
 
     def _on_year_data_loaded(self, login_args, trainee_id, year_data):
         """年份数据加载完成"""
@@ -412,11 +390,16 @@ class WeeklyJournalDialog(QDialog):
         if self.year_combo.count() > 0:
             self.year_combo.setCurrentIndex(0)
             self._on_year_changed()
+        self.btn_load_data.setEnabled(True)
+        self.btn_load_data.setText("加载年月")
+        ToastManager.instance().show("年月数据加载成功", "success")
 
     def _on_year_data_error(self, error_msg):
         """年份数据加载失败"""
         logging.error(f"加载年份数据失败: {error_msg}")
-        if "缓存登录失败" in error_msg or "过期" in error_msg:
+        self.btn_load_data.setEnabled(True)
+        self.btn_load_data.setText("加载年月")
+        if "缓存登录失败" in error_msg or "过期" in error_msg or "失效" in error_msg:
             ToastManager.instance().show("登录信息已过期，请先执行签到操作以获取新的登录信息", "warning")
         else:
             ToastManager.instance().show(f"加载失败: {error_msg}", "warning")
@@ -504,14 +487,37 @@ class WeeklyJournalDialog(QDialog):
                 status = week_item.get('status', 2)
                 # status: 1-已提交，2-未提交
                 status_text = "已提交" if status == 1 else "未提交"
-                week_text = f"第{week_num}周 ({start_date} ~ {end_date}) - {status_text} (已提交{blog_count}篇)"
+                week_text = f"第{week_num}周 ({start_date} ~ {end_date}) - {status_text} ({blog_count}篇)"
                 self.week_combo.addItem(week_text, week_item)
         except Exception as e:
             logging.error(f"更新周信息失败: {e}")
             ToastManager.instance().show(f"加载周信息失败: {str(e)}", "warning")
 
+    def _check_jsessionid_validity(self):
+        """检查jsessionid是否有效"""
+        try:
+            if not self.config:
+                self.config = read_config(CONFIG_FILE)
+            # 尝试使用缓存的登录信息
+            try:
+                login_args = login(self.config['input'], use_cache=True)
+            except Exception:
+                return False
+            # 尝试获取计划来验证session
+            get_plan(userAgent=self.config['input']['userAgent'], args=login_args)
+            return True
+        except Exception as e:
+            logging.error(f"检查jsessionid有效性失败: {e}")
+            return False
+
     def _submit_journal(self):
         """提交周记到xybsyw"""
+        # 先检查jsessionid是否有效
+        if not self._check_jsessionid_validity():
+            handle_invalid_session()
+            ToastManager.instance().show("JSESSIONID已失效，请先执行签到操作以获取新的登录信息", "warning")
+            return
+        
         # 检查标题
         title = self.title_input.text().strip()
         if not title:
@@ -640,11 +646,11 @@ class WeeklyJournalDialog(QDialog):
             QComboBox#ConfigCombo {
                 background: #1A1C24;
                 border: 1px solid #2F3145;
-                border-radius: 8px;
-                padding: 8px;
+                border-radius: 5px;
+                padding: 3px 0;
                 color: #F5F6FF;
                 font-size: 10pt;
-                min-width: 150px;
+                min-width: 10px;
             }
             QComboBox#ConfigCombo:hover {
                 border-color: #5865F2;
@@ -653,6 +659,24 @@ class WeeklyJournalDialog(QDialog):
                 border: none;
                 width: 20px;
             }
+            
+            QComboBox#WeekCombo {
+                background: #1A1C24;
+                border: 1px solid #2F3145;
+                border-radius: 5px;
+                padding: 3px;
+                color: #F5F6FF;
+                font-size: 10pt;
+                min-width: 300px;
+            }
+            QComboBox#WeekCombo:hover {
+                border-color: #5865F2;
+            }
+            QComboBox#WeekCombo::drop-down {
+                border: none;
+                width: 20px;
+            }
+            
             QComboBox#ConfigCombo QAbstractItemView {
                 background: #1A1C24;
                 border: 1px solid #2F3145;
@@ -709,6 +733,26 @@ class WeeklyJournalDialog(QDialog):
                 background: #3A3F5F;
                 border-color: #5865F2;
                 color: #FFFFFF;
+            }
+            QPushButton#LoadDataBtn {
+                background: #4E8BFF;
+                color: white;
+                border: none;
+                border-radius: 18px;
+                padding: 8px 18px;
+                font-weight: bold;
+            }
+            QPushButton#LoadDataBtn:hover {
+                background: #5C96FF;
+            }
+            QPushButton#LoadDataBtn:disabled {
+                background: #353B5A;
+                color: #7B80A3;
+            }
+            #RoleCard {
+                background: rgba(24,27,42,0.95);
+                border: 1px solid #2E3147;
+                border-radius: 12px;
             }
             QLineEdit#TitleInput {
                 background: #1C1C1C;
@@ -777,10 +821,29 @@ class WeeklyJournalDialog(QDialog):
             user = self.auth_info.get("user", {})
             name = user.get("username") or user.get("name") or "已登录"
             self.server_status.setText(f"已登录：{name}")
-            self.server_status.setStyleSheet("color:#58D68D;")
+            self.server_status.setStyleSheet("color:#58D68D; font-size: 9pt; padding: 0 8px; cursor: pointer; text-decoration: underline;")
         else:
             self.server_status.setText("未登录周记服务器")
-            self.server_status.setStyleSheet("color:#BBB;")
+            self.server_status.setStyleSheet("color:#AAA; font-size: 9pt; padding: 0 8px; cursor: pointer;")
+    
+    def _on_server_status_clicked(self, event):
+        """点击服务器状态标签时的处理"""
+        if self.auth_info:
+            self._open_user_center()
+        else:
+            self._prompt_login()
+    
+    def _open_user_center(self):
+        """打开用户中心页面"""
+        if not self.auth_info:
+            return
+        from app.gui.dialogs.user_center_dialog import UserCenterDialog
+        dialog = UserCenterDialog(self.auth_info, self.server_base, self)
+        if dialog.exec() == QDialog.Accepted:
+            # 如果用户登出了，更新状态
+            if dialog.logged_out:
+                self.auth_info = None
+                self._update_server_status()
 
     def _ensure_login(self):
         if self.auth_info:
@@ -793,8 +856,11 @@ class WeeklyJournalDialog(QDialog):
         if not base:
             ToastManager.instance().show("未配置周记服务器地址", "warning")
             return
-        if not self._ensure_login():
-            return
+        # 检查是否登录，如果没有登录则弹出登录/注册页面
+        if not self.auth_info:
+            self._prompt_login()
+            if not self.auth_info:
+                return
         try:
             entries = fetch_journals(base, self.auth_info['token'])
         except JournalServerError as exc:
@@ -873,10 +939,9 @@ class WeeklyJournalDialog(QDialog):
                 QApplication.restoreOverrideCursor()
                 self._ai_busy = False
 
-    def _confirm_generation(self, role: str, journal_type: str) -> bool:
+    def _confirm_generation(self, role: str) -> bool:
         summary = (
-            f"职业/岗位：{role or '未填写'}\n"
-            f"周记类型：{journal_type or '未填写'}\n\n"
+            f"职业/岗位：{role or '未填写'}\n\n"
             "请确认这些提示词信息无误，是否继续生成？"
         )
         reply = QMessageBox.question(

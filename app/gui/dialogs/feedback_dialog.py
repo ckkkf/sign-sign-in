@@ -96,6 +96,8 @@ class FeedbackDialog(QDialog):
         layout.addWidget(self.btn_submit)
 
     def submit(self):
+        ToastManager.instance().show("该功能开发中", "error")
+        return
         content = self.txt_content.toPlainText().strip()
         if not content:
             ToastManager.instance().show("请先填写反馈内容", "warning")
