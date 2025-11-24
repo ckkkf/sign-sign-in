@@ -181,3 +181,4 @@ class UpdateCheckResultDialog(QDialog):
 
         layout.addLayout(btn_row)
 
+

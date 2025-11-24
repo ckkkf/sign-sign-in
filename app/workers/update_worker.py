@@ -36,3 +36,4 @@ class UpdateCheckWorker(QThread):
         except Exception as exc:
             self.result_signal.emit(False, {"error": str(exc)})
 
+

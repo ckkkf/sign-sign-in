@@ -41,13 +41,15 @@ def regeo(userAgent, location):
         "location": f"{location['longitude']},{location['latitude']}",
     }
     try:
+        logging.debug(f"🛩️ 准备发起请求。url:{url}, headers:{headers}, params:{params}")
         response = requests.get(url, headers=headers, params=params, timeout=5)
-        json_data = response.json()
-        if 'regeocode' in json_data:
-            logging.info(f"📍 解析位置: {json_data['regeocode']['formatted_address']}")
-            return json_data['regeocode']
+        logging.debug(f"📡 收到响应:{response} {response.text}")
+        res = response.json()
+        if 'regeocode' in res:
+            logging.info(f"📍 解析位置: {res['regeocode']['formatted_address']}")
+            return res['regeocode']
         else:
-            raise RuntimeError(f"位置解析失败: {json_data}")
+            raise RuntimeError(f"位置解析失败: {res}")
     except Exception as e:
         logging.error(f"高德接口请求失败: {e}")
         raise e
@@ -76,7 +78,9 @@ def get_plan(userAgent, args):
     }
 
     try:
+        logging.debug(f"🛩️ 准备发起请求。url:{url}, headers:{headers}, data:{data}, cookies:{cookies}")
         response = requests.post(url, headers=headers, cookies=cookies, data=data, timeout=5)
+        logging.debug(f"📡 收到响应:{response} {response.text}")
         res = response.json()
         if not check_session_validity(res):
             handle_invalid_session()
@@ -100,12 +104,16 @@ def get_open_id(config, code):
         "devicecode": get_device_code("", config['device']),
     }
     url = "https://xcx.xybsyw.com/common/getOpenId.action"
+    data = {"code": code}
+
     try:
-        response = requests.post(url=url, headers=headers, data={"code": code}, allow_redirects=False, timeout=5)
-        json_data = response.json()
-        if json_data.get('code') == '202':
-            raise RuntimeError('code已失效，请重启小程序')
-        return json_data['data']
+        logging.debug(f"🛩️ 准备发起请求。url:{url}, headers:{headers}, data:{data}")
+        response = requests.post(url=url, headers=headers, data=data, allow_redirects=False, timeout=5)
+        logging.debug(f"📡 收到响应:{response} {response.text}")
+        res = response.json()
+        if res.get('code') == '202':
+            raise RuntimeError(f'code已失效，请重启小程序。接口响应：{res}')
+        return res['data']
     except Exception as e:
         raise RuntimeError(f"获取OpenID失败: {e}")
 
@@ -134,8 +142,11 @@ def wx_login(config, openIdData):
     cookies = {"JSESSIONID": openIdData['sessionId']}
     url = "https://xcx.xybsyw.com/login/login!wx.action"
     try:
+        logging.debug(f"🛩️ 准备发起请求。url:{url}, headers:{headers}, data:{data}, cookies:{cookies}")
         response = requests.post(url, headers=headers, cookies=cookies, data=data, timeout=5)
-        return response.json()['data']
+        logging.debug(f"📡 收到响应:{response} {response.text}")
+        res = response.json()
+        return res['data']
     except Exception as e:
         raise RuntimeError(f"登录失败: {e}")
 
@@ -219,7 +230,7 @@ def watermark_info(args, config, traineeId):
     url = "https://xcx.xybsyw.com/student/clock/postNew!watermarkInfo.action"
 
     data = {
-        "traineeId": traineeId
+        "traineeId": str(traineeId)
     }
 
     header_token = get_header_token(data)
@@ -239,7 +250,9 @@ def watermark_info(args, config, traineeId):
     }
     cookies = {"JSESSIONID": args['sessionId']}
 
+    logging.debug(f"🛩️ 准备发起请求。url:{url}, headers:{headers}, data:{data}, cookies:{cookies}")
     response = requests.post(url, headers=headers, cookies=cookies, data=data)
+    logging.debug(f"📡 收到响应:{response} {response.text}")
 
     logging.info(f"{response} {response.text}")
 
@@ -273,14 +286,17 @@ def commonPostPolicy(args, config):
         "JSESSIONID": args['sessionId']
     }
 
+    logging.debug(f"🛩️ 准备发起请求。url:{url}, headers:{headers}, data:{data}, cookies:{cookies}")
     response = requests.post(url, headers=headers, cookies=cookies, data=data)
+    logging.debug(f"📡 收到响应:{response} {response.text}")
 
     logging.info(f"{response} {response.text}")
 
-    if response.status_code != 200 or response.json()['code'] != "200":
+    res = response.json()
+    if response.status_code != 200 or res['code'] != "200":
         raise RuntimeError(f"commonPostPolicy请求异常, {response} {response.text}")
 
-    return response.json()['data']
+    return res['data']
 
 
 def aliyun_OSS(files, timestamp, policyData):
@@ -327,21 +343,22 @@ def aliyun_OSS(files, timestamp, policyData):
         "callback": policyData['callback'],
     }
 
+    logging.debug(f"🛩️ 准备发起请求。url:{url}, headers:{headers}, data:{data}, files:{files}")
     response = requests.post(url, data=data, files=files, headers=headers)
-
-    logging.info(f"{response} {response.text}")
+    logging.debug(f"📡 收到响应:{response} {response.text}")
 
     if response.status_code != 200:
         raise RuntimeError(f"aliyun_OSS请求异常, {response} {response.text}")
 
-    return response.json()['vo']
+    res = response.json()
+    return res['vo']
 
 
 def post_new(args, config, traineeId, geo, imgUrl):
     url = "https://xcx.xybsyw.com/student/clock/PostNew.action"
 
     data = {
-        "traineeId": traineeId,
+        "traineeId": str(traineeId),
         "adcode": geo['addressComponent']['adcode'],
         "lat": config['location']['latitude'],
         "lng": config['location']['longitude'],
@@ -356,7 +373,7 @@ def post_new(args, config, traineeId, geo, imgUrl):
         "addressId": "null"
     }
 
-    header_token = get_header_token(args)
+    header_token = get_header_token(data)
     headers = {
         "content-type": "application/x-www-form-urlencoded",
         "devicecode": get_device_code(openId=args['openId'], device=config['device']),
@@ -373,11 +390,12 @@ def post_new(args, config, traineeId, geo, imgUrl):
     }
     cookies = {"JSESSIONID": args['sessionId']}
 
+    logging.debug(f"🛩️ 准备发起请求。url:{url}, headers:{headers}, data:{data}, cookies:{cookies}")
     response = requests.post(url, headers=headers, cookies=cookies, data=data)
+    logging.debug(f"📡 收到响应:{response} {response.text}")
 
-    logging.info(f"{response} {response.text}")
-
-    if response.status_code != 200 or response.json()['code'] != "200":
+    res = response.json()
+    if response.status_code != 200 or res['code'] != "200":
         raise RuntimeError(f"post_new请求异常, {response} {response.text}")
 
 
@@ -385,10 +403,10 @@ def deliver_value(args, config, traineeId):
     url = "https://xcx.xybsyw.com/student/DeliverValue!post.action"
 
     data = {
-        "traineeId": traineeId
+        "traineeId": str(traineeId)
     }
 
-    header_token = get_header_token(args)
+    header_token = get_header_token(data)
     headers = {
         "content-type": "application/x-www-form-urlencoded",
         "encryptvalue": args['encryptValue'],
@@ -404,10 +422,12 @@ def deliver_value(args, config, traineeId):
     }
     cookies = {"JSESSIONID": args['sessionId']}
 
+    logging.debug(f"🛩️ 准备发起请求。url:{url}, headers:{headers}, data:{data}, cookies:{cookies}")
     response = requests.post(url, headers=headers, cookies=cookies, data=data)
-    logging.info(f"{response} {response.text}")
+    logging.debug(f"📡 收到响应:{response} {response.text}")
 
-    if response.status_code != 200 or response.json()['code'] != "200":
+    res = response.json()
+    if response.status_code != 200 or res['code'] != "200":
         raise RuntimeError(f"deliver_value请求异常, {response} {response.text}")
 
 
@@ -433,16 +453,17 @@ def simple_sign_in_or_out(args, geo, traineeId, config, opt):
     cookies = {"JSESSIONID": args['sessionId']}
 
     try:
+        logging.debug(f"🛩️ 准备发起请求。url:{url}, headers:{headers}, data:{data}, cookies:{cookies}")
         response = requests.post(url, data=data, headers=headers, cookies=cookies, timeout=5)
-        logging.info(f'📡 服务器响应: {response.text}')
-        json_resp = response.json()
-        
-        if not check_session_validity(json_resp):
+        logging.debug(f"📡 收到响应:{response} {response.text}")
+        res = response.json()
+
+        if not check_session_validity(res):
             handle_invalid_session()
             raise RuntimeError('❌ JSESSIONID已失效，请重新获取code')
-        
-        msg = json_resp['msg']
-        code = json_resp['code']
+
+        msg = res['msg']
+        code = res['code']
 
         info = ''
 
@@ -496,9 +517,11 @@ def load_blog_year(args, config):
     }
 
     try:
+        logging.debug(f"🛩️ 准备发起请求。url:{url}, headers:{headers}, data:{data}, cookies:{cookies}")
         response = requests.post(url, headers=headers, cookies=cookies, data=data, timeout=10)
+        logging.debug(f"📡 收到响应:{response} {response.text}")
         res = response.json()
-        
+
         if not check_session_validity(res):
             handle_invalid_session()
             raise RuntimeError('❌ JSESSIONID已失效，请重新获取code')
@@ -543,13 +566,15 @@ def load_blog_date(args, config, year, month):
     }
 
     try:
+        logging.debug(f"🛩️ 准备发起请求。url:{url}, headers:{headers}, data:{data}, cookies:{cookies}")
         response = requests.post(url, headers=headers, cookies=cookies, data=data, timeout=10)
+        logging.debug(f"📡 收到响应:{response} {response.text}")
         res = response.json()
-        
+
         if not check_session_validity(res):
             handle_invalid_session()
             raise RuntimeError('❌ JSESSIONID已失效，请重新获取code')
-        
+
         logging.info(f'加载周信息：{res.get('msg', 'Unknown error')}')
         if res.get('code') == '200' and 'data' in res:
             return res['data']
@@ -598,13 +623,15 @@ def submit_blog(args, config, blog_title, blog_body, start_date, end_date, blog_
     }
 
     try:
+        logging.debug(f"🛩️ 准备发起请求。url:{url}, headers:{headers}, data:{data}, cookies:{cookies}")
         response = requests.post(url, headers=headers, cookies=cookies, data=data, timeout=10)
+        logging.debug(f"📡 收到响应:{response} {response.text}")
         res = response.json()
-        
+
         if not check_session_validity(res):
             handle_invalid_session()
             raise RuntimeError('❌ JSESSIONID已失效，请重新获取code')
-        
+
         logging.info(f"提交周记结果: {res}")
         if res.get('code') == '200':
             logging.info(f"提交周记成功: {res.get('msg', 'Unknown error')}")
