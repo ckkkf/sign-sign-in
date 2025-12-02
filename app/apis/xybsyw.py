@@ -218,8 +218,8 @@ def photo_sign_in_or_out(args, config, geo, traineeId, opt):
     files = get_img_file(timestamp, opt.get('image_path'))
     try:
         ossData = aliyun_OSS(files=files, timestamp=timestamp, policyData=policyData)
-        post_new(args=args, config=config, traineeId=traineeId, geo=geo, imgUrl=ossData['key'])
-        deliver_value(args=args, config=config, traineeId=traineeId)
+        post_new(args=args, config=config, traineeId=traineeId, geo=geo, imgUrl=ossData['key'], opt=opt)
+        # deliver_value(args=args, config=config, traineeId=traineeId)
     finally:
         file_obj = files.get("file", [None, None, None])[1]
         if file_obj:
@@ -354,7 +354,7 @@ def aliyun_OSS(files, timestamp, policyData):
     return res['vo']
 
 
-def post_new(args, config, traineeId, geo, imgUrl):
+def post_new(args, config, traineeId, geo, imgUrl, opt):
     url = "https://xcx.xybsyw.com/student/clock/PostNew.action"
 
     data = {
@@ -366,7 +366,9 @@ def post_new(args, config, traineeId, geo, imgUrl):
         "deviceName": config['device']['model'],
         # "punchInStatus": "1",
         "punchInStatus": "0",
-        "clockStatus": "2",
+        # 2：普通签到，1：普通签退
+        # "clockStatus": "2",
+        "clockStatus": str(opt['code']),
         # "imgUrl": "temp/20251119/school/14422/xcx/student/clock/11621617/1763557557282.jpg",
         "imgUrl": imgUrl,
         "reason": "",

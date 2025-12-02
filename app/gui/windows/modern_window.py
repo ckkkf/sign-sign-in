@@ -149,7 +149,7 @@ class ModernWindow(QMainWindow):
         l_vbox.addWidget(btn_journal)
 
         # ------------------------- Mode -------------------------
-        label = QLabel("执行操作")
+        label = QLabel("执行操作（拍照签到签退经纬度不准会导致外勤）")
         label.setObjectName("SectionLabel")
         l_vbox.addWidget(label)
 
@@ -162,8 +162,11 @@ class ModernWindow(QMainWindow):
         rb_out = QRadioButton("普通签退")
         self.grp.addButton(rb_out, 1)
 
-        rb_img_in = QRadioButton("拍照签到（测试）")
+        rb_img_in = QRadioButton("拍照签到")
         self.grp.addButton(rb_img_in, 2)
+
+        rb_img_out = QRadioButton("拍照签退")
+        self.grp.addButton(rb_img_out, 3)
 
         # 第一行：签到 + 签退
         mode_row1 = QHBoxLayout()
@@ -171,6 +174,7 @@ class ModernWindow(QMainWindow):
         mode_row1.addWidget(rb_in)
         mode_row1.addWidget(rb_out)
         mode_row1.addWidget(rb_img_in)
+        mode_row1.addWidget(rb_img_out)
         mode_row1.addStretch()
         l_vbox.addLayout(mode_row1)
 
@@ -691,15 +695,6 @@ class ModernWindow(QMainWindow):
             logging.info("")
             logging.info(f"{'=' * 10} 🟢 TASK {datetime.now().strftime('%H:%M')} {'=' * 10}")
 
-            checked_id = self.grp.checkedId()
-            photo_image = None
-            if checked_id == 2:
-                dialog = PhotoSignDialog(self)
-                if dialog.exec() != QDialog.Accepted:
-                    logging.info("用户取消了拍照签到操作")
-                    return
-                photo_image = dialog.selected_image
-
             # 验证数据
             errMsg = validate_config(read_config(CONFIG_FILE))
             if errMsg:
@@ -715,12 +710,24 @@ class ModernWindow(QMainWindow):
             for btn in self.grp.buttons():
                 btn.setEnabled(False)
 
+            # 操作
+            checked_id = self.grp.checkedId()
+            photo_image = None
+            if checked_id in [2, 3]:
+                dialog = PhotoSignDialog(self)
+                if dialog.exec() != QDialog.Accepted:
+                    logging.info("用户取消了拍照签到操作")
+                    return
+                photo_image = dialog.selected_image
+
             if checked_id == 0:
                 opt = {"action": "普通签到", "code": "2"}
             elif checked_id == 1:
                 opt = {"action": "普通签退", "code": "1"}
             elif checked_id == 2:
-                opt = {"action": "拍照签到", "image_path": photo_image}
+                opt = {"action": "拍照签到", "code": "2", "image_path": photo_image}
+            elif checked_id == 3:
+                opt = {"action": "拍照签退", "code": "1", "image_path": photo_image}
 
             self.worker = SignTaskThread(CONFIG_FILE, opt)
             self.worker.finished_signal.connect(self.on_done)

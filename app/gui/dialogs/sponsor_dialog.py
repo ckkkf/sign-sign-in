@@ -189,15 +189,15 @@ class SponsorSubmitDialog(QDialog):
         self.txt_message.setPlaceholderText("想对作者说的话、署名或展示链接，可选")
         form_layout.addRow("留言", self.txt_message)
 
-        layout.addWidget(form_card)
+        # layout.addWidget(form_card)
 
         btn_row = QHBoxLayout()
         btn_row.addStretch()
 
-        self.btn_submit = QPushButton("提交赞助信息")
-        self.btn_submit.setObjectName("PrimaryBtn")
-        self.btn_submit.clicked.connect(self.submit)
-        btn_row.addWidget(self.btn_submit)
+        # self.btn_submit = QPushButton("提交赞助信息")
+        # self.btn_submit.setObjectName("PrimaryBtn")
+        # self.btn_submit.clicked.connect(self.submit)
+        # btn_row.addWidget(self.btn_submit)
 
         # 不再显示按钮
         btn_dont_show = QPushButton("不再显示")

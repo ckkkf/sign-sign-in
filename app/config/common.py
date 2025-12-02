@@ -2,7 +2,7 @@ import os
 from core.paths import get_base_dir
 
 # 项目信息
-VERSION = "v1.1.0"
+VERSION = "v1.1.2"
 
 # QQ群信息
 QQ_GROUP = "859098272"

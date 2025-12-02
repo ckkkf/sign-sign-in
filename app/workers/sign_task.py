@@ -36,13 +36,13 @@ class SignTaskThread(QThread):
             # 读取并校验配置文件
             config = read_config(self.config_file)
             # 校验其他文件
-            if self.sign_option['action'] == "拍照签到":
+            if "拍照" in self.sign_option['action']:
                 check_img(self.sign_option.get("image_path"))
-            
+
             # 检查是否有有效的session缓存，如果有就直接使用，不需要重新获取code
             from app.utils.files import get_valid_session_cache
             cached_session = get_valid_session_cache()
-            
+
             if cached_session:
                 logging.info("✅ 使用缓存的JSESSIONID，跳过获取code步骤")
                 # 直接使用缓存的session执行逻辑
@@ -143,7 +143,7 @@ class SignTaskThread(QThread):
         if action in ['普通签到', '普通签退']:
             simple_sign_in_or_out(args=args, config=config, geo=geo, traineeId=plan_data[0]['dateList'][0]['traineeId'],
                                   opt=self.sign_option)
-        elif action == '拍照签到':
+        elif action in ['拍照签到', '拍照签退']:
             photo_sign_in_or_out(args=args, config=config, geo=geo, traineeId=plan_data[0]['dateList'][0]['traineeId'],
                                  opt=self.sign_option)
 
@@ -229,7 +229,7 @@ class GetCodeAndSessionThread(QThread):
 
             ### 获取配置文件相关
             config = read_config(self.config_file)
-            
+
             # 删除旧code文件
             if os.path.exists(self.code_file):
                 os.remove(self.code_file)
@@ -281,7 +281,7 @@ class GetCodeAndSessionThread(QThread):
             reset_proxy(self.origin_proxy, f"{self.target_host}:{self.target_port}")
 
     def check_stop(self):
-        if self.isInterruptionRequested(): 
+        if self.isInterruptionRequested():
             raise RuntimeError("用户停止执行")
 
     def wait_code(self, fpath, proxy):
@@ -289,14 +289,14 @@ class GetCodeAndSessionThread(QThread):
         for _ in range(1200):
             self.check_stop()
             if time.time() - last > 1.0:
-                if get_system_proxy() != proxy: 
+                if get_system_proxy() != proxy:
                     set_proxy(proxy)
                 last = time.time()
             if os.path.exists(fpath):
                 try:
                     with open(fpath) as f:
                         d = json.load(f)
-                        if d.get("code"): 
+                        if d.get("code"):
                             return d['code'].strip()
                 except:
                     pass
