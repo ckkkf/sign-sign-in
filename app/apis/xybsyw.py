@@ -2,6 +2,7 @@ import logging
 
 import requests
 
+from app.config.common import XYB_VERSION
 from app.utils.common import get_timestamp
 from app.utils.files import get_img_file, clear_session_cache
 from app.utils.params import get_header_token, get_device_code
@@ -61,7 +62,7 @@ def get_plan(userAgent, args):
     data = {}
     header_token = get_header_token(data)
     headers = {
-        "v": "1.6.39",
+        "v": XYB_VERSION,
         "wechat": "1",
         "xweb_xhr": "1",
         "content-type": "application/x-www-form-urlencoded",
@@ -96,7 +97,7 @@ def get_plan(userAgent, args):
 def get_open_id(config, code):
     logging.info("正在获取open_id...")
     headers = {
-        "v": "1.6.39",
+        "v": XYB_VERSION,
         "xweb_xhr": "1",
         "content-type": "application/x-www-form-urlencoded",
         "referer": "https://servicewechat.com/wx9f1c2e0bbc10673c/534/page-frame.html",
@@ -127,7 +128,7 @@ def wx_login(config, openIdData):
     header_token = get_header_token(data)
     headers = {
         "wechat": "1",
-        "v": "1.6.39",
+        "v": XYB_VERSION,
         "xweb_xhr": "1",
         "content-type": "application/x-www-form-urlencoded",
         "referer": "https://servicewechat.com/wx9f1c2e0bbc10673c/534/page-frame.html",
@@ -244,7 +245,7 @@ def watermark_info(args, config, traineeId):
         "t": header_token['t'],
         "referer": "https://servicewechat.com/wx9f1c2e0bbc10673c/537/page-frame.html",
         "user-agent": config['userAgent'],
-        "v": "1.6.39",
+        "v": XYB_VERSION,
         "wechat": "1",
         "xweb_xhr": "1"
     }
@@ -278,7 +279,7 @@ def commonPostPolicy(args, config):
         "s": header_token['s'],
         "t": header_token['t'],
         "user-agent": config['userAgent'],
-        "v": "1.6.39",
+        "v": XYB_VERSION,
         "wechat": "1",
         "xweb_xhr": "1"
     }
@@ -312,7 +313,7 @@ def aliyun_OSS(files, timestamp, policyData):
     #     "n": "content,deviceName,keyWord,blogBody,blogTitle,getType,responsibilities,street,text,reason,searchvalue,key,answers,leaveReason,personRemark,selfAppraisal,imgUrl,wxname,deviceId,avatarTempPath,file,file,model,brand,system,deviceId,platform,code,openId,unionid,clockDeviceToken,clockDevice,address,name,enterpriseEmail,responsibilities,practiceTarget,guardianName,guardianPhone,practiceDays,linkman,enterpriseName,companyIntroduction,accommodationStreet,accommodationLongitude,accommodationLatitude,internshipDestination,specialStatement,enterpriseStreet,insuranceName,insuranceFinancing,policyNumber,overtimeRemark,riskStatement,specialStatement",
     #     "s": header_token['s'],
     #     "t": header_token['t'],
-    #     "v": "1.6.39",
+    #     "v": XYB_VERSION,
     #     "wechat": "1",
     #     "xweb_xhr": "1"
     # }
@@ -386,7 +387,7 @@ def post_new(args, config, traineeId, geo, imgUrl, opt):
         "s": header_token['s'],
         "t": header_token['t'],
         "user-agent": config['userAgent'],
-        "v": "1.6.39",
+        "v": XYB_VERSION,
         "wechat": "1",
         "xweb_xhr": "1"
     }
@@ -418,7 +419,7 @@ def deliver_value(args, config, traineeId):
         "s": header_token['s'],
         "t": header_token['t'],
         "user-agent": config['userAgent'],
-        "v": "1.6.39",
+        "v": XYB_VERSION,
         "wechat": "1",
         "xweb_xhr": "1"
     }
@@ -445,7 +446,7 @@ def simple_sign_in_or_out(args, geo, traineeId, config, opt):
             'lng': config['location']['longitude'], 'lat': config['location']['latitude'],
             'address': geo['formatted_address'], 'deviceName': device['model'], }
     header_token = get_header_token(data)
-    headers = {'v': "1.6.39", 'wechat': "1",
+    headers = {'v': XYB_VERSION, 'wechat': "1",
                'Referer': "https://servicewechat.com/wx9f1c2e0bbc10673c/534/page-frame.html",
                'User-Agent': config['userAgent'],
                'n': "content,deviceName,keyWord,blogBody,blogTitle,getType,responsibilities,street,text,reason,searchvalue,key,answers,leaveReason,personRemark,selfAppraisal,imgUrl,wxname,deviceId,avatarTempPath,file,file,model,brand,system,deviceId,platform,code,openId,unionid,clockDeviceToken,clockDevice,address,name,enterpriseEmail,responsibilities,practiceTarget,guardianName,guardianPhone,practiceDays,linkman,enterpriseName,companyIntroduction,accommodationStreet,accommodationLongitude,accommodationLatitude,internshipDestination,specialStatement,enterpriseStreet,insuranceName,insuranceFinancing,policyNumber,overtimeRemark,riskStatement,specialStatement",
@@ -510,7 +511,7 @@ def load_blog_year(args, config):
         "s": header_token['s'],
         "t": header_token['t'],
         "user-agent": config['userAgent'],
-        "v": "1.6.39",
+        "v": XYB_VERSION,
         "wechat": "1",
         "xweb_xhr": "1"
     }
@@ -559,7 +560,7 @@ def load_blog_date(args, config, year, month):
         "s": header_token['s'],
         "t": header_token['t'],
         "user-agent": config['userAgent'],
-        "v": "1.6.39",
+        "v": XYB_VERSION,
         "wechat": "1",
         "xweb_xhr": "1"
     }
@@ -616,7 +617,7 @@ def submit_blog(args, config, blog_title, blog_body, start_date, end_date, blog_
         "s": header_token['s'],
         "t": header_token['t'],
         "user-agent": config['userAgent'],
-        "v": "1.6.39",
+        "v": XYB_VERSION,
         "wechat": "1",
         "xweb_xhr": "1"
     }

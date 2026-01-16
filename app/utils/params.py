@@ -6,6 +6,7 @@ import urllib.parse
 
 from gmssl import sm2
 
+from app.config.common import XYB_KEY
 from app.utils.common import rand_str
 
 
@@ -19,9 +20,7 @@ def get_device_code(openId, device):
 
 def get_header_token(e):
     # 映射列表
-    n = ["5", "b", "f", "A", "J", "Q", "g", "a", "l", "p", "s", "q", "H", "4", "L", "Q", "g", "1", "6", "Q", "Z", "v",
-         "w", "b", "c", "e", "2", "2", "m", "l", "E", "g", "G", "H", "I", "r", "o", "s", "d", "5", "7", "x", "t", "J",
-         "S", "T", "F", "v", "w", "4", "8", "9", "0", "K", "E", "3", "4", "0", "m", "r", "i", "n"]
+    n = list(XYB_KEY)
 
     # 初始化o列表
     o = [str(i) for i in range(62)]
