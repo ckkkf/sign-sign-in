@@ -16,6 +16,12 @@ class MonitorThread(QThread):
     def __init__(self, mitm):
         super().__init__()
         self.mitm = mitm
+        self._running = True
+
+    def stop(self):
+        """Stop monitoring loop so the thread can exit cleanly."""
+        self._running = False
+        self.requestInterruption()
 
     def run(self):
         host, port = MITM_PROXY.split(":")
@@ -24,7 +30,7 @@ class MonitorThread(QThread):
         last_io = get_net_io()
         last_time = time.time()
 
-        while True:
+        while self._running and not self.isInterruptionRequested():
             # =======================
             # ① 监控 mitm 是否运行
             # =======================
@@ -72,4 +78,7 @@ class MonitorThread(QThread):
             }
 
             self.data_signal.emit(data)
-            time.sleep(1)
+            for _ in range(10):
+                if not self._running or self.isInterruptionRequested():
+                    return
+                time.sleep(0.1)

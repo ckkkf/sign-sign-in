@@ -1,6 +1,7 @@
 import logging
 import os
 import subprocess
+import threading
 import time
 from datetime import datetime
 
@@ -771,3 +772,35 @@ class ModernWindow(QMainWindow):
         else:
             if msg != "任务已停止":
                 ToastManager.instance().show(msg, "error")
+
+    def closeEvent(self, event):
+        """Ensure background services exit when the window closes."""
+        try:
+            # stop monitor thread first to avoid自动重启 mitm
+            if hasattr(self, "monitor") and self.monitor.isRunning():
+                self.monitor.stop()
+                self.monitor.wait(2000)
+
+            if hasattr(self, "worker") and getattr(self, "worker").isRunning():
+                self.worker.requestInterruption()
+                self.worker.wait(2000)
+
+            if hasattr(self, "code_worker") and getattr(self, "code_worker").isRunning():
+                self.code_worker.requestInterruption()
+                self.code_worker.wait(2000)
+
+            if hasattr(self, "update_worker") and getattr(self, "update_worker").isRunning():
+                self.update_worker.requestInterruption()
+                self.update_worker.wait(2000)
+        finally:
+            # 关闭窗口时停止 mitmdump，防止后台残留
+            # self.mitm.stop_mitm()
+            # super().closeEvent(event)
+            # 异步关闭 mitmdump
+            threading.Thread(
+                target=self.mitm.stop_mitm,
+                daemon=True
+            ).start()
+
+            # 继续正常关闭窗口
+            super().closeEvent(event)
