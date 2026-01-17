@@ -63,7 +63,58 @@ class AIGenerationThread(QThread):
             self.error_signal.emit("error", f"调用模型失败：{e}")
 
 
+class CustomConfirmDialog(QDialog):
+    """自定义样式的确认对话框"""
+    def __init__(self, parent, title, text, confirm_text="确认", is_danger=False):
+        super().__init__(parent)
+        self.setWindowTitle(title)
+        self.setFixedWidth(380)
+        # 移除问号图标，使用纯净样式
+        self.setWindowFlags(self.windowFlags() & ~Qt.WindowContextHelpButtonHint)
+        self._setup_ui(text, confirm_text, is_danger)
 
+    def _setup_ui(self, text, confirm_text, is_danger):
+        self.setStyleSheet("""
+            QDialog { background-color: #1E1E1E; }
+            QLabel { color: #E8EAED; font-size: 14px; line-height: 1.5; }
+            QPushButton { 
+                padding: 8px 16px; border-radius: 6px; font-size: 13px; font-weight: 500;
+            }
+        """)
+        layout = QVBoxLayout(self)
+        layout.setSpacing(24)
+        layout.setContentsMargins(24, 24, 24, 24)
+        
+        msg_label = QLabel(text)
+        msg_label.setWordWrap(True)
+        # 稍微增加字间距
+        msg_layout = QHBoxLayout()
+        msg_layout.addWidget(msg_label)
+        layout.addLayout(msg_layout)
+        
+        btn_layout = QHBoxLayout()
+        btn_layout.setSpacing(12)
+        btn_layout.addStretch()
+        
+        btn_cancel = QPushButton("取消")
+        btn_cancel.setCursor(Qt.PointingHandCursor)
+        btn_cancel.setStyleSheet("""
+            background-color: transparent; border: 1px solid #3E3E3E; color: #CCCCCC;
+        """)
+        btn_cancel.clicked.connect(self.reject)
+        
+        btn_confirm = QPushButton(confirm_text)
+        btn_confirm.setCursor(Qt.PointingHandCursor)
+        if is_danger:
+            btn_confirm.setStyleSheet("QPushButton { background-color: #EF4444; color: white; border: none; } QPushButton:hover { background-color: #DC2626; }")
+        else:
+            btn_confirm.setStyleSheet("QPushButton { background-color: #2563EB; color: white; border: none; } QPushButton:hover { background-color: #1D4ED8; }")
+            
+        btn_confirm.clicked.connect(self.accept)
+        btn_layout.addWidget(btn_cancel)
+        btn_layout.addWidget(btn_confirm)
+        
+        layout.addLayout(btn_layout)
 class LoadYearDataThread(QThread):
     """加载年份数据的异步线程"""
     finished_signal = Signal(dict, str, list)  # login_args, trainee_id, year_data
@@ -301,6 +352,10 @@ class AIMessageBubble(QFrame):
             self.parent_dialog.floating_bar.schedule_hide()
         super().leaveEvent(event)
 
+    def wheelEvent(self, event):
+        # 禁用气泡内的滚轮滚动，并将事件忽略以便传递给父级（ScrollArea）
+        event.ignore()
+
 
 class UserMessageBubble(QFrame):
     def __init__(self, parent_dialog, text):
@@ -372,6 +427,12 @@ class UserMessageBubble(QFrame):
         if hasattr(self.parent_dialog, 'floating_bar'):
             self.parent_dialog.floating_bar.schedule_hide()
         super().leaveEvent(event)
+
+    def wheelEvent(self, event):
+        event.ignore()
+
+    def wheelEvent(self, event):
+        event.ignore()
 
 
 class WeeklyJournalDialog(QDialog):
@@ -614,7 +675,7 @@ class WeeklyJournalDialog(QDialog):
 
         # 单一主输入框（自动调整高度）
         self.editor = QTextEdit()
-        self.editor.setPlaceholderText("✏️ 发送消息...")
+        self.editor.setPlaceholderText("发送消息...")
         self.editor.setObjectName("MainEditor")
         self._editor_min_height = 40
         self._editor_max_height = 150
@@ -652,6 +713,13 @@ class WeeklyJournalDialog(QDialog):
         toolbar_row = QHBoxLayout()
         toolbar_row.setSpacing(8)
         toolbar_row.setContentsMargins(0, 0, 0, 0)
+
+        # 清空对话按钮
+        self.btn_clear = QPushButton("🗑️ 清空对话")
+        self.btn_clear.setObjectName("ToolbarBtn")
+        self.btn_clear.setCursor(Qt.PointingHandCursor)
+        self.btn_clear.clicked.connect(self._clear_chat_session)
+        toolbar_row.addWidget(self.btn_clear)
 
         toolbar_row.addStretch()
 
@@ -852,19 +920,18 @@ class WeeklyJournalDialog(QDialog):
         if self.generated_widget.count() == 0:
             return
             
-        reply = QMessageBox.question(
-            self,
-            "确认",
-            "确定要清空所有 AI 生成的历史记录吗？",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
-        )
+        if not self._show_custom_confirm(
+            "确认清空", 
+            "确定要清空所有 AI 生成的历史记录吗？\n此操作将清除左侧列表中的所有记录。", 
+            confirm_text="🗑️ 清空",
+            is_danger=True
+        ):
+            return
         
-        if reply == QMessageBox.Yes:
-            self.history["generated"] = []
-            self.generated_widget.clear()
-            clear_journal_history("generated")
-            ToastManager.instance().show("生成历史已清空", "success")
+        self.history["generated"] = []
+        self.generated_widget.clear()
+        clear_journal_history("generated")
+        ToastManager.instance().show("生成历史已清空", "success")
 
     def _adjust_editor_height(self):
         """根据内容自动调整输入框高度"""
@@ -1218,10 +1285,222 @@ class WeeklyJournalDialog(QDialog):
             logging.error(f"提交周记失败: {e}")
             ToastManager.instance().show(f"提交周记失败: {str(e)}", "error")
 
+    def submit_journal_from_text(self, content):
+        """从文本提交周记（工具栏调用）"""
+        if hasattr(self, '_submit_thread') and self._submit_thread and self._submit_thread.isRunning():
+            ToastManager.instance().show("正在提交中，请稍后...", "warning")
+            return
+
+        # 1. 弹出配置与确认对话框
+        confirmed, final_title, final_content = self._show_submit_config_dialog(content)
+        if not confirmed:
+            return
+
+        week_id = self.week_combo.currentData()
+        start_date = self.week_combo.itemData(self.week_combo.currentIndex(), Qt.UserRole + 1)
+        end_date = self.week_combo.itemData(self.week_combo.currentIndex(), Qt.UserRole + 2)
+        permission = self.permission_combo.currentData()
+
+        # 2. 启动提交线程
+        self.btn_ai.setEnabled(False)
+        self._submit_thread = SubmitJournalThread(
+            final_content, 
+            final_title, 
+            start_date, 
+            end_date, 
+            permission, 
+            week_id
+        )
+        self._submit_thread.finished_signal.connect(self._on_submit_finished)
+        self._submit_thread.error_signal.connect(self._on_submit_error)
+        self._submit_thread.start()
+        
+    def _on_submit_finished(self, msg):
+        self.btn_ai.setEnabled(True)
+        ToastManager.instance().show(msg, "success")
+        append_journal_entry("submitted", self._submit_thread.content) # Record submission
+        self._load_history()
+        self._submit_thread = None
+        
+    def _on_submit_error(self, err):
+        self.btn_ai.setEnabled(True)
+        ToastManager.instance().show(f"提交失败: {err}", "error")
+        self._submit_thread = None
+
+    def _show_submit_config_dialog(self, content):
+        """显示提交配置对话框"""
+        dialog = QDialog(self)
+        dialog.setWindowTitle("提交周记配置")
+        dialog.setFixedWidth(500)
+        dialog.setStyleSheet("""
+            QDialog { background-color: #1E1E1E; color: white; }
+            QLabel { color: #CCCCCC; font-size: 14px; }
+            QTextEdit, QLineEdit { background-color: #2D2D2D; border: 1px solid #3E3E3E; padding: 8px; border-radius: 4px; color: white; }
+            QPushButton { 
+                padding: 6px 16px; border-radius: 4px; font-size: 13px; 
+                background-color: #3E3E3E; color: white; border: 1px solid #555;
+            }
+            QPushButton:hover { background-color: #4E4E4E; }
+        """)
+        
+        layout = QVBoxLayout(dialog)
+        layout.setSpacing(16)
+        
+        # 1. 配置项布局 (复用 hidden combos)
+        # 注意：此处我们将 combos "借用" 到对话框中显示，关闭时必须还回去
+        self.year_combo.setVisible(True)
+        self.month_combo.setVisible(True)
+        self.week_combo.setVisible(True)
+        self.permission_combo.setVisible(True)
+        
+        # 设置下拉框样式以适配 Dialog
+        combo_style = """
+            QComboBox {
+                background-color: #2D2D2D; color: white; border: 1px solid #3E3E3E; 
+                padding: 4px 8px; border-radius: 4px; min-width: 120px;
+            }
+            QComboBox::drop-down { border: none; }
+            QComboBox QAbstractItemView {
+                background-color: #2D2D2D; color: white; selection-background-color: #3E3E3E;
+            }
+        """
+        self.year_combo.setStyleSheet(combo_style)
+        self.month_combo.setStyleSheet(combo_style)
+        self.week_combo.setStyleSheet(combo_style)
+        self.permission_combo.setStyleSheet(combo_style)
+
+        form_layout = QHBoxLayout() # 使用水平布局排列配置项
+        form_layout.addWidget(QLabel("年份:"))
+        form_layout.addWidget(self.year_combo)
+        form_layout.addWidget(QLabel("月份:"))
+        form_layout.addWidget(self.month_combo)
+        form_layout.addStretch()
+        
+        form_layout2 = QHBoxLayout()
+        form_layout2.addWidget(QLabel("周次:"))
+        form_layout2.addWidget(self.week_combo, 1) # 周次较长
+        form_layout2.addWidget(QLabel("权限:"))
+        form_layout2.addWidget(self.permission_combo)
+        
+        layout.addLayout(form_layout)
+        layout.addLayout(form_layout2)
+        
+        # 1.5 标题 (可编辑)
+        title_layout = QHBoxLayout()
+        title_layout.addWidget(QLabel("标题:"))
+        title_edit = QLineEdit()
+        # 默认标题
+        current_week_item = self.week_combo.currentData()
+        if current_week_item:
+            title_edit.setText(f"第{current_week_item.get('week', '')}周实习周记")
+        else:
+            title_edit.setText("实习周记")
+        title_layout.addWidget(title_edit)
+        layout.addLayout(title_layout)
+        
+        # 2. 内容编辑
+        layout.addWidget(QLabel("周记内容 (可编辑):"))
+        content_edit = QTextEdit()
+        content_edit.setPlainText(content)
+        content_edit.setMinimumHeight(200)
+        layout.addWidget(content_edit)
+        
+        # 3. 按钮
+        btn_box = QHBoxLayout()
+        btn_cancel = QPushButton("取消")
+        btn_submit = QPushButton("🚀 确认提交")
+        btn_submit.setStyleSheet("""
+            QPushButton { 
+                background-color: #2563EB; color: white; border: none; font-weight: bold;
+            }
+            QPushButton:hover { background-color: #1D4ED8; }
+        """)
+        
+        btn_cancel.clicked.connect(dialog.reject)
+        btn_submit.clicked.connect(dialog.accept)
+        
+        btn_box.addStretch()
+        btn_box.addWidget(btn_cancel)
+        btn_box.addWidget(btn_submit)
+        layout.addLayout(btn_box)
+        
+        # 执行对话框
+        result = dialog.exec()
+        
+        # 4. 恢复 Combos (无论结果如何都归还)
+        # 必须先重新设置 parent，否则 visible 设为 false 可能没用（如果 dialog 销毁）
+        self.year_combo.setParent(self)
+        self.month_combo.setParent(self)
+        self.week_combo.setParent(self)
+        self.permission_combo.setParent(self)
+        
+        self.year_combo.setVisible(False)
+        self.month_combo.setVisible(False)
+        self.week_combo.setVisible(False)
+        self.permission_combo.setVisible(False)
+        
+        if result == QDialog.Accepted:
+            return True, title_edit.text().strip(), content_edit.toPlainText()
+        return False, None, None
+
     def _fill_from_history(self, item: QListWidgetItem):
         content = item.data(Qt.UserRole)
         if content:
-            self.editor.setPlainText(content)
+            # 确保切换到聊天模式（隐藏主标题和占位符）
+            if self._title_container.isVisible():
+                self._title_container.hide()
+                self._top_spacer.hide()
+                self._bottom_spacer.hide()
+                self._chat_area_widget.setVisible(True)
+
+            # 将历史记录展示在聊天窗口，而不是覆盖输入框
+            self._add_ai_message(content)
+            # 滚动到底部确保可见
+            QTimer.singleShot(100, lambda: self._scroll_chat_to_bottom())
+
+    def _scroll_chat_to_bottom(self):
+        """滚动聊天记录到底部"""
+        bar = self.chat_scroll.verticalScrollBar()
+        bar.setValue(bar.maximum())
+
+    def _clear_chat_session(self):
+        """清空当前对话内容并恢复初始状态"""
+        if self._chat_area_widget.isHidden() and not self.editor.toPlainText().strip():
+            # 已经在初始状态且无内容，无需操作
+            return
+
+        # 使用自定义确认对话框
+        if not self._show_custom_confirm(
+            "确认清空", 
+            "确定要清空当前对话内容吗？\n此操作无法撤销。", 
+            confirm_text="🗑️ 清空",
+            is_danger=True
+        ):
+            return
+
+        # 清空聊天消息
+        while self.chat_messages_layout.count() > 0:
+            item = self.chat_messages_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        
+        # 重新添加底部弹簧
+        self.chat_messages_layout.addStretch()
+
+        # 恢复初始布局状态
+        self._chat_area_widget.hide()
+        self._title_container.show()
+        self._top_spacer.show()
+        self._bottom_spacer.show()
+        
+        # 清空输入框
+        self.editor.clear()
+        self.btn_ai.setEnabled(True)
+
+    def _show_custom_confirm(self, title, text, confirm_text="确认", is_danger=False):
+        """显示自定义样式的确认对话框 (使用 CustomConfirmDialog)"""
+        dialog = CustomConfirmDialog(self, title, text, confirm_text, is_danger)
+        return dialog.exec() == QDialog.Accepted
 
     # ---------------------- Server Helpers ----------------------
     def _setup_styles(self):
@@ -1494,20 +1773,23 @@ class WeeklyJournalDialog(QDialog):
                 width: 24px;
             }
             QComboBox QAbstractItemView {
-                background-color: #202737;
-                border: 1px solid rgba(138, 180, 248, 0.2);
-                border-radius: 12px;
-                selection-background-color: rgba(138, 180, 248, 0.2);
-                color: #E8EAED;
+                background-color: #1F2233;
+                border: 1px solid #2F3342;
+                border-radius: 8px;
+                color: #B0B3B8;
                 outline: none;
-                padding: 6px;
+                padding: 4px;
             }
             QComboBox QAbstractItemView::item {
-                padding: 10px 14px;
-                border-radius: 8px;
+                padding: 12px 14px;
+                border-bottom: 1px solid rgba(255, 255, 255, 0.08);
             }
             QComboBox QAbstractItemView::item:selected {
-                background-color: rgba(138, 180, 248, 0.25);
+                background-color: #363B4C;
+                color: #FFFFFF;
+                border-radius: 6px;
+                border-left: 3px solid #4F6BFF;
+                padding-left: 11px;
             }
             
             /* ========== 按钮基础样式 ========== */
@@ -1773,7 +2055,7 @@ class WeeklyJournalDialog(QDialog):
             self._ai_busy = True
         else:
             self.btn_ai.setEnabled(True)
-            self.btn_ai.setText("✨发送")
+            self.btn_ai.setText("🔺发送")
             if self._ai_busy:
                 QApplication.restoreOverrideCursor()
                 self._ai_busy = False
