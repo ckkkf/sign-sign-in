@@ -8,7 +8,7 @@ from datetime import datetime
 from PySide6.QtCore import Qt, QUrl
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import QMainWindow, QWidget, QHBoxLayout, QFrame, QVBoxLayout, QLabel, QGridLayout, QPushButton, \
-    QButtonGroup, QRadioButton, QProgressBar, QSizePolicy, QMessageBox, QApplication, QTextEdit, QDialog
+    QButtonGroup, QRadioButton, QProgressBar, QSizePolicy, QMessageBox, QApplication, QTextEdit, QDialog, QFileDialog
 
 from app.config.common import QQ_GROUP, PROJECT_VERSION, CONFIG_FILE, MITM_PROXY, API_URL, PROJECT_NAME
 from app.gui.components.log_viewer import QTextEditLogger
@@ -19,7 +19,7 @@ from app.gui.dialogs.image_manager_dialog import ImageManagerDialog
 from app.gui.dialogs.photo_sign_dialog import PhotoSignDialog
 from app.gui.dialogs.sponsor_dialog import SponsorSubmitDialog
 from app.gui.dialogs.update_dialog import UpdateDialog
-from app.gui.dialogs.weekly_journal_dialog import WeeklyJournalDialog
+from app.gui.dialogs.weekly_journal.WeeklyJournalDialog import WeeklyJournalDialog
 from app.mitm.service import MitmService
 from app.utils.commands import get_net_io, bash, get_network_type, get_local_ip, get_system_proxy, check_port_listening, \
     check_cert
@@ -39,6 +39,7 @@ class ModernWindow(QMainWindow):
         self.is_getting_code = False
         self.photo_image_path = None
         self.btn_get_code_original_style = None  # 保存按钮原始样式
+        self.weekly_journal_dialog = None  # 周记对话框实例
 
         # 自动守护：monitor 会调用 mitm.start()
         self.mitm = MitmService()
@@ -128,8 +129,8 @@ class ModernWindow(QMainWindow):
         t_grid = QGridLayout()
         t_grid.setSpacing(8)
         tools = [
-            ("🔗 系统代理", lambda: bash('rundll32.exe shell32.dll,Control_RunDLL inetcpl.cpl,,4')),
-            ("🔒 证书管理", lambda: bash('certmgr.msc')),
+            ("🔗 系统代理", lambda: subprocess.Popen('rundll32.exe shell32.dll,Control_RunDLL inetcpl.cpl,,4', shell=True, creationflags=subprocess.CREATE_NO_WINDOW)),
+            ("🔒 证书管理", lambda: subprocess.Popen('certmgr.msc', shell=True, creationflags=subprocess.CREATE_NO_WINDOW)),
             ("📄 编辑配置", self.open_config),
             ("🔁 刷新DNS", self.flush_dns),
             ("📤 发送反馈", self.show_feedback),
@@ -144,10 +145,10 @@ class ModernWindow(QMainWindow):
             t_grid.addWidget(b, i // 4, i % 4)
         l_vbox.addLayout(t_grid)
 
-        btn_journal = QPushButton("提交周记（测试）")
-        btn_journal.setObjectName("BtnJournal")
+        btn_journal = QPushButton("✨ AI 与 周记（测试）")
+        btn_journal.setObjectName("ToolBtn")
         btn_journal.clicked.connect(self.open_weekly_journal)
-        l_vbox.addWidget(btn_journal)
+        t_grid.addWidget(btn_journal, 2, 0, 1, 2)
 
         # ------------------------- Mode -------------------------
         label = QLabel("执行操作（拍照签到签退经纬度不准会导致外勤）")
@@ -192,16 +193,8 @@ class ModernWindow(QMainWindow):
         self.btn_get_code.setObjectName("BtnGetCode")
         self.btn_get_code.clicked.connect(self.get_code_and_session)
         # 保存原始样式
-        self.btn_get_code_original_style = """
-            background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                stop:0 #28A745, stop:1 #20C997);
-            color: white;
-            border-radius: 20px;
-            padding: 10px;
-            font-size: 12pt;
-            font-weight: bold;
-            border: none;
-        """
+        # 保存原始样式（置空，使用 setup_style 中的 ID 样式）
+        self.btn_get_code_original_style = ""
         btn_row1.addWidget(self.btn_get_code)
         btn_row1.setContentsMargins(0, 10, 0, 10)  # 左 上 右 下
         btn_row1.setSpacing(5)
@@ -245,6 +238,13 @@ class ModernWindow(QMainWindow):
         hh.setContentsMargins(10, 5, 10, 5)
         hh.addWidget(QLabel(" >_ SYSTEM LOG", objectName="TermHeader"))
         hh.addStretch()
+
+        btn_export = QPushButton("📤 导出日志")
+        btn_export.setObjectName("LogActionBtn")
+        btn_export.setCursor(Qt.PointingHandCursor)
+        btn_export.clicked.connect(self.export_log)
+        btn_export.setToolTip("导出日志到文件")
+        hh.addWidget(btn_export)
 
         btn_copy = QPushButton("⧉ 复制日志")
         btn_copy.setObjectName("LogActionBtn")
@@ -369,9 +369,11 @@ class ModernWindow(QMainWindow):
                 padding: 10px;
                 font-size: 12pt;
                 font-weight: bold;
-                border: none;
+                border: 2px solid transparent;
             }
-            #BtnGetCode:hover { opacity: 0.92; }
+            #BtnGetCode:hover {
+                border-color: #4F6BFF;
+            }
             #BtnStart {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
                     stop:0 #3D7CFF, stop:1 #7A4DFF);
@@ -380,9 +382,11 @@ class ModernWindow(QMainWindow):
                 padding: 10px;
                 font-size: 12pt;
                 font-weight: bold;
-                border: none;
+                border: 2px solid transparent;
             }
-            #BtnStart:hover { opacity: 0.92; }
+            #BtnStart:hover {
+                border-color: #4F6BFF;
+            }
             #BtnDonate, #BtnGit {
                 background: transparent;
                 color: #7E86A8;
@@ -544,6 +548,17 @@ class ModernWindow(QMainWindow):
     def open_image_manager(self):
         ImageManagerDialog(self).exec()
 
+    def export_log(self):
+        """导出日志到文件"""
+        filename, _ = QFileDialog.getSaveFileName(self, "导出日志", "log.txt", "Text Files (*.txt);;All Files (*)")
+        if filename:
+            try:
+                with open(filename, 'w', encoding='utf-8') as f:
+                    f.write(self.log.toPlainText())
+                ToastManager.instance().show("日志导出成功", "success")
+            except Exception as e:
+                ToastManager.instance().show(f"导出失败: {str(e)}", "error")
+
     def check_update(self, silent: bool = False):
         """检查更新"""
         if hasattr(self, 'update_worker') and self.update_worker.isRunning():
@@ -608,7 +623,12 @@ class ModernWindow(QMainWindow):
             # 其他错误不影响打开对话框
             logging.warning(f"检查jsessionid时出现错误: {e}")
 
-        WeeklyJournalDialog(config.get("model", {}), login_args, self).exec()
+        if self.weekly_journal_dialog is not None:
+            self.weekly_journal_dialog.close()
+            self.weekly_journal_dialog.deleteLater()
+
+        self.weekly_journal_dialog = WeeklyJournalDialog(config.get("model", {}), login_args, self)
+        self.weekly_journal_dialog.show()
 
     def get_code_and_session(self):
         """获取Code和JSESSIONID"""
@@ -648,7 +668,13 @@ class ModernWindow(QMainWindow):
         self.btn_get_code.setEnabled(True)
         self.btn_get_code.setText("获取code")
         # 恢复原始样式
-        self.btn_get_code.setStyleSheet(self.btn_get_code_original_style)
+        if success:
+            ToastManager.instance().show("获取成功！", "success")
+            # 更新JSESSIONID显示
+            self._update_session_display()
+        else:
+            # 恢复原始样式以便可以再次点击
+            self.btn_get_code.setStyleSheet("")
         self.prog.hide()
         self.btn_run.setEnabled(True)
         for btn in self.grp.buttons():
@@ -743,14 +769,7 @@ class ModernWindow(QMainWindow):
         self.is_running = False
         self.btn_run.setEnabled(True)
         self.btn_run.setText("开始执行")
-        self.btn_run.setStyleSheet("""
-            background: #007ACC;
-            color: white;
-            border-radius: 4px;
-            padding: 8px;
-            font-size: 11pt;
-            font-weight: bold;
-        """)
+        self.btn_run.setStyleSheet("")
         self.prog.hide()
         self.btn_get_code.setEnabled(True)
         for btn in self.grp.buttons():

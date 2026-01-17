@@ -23,6 +23,7 @@ bin-release/
 /.idea/sign-sign-in.iml
 /.idea/vcs.xml
 /.idea/.gitignore
+/.idea
 
 *.iml
 test/
@@ -32,3 +33,8 @@ dist/
 release/
 resources/config/session_cache.json
 resources/img/
+resources/config/code.json
+resources/journals/
+backend/
+admin/
+others/
