@@ -9,7 +9,7 @@ from PySide6.QtWidgets import (
     QTextEdit,
 )
 
-from app.config.common import VERSION
+from app.config.common import PROJECT_VERSION
 from app.gui.components.toast import ToastManager
 
 
@@ -88,7 +88,7 @@ class UpdateDialog(QDialog):
         layout.addWidget(title)
 
         # 版本信息
-        current_version = self.update_info.get("current_version", VERSION)
+        current_version = self.update_info.get("current_version", PROJECT_VERSION)
         latest_version = self.update_info.get("latest_version", "未知")
         version_text = f"当前版本：{current_version}\n最新版本：{latest_version}"
         version_label = QLabel(version_text)

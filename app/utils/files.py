@@ -173,6 +173,18 @@ def append_journal_entry(section: str, content: str) -> dict:
     return entry
 
 
+def clear_journal_history(section: str = None) -> None:
+    """清空历史记录"""
+    data = load_journal_history()
+    if section:
+        if section in data:
+            data[section] = []
+    else:
+        data["generated"] = []
+        data["submitted"] = []
+    save_json_file(JOURNAL_HISTORY_FILE, data)
+
+
 def load_session_cache() -> dict:
     """加载会话缓存"""
     if not os.path.exists(SESSION_CACHE_FILE):

@@ -16,7 +16,7 @@ from PySide6.QtWidgets import (
     QTextEdit,
 )
 
-from app.config.common import API_URL, VERSION, CONFIG_FILE
+from app.config.common import API_URL, PROJECT_VERSION, CONFIG_FILE
 from app.gui.components.toast import ToastManager
 from app.workers.http_worker import HttpWorker
 from app.utils.files import save_json_file, read_config
@@ -227,7 +227,7 @@ class SponsorSubmitDialog(QDialog):
 
         layout.addLayout(btn_row)
 
-        version = QLabel(f"当前版本：{VERSION}", alignment=Qt.AlignRight)
+        version = QLabel(f"当前版本：{PROJECT_VERSION}", alignment=Qt.AlignRight)
         version.setStyleSheet("color:#5C6287; font-size:9pt;")
         layout.addWidget(version)
 

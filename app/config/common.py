@@ -1,8 +1,10 @@
 import os
 from core.paths import get_base_dir
 
+
 # 项目信息
-VERSION = "v1.1.2"
+PROJECT_VERSION = "v1.1.3"
+PROJECT_NAME = "🔰 Sign sign in"
 
 # QQ群信息
 QQ_GROUP = "859098272"

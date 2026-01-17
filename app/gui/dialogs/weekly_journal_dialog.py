@@ -1,5 +1,8 @@
-from PySide6.QtCore import Qt, QThread, Signal, QTimer
+import logging
+
+from PySide6.QtCore import Qt, QThread, Signal, QTimer, QPoint
 from PySide6.QtGui import QTextCursor
+from PySide6.QtWidgets import QApplication
 from PySide6.QtWidgets import (
     QDialog,
     QVBoxLayout,
@@ -9,24 +12,24 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QLabel,
-    QSplitter,
     QWidget,
     QFrame,
     QLineEdit,
     QMessageBox,
     QComboBox,
-    QGroupBox,
+    QScrollArea,
+    QSizePolicy,
+    QSplitter,
 )
-from PySide6.QtWidgets import QApplication
 
-from app.config.common import API_URL, SYSTEM_PROMPT, CONFIG_FILE
+from app.apis.xybsyw import login, get_plan, load_blog_year, load_blog_date, submit_blog, handle_invalid_session, \
+    xyb_completion
+from app.config.common import SYSTEM_PROMPT, CONFIG_FILE, PROJECT_NAME
 from app.gui.components.toast import ToastManager
 from app.gui.dialogs.journal_auth_dialog import JournalAuthDialog
-from app.utils.files import load_journal_history, append_journal_entry, read_config, clear_session_cache
-import logging
-from app.utils.model_client import call_chat_model, ModelConfigurationError
-from app.utils.journal_client import fetch_journals, JournalServerError
-from app.apis.xybsyw import login, get_plan, load_blog_year, load_blog_date, submit_blog, handle_invalid_session
+from app.utils.files import load_journal_history, append_journal_entry, read_config, clear_journal_history
+from app.utils.model_client import ModelConfigurationError
+
 
 class AIGenerationThread(QThread):
     """AI生成周记的异步线程"""
@@ -34,9 +37,10 @@ class AIGenerationThread(QThread):
     finished_signal = Signal(str)
     error_signal = Signal(str, str)  # error_type, message
 
-    def __init__(self, model_config, prompt, system_prompt):
+    def __init__(self, args, config, prompt, system_prompt):
         super().__init__()
-        self.model_config = model_config
+        self.args = args
+        self.config = config
         self.prompt = prompt
         self.system_prompt = system_prompt
 
@@ -45,17 +49,19 @@ class AIGenerationThread(QThread):
             def on_delta(delta: str):
                 self.delta_signal.emit(delta)
 
-            content = call_chat_model(
-                self.model_config,
-                self.prompt,
-                self.system_prompt,
+            content = xyb_completion(
+                args=self.args,
+                config=self.config,
+                prompt=self.prompt,
                 on_delta=on_delta
             )
+
             self.finished_signal.emit(content)
         except ModelConfigurationError as e:
             self.error_signal.emit("config", str(e))
         except Exception as e:
             self.error_signal.emit("error", f"调用模型失败：{e}")
+
 
 
 class LoadYearDataThread(QThread):
@@ -70,42 +76,318 @@ class LoadYearDataThread(QThread):
     def run(self):
         try:
             from app.apis.xybsyw import login, get_plan, load_blog_year
-            
+
             # 尝试使用缓存的登录信息
             try:
                 login_args = login(self.config['input'], use_cache=True)
             except Exception as login_err:
                 self.error_signal.emit(f"使用缓存登录失败: {login_err}")
                 return
-            
+
             # 获取traineeId
             plan_data = get_plan(userAgent=self.config['input']['userAgent'], args=login_args)
             trainee_id = None
             if plan_data and len(plan_data) > 0 and 'dateList' in plan_data[0] and len(plan_data[0]['dateList']) > 0:
                 trainee_id = plan_data[0]['dateList'][0]['traineeId']
                 login_args['traineeId'] = trainee_id
-            
+
             # 加载年份数据
             year_data = load_blog_year(login_args, self.config['input'])
-            
+
             self.finished_signal.emit(login_args, trainee_id, year_data)
         except Exception as e:
             self.error_signal.emit(str(e))
 
 
-class WeeklyJournalDialog(QDialog):
-    def __init__(self, model_config: dict, parent=None):
+class SubmitJournalThread(QThread):
+    """提交周记的异步线程"""
+    finished_signal = Signal(dict)
+    error_signal = Signal(str)
+
+    def __init__(self, args, config, blog_title, blog_body, start_date, end_date, blog_open_type, trainee_id):
+        super().__init__()
+        self.args = args
+        self.config = config
+        self.blog_title = blog_title
+        self.blog_body = blog_body
+        self.start_date = start_date
+        self.end_date = end_date
+        self.blog_open_type = blog_open_type
+        self.trainee_id = trainee_id
+        self.content = blog_body
+
+    def run(self):
+        try:
+            from app.apis.xybsyw import submit_blog
+            result = submit_blog(
+                self.args, self.config,
+                self.blog_title, self.blog_body,
+                self.start_date, self.end_date,
+                self.blog_open_type, self.trainee_id
+            )
+            self.finished_signal.emit(result)
+        except Exception as e:
+            self.error_signal.emit(str(e))
+
+
+
+class FloatingActionBar(QFrame):
+    def __init__(self, parent=None, callback_copy=None, callback_submit=None):
         super().__init__(parent)
-        self.setWindowTitle("提交周记")
-        self.resize(900, 650)
+        self.callback_copy = callback_copy
+        self.callback_submit = callback_submit
+        self.current_text = ""
+        self.hide_timer = QTimer(self)
+        self.hide_timer.setInterval(100)
+        self.hide_timer.timeout.connect(self.hide)
+        self.hide() # 确保初始隐藏
+        self._init_ui()
+        
+    def _init_ui(self):
+        self.setObjectName("FloatingActionBar")
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(4, 4, 4, 4)
+        layout.setSpacing(8)
+        self.setStyleSheet("""
+            QFrame#FloatingActionBar {
+                background-color: rgba(40, 44, 52, 0.95);
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                border-radius: 8px;
+            }
+        """)
+        
+        self.btn_copy = QPushButton("复制")
+        self._style_btn(self.btn_copy)
+        self.btn_copy.clicked.connect(lambda: self.callback_copy(self.current_text))
+        layout.addWidget(self.btn_copy)
+        
+        # 分割线
+        self.divider = QFrame()
+        self.divider.setFixedSize(1, 14)
+        self.divider.setStyleSheet("background-color: rgba(255, 255, 255, 0.2);")
+        layout.addWidget(self.divider)
+        
+        self.btn_submit = QPushButton("📝 提交为周记")
+        self._style_btn(self.btn_submit)
+        self.btn_submit.clicked.connect(lambda: self.callback_submit(self.current_text))
+        layout.addWidget(self.btn_submit)
+        
+    def _style_btn(self, btn):
+        btn.setCursor(Qt.PointingHandCursor)
+        btn.setFixedHeight(24)
+        btn.setStyleSheet("""
+            QPushButton {
+                background: transparent;
+                color: #BDC1C6;
+                border: none;
+                padding: 0 8px;
+                font-size: 12px;
+                border-radius: 4px;
+            }
+            QPushButton:hover {
+                background-color: rgba(255, 255, 255, 0.1);
+                color: #FFFFFF;
+            }
+        """)
+
+    def show_for(self, target_widget, text, show_submit=False):
+        self.hide_timer.stop()
+        self.current_text = text
+        self.btn_submit.setVisible(show_submit)
+        self.divider.setVisible(show_submit)
+        self.adjustSize()
+        
+        # Calculate position: Bottom Left of target widget, mapped to parent dialog
+        target_pos = target_widget.mapTo(self.parent(), QPoint(0, 0))
+        x = target_pos.x()
+        y = target_pos.y() + target_widget.height() + 4
+        
+        self.move(x, y)
+        self.show()
+        self.raise_()
+        
+    def enterEvent(self, event):
+        self.hide_timer.stop()
+        super().enterEvent(event)
+        
+    def leaveEvent(self, event):
+        self.hide_timer.start()
+        super().leaveEvent(event)
+        
+    def schedule_hide(self):
+        self.hide_timer.start()
+
+
+class AIMessageBubble(QFrame):
+    def __init__(self, parent_dialog, initial_text=""):
+        super().__init__()
+        self.parent_dialog = parent_dialog
+        self.text = initial_text
+        self.setObjectName("AIMessage")
+        self._init_ui()
+        
+    def _init_ui(self):
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setAlignment(Qt.AlignTop) # 顶部对齐
+        
+        ai_icon = QLabel("✨")
+        ai_icon.setObjectName("AIIcon")
+        ai_icon.setAlignment(Qt.AlignTop)
+        ai_icon.setContentsMargins(0, 4, 0, 0) # 微调图标位置
+        layout.addWidget(ai_icon)
+        
+        # 使用 TextEdit 代替 Label 以支持 Markdown 和 完美自动换行
+        self.text_edit = QTextEdit()
+        self.text_edit.setReadOnly(True)
+        self.text_edit.setFrameShape(QFrame.NoFrame)
+        self.text_edit.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.text_edit.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.text_edit.setObjectName("AIMessageText")
+        self.text_edit.document().setDocumentMargin(0) # 去除默认边距
+        
+        self.text_edit.setMarkdown(self.text)
+        self.text_edit.setMaximumWidth(550)
+        self.text_edit.setMinimumWidth(50)
+        
+        # 样式 - 确保背景透明，使用 label 样式
+        self.text_edit.setStyleSheet("""
+            QTextEdit {
+                background-color: #2A2D3E;
+                color: #E8EAED;
+                font-size: 14px;
+                line-height: 1.5;
+                padding: 10px 14px; /* 垂直10，水平14 */
+                border: 1px solid #363B4C;
+                border-radius: 16px;
+                border-bottom-left-radius: 2px;
+            }
+        """)
+        
+        layout.addWidget(self.text_edit)
+        self._adjust_height()
+        
+    def setText(self, text):
+        self.text = text
+        self.text_edit.setMarkdown(text)
+        self._adjust_height()
+        
+    def _adjust_height(self):
+        # 自动调整高度
+        current_width = self.text_edit.width()
+        if current_width <= 0: current_width = 550 # 默认宽度
+        
+        # 减去 Horizontal Padding (14px * 2 = 28) 和 边框 余量
+        # 保持一点额外空间防止换行抖动
+        text_width = current_width - 30 
+        if text_width < 10: text_width = 10
+        
+        doc = self.text_edit.document()
+        doc.setTextWidth(text_width) 
+        h = doc.size().height()
+        self.text_edit.setFixedHeight(int(h + 20)) # Vertical Padding (10*2=20)
+        
+    def resizeEvent(self, event):
+        self._adjust_height()
+        super().resizeEvent(event)
+        
+    def enterEvent(self, event):
+        if hasattr(self.parent_dialog, 'floating_bar'):
+            self.parent_dialog.floating_bar.show_for(self.text_edit, self.text, show_submit=True)
+        super().enterEvent(event)
+        
+    def leaveEvent(self, event):
+        if hasattr(self.parent_dialog, 'floating_bar'):
+            self.parent_dialog.floating_bar.schedule_hide()
+        super().leaveEvent(event)
+
+
+class UserMessageBubble(QFrame):
+    def __init__(self, parent_dialog, text):
+        super().__init__()
+        self.parent_dialog = parent_dialog
+        self.text = text
+        self._init_ui()
+        
+    def _init_ui(self):
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addStretch()
+        layout.setAlignment(Qt.AlignTop)
+        
+        self.text_edit = QTextEdit()
+        self.text_edit.setReadOnly(True)
+        self.text_edit.setFrameShape(QFrame.NoFrame)
+        self.text_edit.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.text_edit.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.text_edit.setObjectName("UserMessageText")
+        self.text_edit.document().setDocumentMargin(0) # 去除默认边距
+        self.text_edit.setPlainText(self.text)
+        self.text_edit.setMaximumWidth(550)
+        self.text_edit.setMinimumWidth(20)
+        
+        self.text_edit.setStyleSheet("""
+            QTextEdit {
+                background-color: #2563EB;
+                color: #FFFFFF;
+                font-size: 14px;
+                padding: 10px 14px; /* 垂直10，水平14 */
+                border-radius: 16px;
+                border-bottom-right-radius: 2px;
+                border: none;
+            }
+        """)
+        
+        layout.addWidget(self.text_edit)
+        self._adjust_height()
+        
+    def _adjust_height(self):
+        doc = self.text_edit.document()
+        
+        # 1. 计算理想宽度
+        doc.setTextWidth(-1) # 不换行
+        ideal_width = doc.idealWidth()
+        
+        # 2. 确定气泡宽度 (Horizontal Padding 28 + 额外 2)
+        bubble_width = ideal_width + 30
+        bubble_width = max(40, min(bubble_width, 550)) # 最小宽度减小到40
+        
+        self.text_edit.setFixedWidth(int(bubble_width))
+        
+        # 3. 根据实际宽度计算高度 (减去 Horizontal Padding)
+        doc.setTextWidth(bubble_width - 28)
+        h = doc.size().height()
+        self.text_edit.setFixedHeight(int(h + 20)) # Vertical Padding 20
+        
+    def resizeEvent(self, event):
+        self._adjust_height()
+        super().resizeEvent(event)
+        
+    def enterEvent(self, event):
+        if hasattr(self.parent_dialog, 'floating_bar'):
+            self.parent_dialog.floating_bar.show_for(self.text_edit, self.text, show_submit=False)
+        super().enterEvent(event)
+        
+    def leaveEvent(self, event):
+        if hasattr(self.parent_dialog, 'floating_bar'):
+            self.parent_dialog.floating_bar.schedule_hide()
+        super().leaveEvent(event)
+
+
+class WeeklyJournalDialog(QDialog):
+    def __init__(self, model_config: dict, args, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("周记提交")
+
+        # 自适应屏幕大小
+        self._setup_window_geometry()
+
         self.model_config = model_config or {}
-        self.server_base = API_URL
-        self.auth_info = None
         self.history = {"generated": [], "submitted": []}
         self._ai_busy = False
         self._ai_thread = None
         self._load_data_thread = None
-        self.login_args = None
+        self.args = args
         self.config = None
         self.trainee_id = None
         self.year_data = None
@@ -118,7 +400,31 @@ class WeeklyJournalDialog(QDialog):
         self._setup_styles()
         self._setup_ui()
         self._load_history()
-        # 不再自动加载年月数据，提示用户手动点击按钮加载
+        # 初始化编辑器高度
+        QTimer.singleShot(0, self._adjust_editor_height)
+        # 自动加载年月数据
+        QTimer.singleShot(100, self._load_year_month_data)
+
+    def _setup_window_geometry(self):
+        """设置窗口尺寸，自适应屏幕大小"""
+        screen = QApplication.primaryScreen()
+        if screen:
+            screen_geometry = screen.availableGeometry()
+            screen_width = screen_geometry.width()
+            screen_height = screen_geometry.height()
+
+            # 窗口占屏幕的 85%，但有最大最小限制
+            window_width = min(max(int(screen_width * 0.85), 900), 1400)
+            window_height = min(max(int(screen_height * 0.85), 650), 900)
+
+            self.resize(window_width, window_height)
+
+            # 居中显示
+            x = (screen_width - window_width) // 2 + screen_geometry.x()
+            y = (screen_height - window_height) // 2 + screen_geometry.y()
+            self.move(x, y)
+        else:
+            self.resize(1100, 750)
 
     def closeEvent(self, event):
         """窗口关闭时清理资源"""
@@ -131,153 +437,450 @@ class WeeklyJournalDialog(QDialog):
         event.accept()
 
     def _setup_ui(self):
-        layout = QVBoxLayout(self)
-        layout.setSpacing(8)
-        layout.setContentsMargins(12, 12, 12, 12)
+        # 主布局 - DeepSeek 风格：左侧边栏 + 右侧主内容区
+        main_layout = QHBoxLayout(self)
+        main_layout.setSpacing(0)
+        main_layout.setContentsMargins(0, 0, 0, 0)
 
-        # 周记配置区域
-        config_frame = QFrame()
-        config_frame.setObjectName("ConfigCard")
-        config_layout = QVBoxLayout(config_frame)
-        config_layout.setContentsMargins(12, 8, 12, 8)
-        config_layout.setSpacing(8)
+        # ========== 左侧边栏 ==========
+        sidebar = QFrame()
+        sidebar.setObjectName("Sidebar")
+        sidebar.setMinimumWidth(200)
+        sidebar.setMaximumWidth(400)
+        sidebar_layout = QVBoxLayout(sidebar)
+        sidebar_layout.setContentsMargins(16, 20, 16, 20)
+        sidebar_layout.setSpacing(16)
 
-        config_row1 = QHBoxLayout()
-        config_row1.setSpacing(8)
+        # 侧边栏标题
+        sidebar_title = QLabel(PROJECT_NAME)
+        sidebar_title.setObjectName("SidebarTitle")
+        sidebar_layout.addWidget(sidebar_title)
+
+        # AI 生成记录标题和清空按钮
+        gen_header = QWidget()
+        gen_header_layout = QHBoxLayout(gen_header)
+        gen_header_layout.setContentsMargins(0, 0, 0, 0)
         
-        # 添加加载年月按钮
-        btn_load_data = QPushButton("加载年月")
-        btn_load_data.setObjectName("LoadDataBtn")
-        btn_load_data.setToolTip("点击加载可用的年份和月份")
-        btn_load_data.clicked.connect(self._load_year_month_data)
-        config_row1.addWidget(btn_load_data)
-        self.btn_load_data = btn_load_data
+        generated_label = QLabel("⏱️ 生成历史")
+        generated_label.setObjectName("SidebarLabel")
+        gen_header_layout.addWidget(generated_label)
         
-        config_row1.addWidget(QLabel("绑定年份:"))
+        gen_header_layout.addStretch()
+        
+        self.btn_clear_history = QPushButton("清空")
+        self.btn_clear_history.setToolTip("清空历史")
+        self.btn_clear_history.setFixedSize(32, 20)
+        self.btn_clear_history.setCursor(Qt.PointingHandCursor)
+        self.btn_clear_history.setStyleSheet("""
+            QPushButton {
+                background: transparent;
+                color: #6B7280;
+                border: none;
+                font-size: 11px;
+                padding: 0;
+            }
+            QPushButton:hover {
+                color: #EF4444;
+            }
+        """)
+        self.btn_clear_history.clicked.connect(self._clear_generated_history)
+        gen_header_layout.addWidget(self.btn_clear_history)
+        
+        sidebar_layout.addWidget(gen_header)
+
+        self.generated_widget = QListWidget()
+        self.generated_widget.setObjectName("HistoryList")
+        self.generated_widget.itemDoubleClicked.connect(self._fill_from_history)
+        self.generated_widget.setMaximumHeight(200)
+        sidebar_layout.addWidget(self.generated_widget)
+
+        # 已提交记录
+        submitted_label = QLabel("✅ 已提交")
+        submitted_label.setObjectName("SidebarLabel")
+        sidebar_layout.addWidget(submitted_label)
+
+        self.submitted_widget = QListWidget()
+        self.submitted_widget.setObjectName("HistoryList")
+        self.submitted_widget.itemDoubleClicked.connect(self._fill_from_history)
+        sidebar_layout.addWidget(self.submitted_widget)
+
+        # 兼容旧代码
+        self.generated_container = self.generated_widget
+        self.submitted_container = self.submitted_widget
+
+        sidebar_layout.addStretch()
+
+        sidebar_layout.addStretch()
+        
+        # main_layout.addWidget(sidebar) 已移除，改为添加到 Splitter
+
+        # ========== 右侧主内容区 ==========
+        content_area = QFrame()
+        content_area.setObjectName("ContentArea")
+        content_layout = QVBoxLayout(content_area)
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(0)
+
+        # 创建滚动区域
+        scroll_area = QScrollArea()
+        scroll_area.setObjectName("MainScrollArea")
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll_area.setFrameShape(QFrame.NoFrame)
+
+        # 中央内容容器
+        central_widget = QWidget()
+        central_widget.setObjectName("CentralWidget")
+        central_layout = QVBoxLayout(central_widget)
+        central_layout.setSpacing(0)
+        central_layout.setContentsMargins(60, 40, 60, 30)
+
+        # ========== 顶部弹性空间（对话开始后隐藏）==========
+        self._top_spacer = QWidget()
+        self._top_spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        central_layout.addWidget(self._top_spacer, 1)
+
+        # ========== 主标题（对话开始后隐藏）==========
+        self._title_container = QWidget()
+        self._title_container.setObjectName("TitleContainer")
+        title_layout = QVBoxLayout(self._title_container)
+        title_layout.setContentsMargins(0, 0, 0, 40)
+        title_layout.setSpacing(0)
+        title_layout.setAlignment(Qt.AlignCenter)
+
+        main_title = QLabel("✨ 今天有什么可以帮到你？")
+        main_title.setObjectName("MainTitle")
+        main_title.setAlignment(Qt.AlignCenter)
+        title_layout.addWidget(main_title)
+
+        central_layout.addWidget(self._title_container)
+
+        # ========== 聊天消息显示区域 ==========
+        self.chat_container = QFrame()
+        self.chat_container.setObjectName("ChatContainer")
+        self.chat_container.setMinimumWidth(750)
+        self.chat_container.setMaximumWidth(900)
+        chat_layout = QVBoxLayout(self.chat_container)
+        chat_layout.setContentsMargins(0, 0, 0, 0)
+        chat_layout.setSpacing(12)
+        
+        # 聊天消息滚动区域
+        self.chat_scroll = QScrollArea()
+        self.chat_scroll.setObjectName("ChatScrollArea")
+        self.chat_scroll.setWidgetResizable(True)
+        self.chat_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.chat_scroll.setFrameShape(QFrame.NoFrame)
+        
+        # 聊天消息容器
+        self.chat_messages = QWidget()
+        self.chat_messages.setObjectName("ChatMessages")
+        self.chat_messages_layout = QVBoxLayout(self.chat_messages)
+        self.chat_messages_layout.setContentsMargins(20, 20, 20, 20)
+        self.chat_messages_layout.setSpacing(20)
+        self.chat_messages_layout.addStretch()
+        
+        self.chat_scroll.setWidget(self.chat_messages)
+        chat_layout.addWidget(self.chat_scroll)
+        
+        # 居中显示聊天区域（初始隐藏）
+        self._chat_area_widget = QWidget()
+        chat_wrapper = QHBoxLayout(self._chat_area_widget)
+        chat_wrapper.setContentsMargins(0, 0, 0, 0)
+        chat_wrapper.addStretch()
+        chat_wrapper.addWidget(self.chat_container)
+        chat_wrapper.addStretch()
+        
+        self._chat_area_widget.setVisible(False)
+        central_layout.addWidget(self._chat_area_widget, 1)  # stretch factor 1
+
+        # ========== 底部输入区域容器 ==========
+        input_container = QFrame()
+        input_container.setObjectName("InputContainer")
+        input_container.setMinimumWidth(750)
+        input_container.setMaximumWidth(900)
+        input_container_layout = QVBoxLayout(input_container)
+        input_container_layout.setContentsMargins(12, 10, 12, 8)
+        input_container_layout.setSpacing(0)
+        
+        # 保存引用以便后续操作
+        self._input_container = input_container
+
+        # 隐藏的标题输入（兼容旧代码，自动生成标题）
+        self.title_input = QLineEdit()
+        self.title_input.setVisible(False)
+
+        # 隐藏的加载按钮引用（兼容旧代码）
+        self.btn_load_data = QPushButton("加载数据")
+
+        # 单一主输入框（自动调整高度）
+        self.editor = QTextEdit()
+        self.editor.setPlaceholderText("✏️ 发送消息...")
+        self.editor.setObjectName("MainEditor")
+        self._editor_min_height = 40
+        self._editor_max_height = 150
+        self.editor.setMinimumHeight(self._editor_min_height)
+        self.editor.setMaximumHeight(self._editor_min_height)  # 初始为最小高度
+        self.editor.textChanged.connect(self._adjust_editor_height)
+        # 安装事件过滤器以捕获 Enter 键
+        self.editor.installEventFilter(self)
+        input_container_layout.addWidget(self.editor)
+
+        # 隐藏的 AI 提示词输入（兼容旧代码）
+        self.role_input = QLineEdit()
+        self.role_input.setVisible(False)
+
+        # 隐藏的配置选项（兼容旧代码）
         self.year_combo = QComboBox()
-        self.year_combo.setObjectName("ConfigCombo")
+        self.year_combo.setVisible(False)
         self.year_combo.currentIndexChanged.connect(self._on_year_changed)
-        config_row1.addWidget(self.year_combo)
-        
-        config_row1.addSpacing(3)
-        config_row1.addWidget(QLabel("月份:"))
+
         self.month_combo = QComboBox()
-        self.month_combo.setObjectName("ConfigCombo")
+        self.month_combo.setVisible(False)
         self.month_combo.currentIndexChanged.connect(self._on_month_changed)
-        config_row1.addWidget(self.month_combo)
-        
-        config_row1.addSpacing(3)
-        config_row1.addWidget(QLabel("周:"))
+
         self.week_combo = QComboBox()
-        self.week_combo.setObjectName("WeekCombo")
-        config_row1.addWidget(self.week_combo)
-        
-        config_row1.setSpacing(3)
-        config_row1.addWidget(QLabel("查看权限:"))
+        self.week_combo.setVisible(False)
+
         self.permission_combo = QComboBox()
-        self.permission_combo.setObjectName("ConfigCombo")
+        self.permission_combo.setVisible(False)
+        self.permission_combo.addItem("仅老师可见", 2)
         self.permission_combo.addItem("仅老师和同学可见", 0)
         self.permission_combo.addItem("全网可见", 1)
-        self.permission_combo.addItem("仅老师可见", 2)
-        self.permission_combo.setCurrentIndex(2)  # 默认仅老师可见
-        config_row1.addWidget(self.permission_combo)
+        self.permission_combo.setCurrentIndex(0)
 
-        config_row1.addStretch()
-        config_layout.addLayout(config_row1)
+        # 底部工具栏（只有 AI 生成按钮）
+        toolbar_row = QHBoxLayout()
+        toolbar_row.setSpacing(8)
+        toolbar_row.setContentsMargins(0, 0, 0, 0)
 
+        toolbar_row.addStretch()
 
-        layout.addWidget(config_frame)
-
-        splitter = QSplitter(Qt.Vertical)
-
-        editor_container = QWidget()
-        editor_layout = QVBoxLayout(editor_container)
-        editor_layout.setContentsMargins(0, 0, 0, 0)
-        editor_layout.setSpacing(6)
-
-        # 周记标题
-        title_label = QLabel("周记标题:")
-        title_label.setStyleSheet("color: #AAA; font-weight: bold;")
-        self.title_input = QLineEdit()
-        self.title_input.setPlaceholderText("请输入周记标题（必填）")
-        self.title_input.setObjectName("TitleInput")
-        editor_layout.addWidget(title_label)
-        editor_layout.addWidget(self.title_input)
-
-        # 周记内容
-        self.editor = QTextEdit()
-        self.editor.setPlaceholderText("在此输入或生成本周周记内容...")
-        editor_layout.addWidget(self.editor)
-
-        # 职业提示（移到编辑区域下面）
-        role_frame = QFrame()
-        role_frame.setObjectName("RoleCard")
-        role_layout = QHBoxLayout(role_frame)
-        role_layout.setContentsMargins(8, 6, 8, 6)
-        role_layout.setSpacing(8)
-        role_layout.addWidget(QLabel("AI提示词:"))
-        self.role_input = QLineEdit()
-        self.role_input.setPlaceholderText("请描述你的实习职业/岗位（例：前端实习生）")
-        self.role_input.setObjectName("PromptInput")
-        role_layout.addWidget(self.role_input)
-        editor_layout.addWidget(role_frame)
-
-        # 按钮行：包含登录状态、从服务器获取、AI生成、提交、清空
-        btn_row = QHBoxLayout()
-        btn_row.setSpacing(8)
-        
-        self.server_status = QLabel("未登录周记服务器")
-        self.server_status.setObjectName("ServerStatus")
-        self.server_status.setStyleSheet("color: #AAA; font-size: 9pt; padding: 0 8px; cursor: pointer;")
-        self.server_status.mousePressEvent = self._on_server_status_clicked
-        
-        btn_fetch = QPushButton("从服务器获取")
-        btn_fetch.setObjectName("FetchBtn")
-        btn_fetch.clicked.connect(self._fetch_from_server)
-        
-        # AI按钮移到最左侧
-        self.btn_ai = QPushButton("AI 自动生成")
+        # AI 生成按钮
+        self.btn_ai = QPushButton("🔺发送")
         self.btn_ai.clicked.connect(self._generate_with_ai)
-        self.btn_ai.setObjectName("PrimaryBtn")
+        self.btn_ai.setObjectName("AIBtn")
+        self.btn_ai.setCursor(Qt.PointingHandCursor)
+        toolbar_row.addWidget(self.btn_ai)
 
-        btn_submit = QPushButton("提交周记")
-        btn_submit.setObjectName("SuccessBtn")
-        btn_submit.clicked.connect(self._submit_journal)
+        input_container_layout.addLayout(toolbar_row)
 
-        btn_clear = QPushButton("清空")
-        btn_clear.setObjectName("GhostBtn")
-        btn_clear.clicked.connect(self._clear_all)
+        # 居中显示输入容器
+        input_wrapper = QHBoxLayout()
+        input_wrapper.addStretch()
+        input_wrapper.addWidget(input_container)
+        input_wrapper.addStretch()
+        central_layout.addLayout(input_wrapper)
 
-        btn_row.addWidget(self.btn_ai)
-        btn_row.addStretch()
-        btn_row.addWidget(self.server_status)
-        btn_row.addWidget(btn_fetch)
-        btn_row.addWidget(btn_submit)
-        btn_row.addWidget(btn_clear)
-        editor_layout.addLayout(btn_row)
+        # ========== 底部弹性空间（对话开始后隐藏）==========
+        self._bottom_spacer = QWidget()
+        self._bottom_spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        central_layout.addWidget(self._bottom_spacer, 2)
 
-        splitter.addWidget(editor_container)
+        # 设置滚动区域内容
+        scroll_area.setWidget(central_widget)
+        content_layout.addWidget(scroll_area)
 
-        history_container = QWidget()
-        history_layout = QHBoxLayout(history_container)
-        history_layout.setContentsMargins(0, 0, 0, 0)
+        # ========== 主布局 ==========
+        # main_layout 已在函数开头定义
+        # main_layout.setContentsMargins(0, 0, 0, 0)
+        # main_layout.setSpacing(0)
 
-        self.generated_container, self.generated_widget = self._create_history_list("历史生成（双击填充）")
-        self.submitted_container, self.submitted_widget = self._create_history_list("历史提交（双击填充）")
+        # 创建浮动工具栏
+        self.floating_bar = FloatingActionBar(self, self._copy_text_to_clipboard, self.submit_journal_from_text)
+        
+        # 使用 Splitter 实现可拖动侧边栏
+        self.splitter = QSplitter(Qt.Horizontal)
+        self.splitter.setHandleWidth(1) # 细线
+        self.splitter.setStyleSheet("QSplitter::handle { background-color: #2D313E; }")
+        
+        # 添加侧边栏和内容区域到 Splitter
+        self.splitter.addWidget(sidebar)
+        self.splitter.addWidget(content_area)
+        
+        # 设置伸缩因子，让内容区域占用更多空间
+        self.splitter.setStretchFactor(1, 1)
+        self.splitter.setCollapsible(0, False)
+        
+        main_layout.addWidget(self.splitter)
+        
+        # 当前 AI 回复的消息标签（用于流式更新）
+        self._current_ai_message = None
 
-        history_layout.addWidget(self.generated_container)
-        history_layout.addWidget(self.submitted_container)
+    def eventFilter(self, obj, event):
+        """事件过滤器：捕获 Enter 键发送消息"""
+        from PySide6.QtCore import QEvent
+        from PySide6.QtGui import QKeyEvent
+        
+        if obj == self.editor and event.type() == QEvent.KeyPress:
+            if event.key() == Qt.Key_Return or event.key() == Qt.Key_Enter:
+                # Shift+Enter 换行，Enter 发送
+                if not event.modifiers() & Qt.ShiftModifier:
+                    self._generate_with_ai()
+                    return True
+        return super().eventFilter(obj, event)
+    
+    def _add_user_message(self, text):
+        """添加用户消息"""
+        bubble = UserMessageBubble(self, text)
+        
+        # 在 stretch 之前插入消息，右对齐
+        self.chat_messages_layout.insertWidget(
+            self.chat_messages_layout.count() - 1, bubble, 0, Qt.AlignRight
+        )
+        
+        # 滚动到底部
+        QTimer.singleShot(50, self._scroll_chat_to_bottom)
 
-        splitter.addWidget(history_container)
-        splitter.setStretchFactor(0, 5)  # 增大编辑区域比例
-        splitter.setStretchFactor(1, 2)
+    def _add_ai_message(self, initial_text: str = ""):
+        """添加 AI 消息到聊天区域，返回消息对象用于流式更新"""
+        bubble = AIMessageBubble(self, initial_text)
+        
+        # 在 stretch 之前插入消息，左对齐
+        self.chat_messages_layout.insertWidget(
+            self.chat_messages_layout.count() - 1, bubble, 0, Qt.AlignLeft
+        )
+        
+        # 滚动到底部
+        QTimer.singleShot(50, self._scroll_chat_to_bottom)
+        
+        return bubble
+        
+    def _copy_text_to_clipboard(self, text):
+        """复制文本到剪贴板"""
+        clipboard = QApplication.clipboard()
+        clipboard.setText(text)
+        ToastManager.instance().show("内容已复制", "success")
+    
+    def submit_journal_from_text(self, content):
+        """提交周记"""
+        if not content:
+            ToastManager.instance().show("内容为空", "warning")
+            return
+            
+        if not hasattr(self, 'trainee_id') or not self.trainee_id:
+            ToastManager.instance().show("正在加载数据，请稍候...", "info")
+            if hasattr(self, '_load_data_thread') and self._load_data_thread and self._load_data_thread.isRunning():
+                 return
+            self._load_year_month_data()
+            return
+            
+        if self.week_combo.count() == 0:
+            ToastManager.instance().show("未加载周次信息，请等待数据加载", "warning")
+            return
+            
+        week_data = self.week_combo.currentData()
+        # 如果没有选中，选第一个
+        if not week_data and self.week_combo.count() > 0:
+             self.week_combo.setCurrentIndex(0)
+             week_data = self.week_combo.currentData()
+             
+        if not week_data:
+             ToastManager.instance().show("无法获取周次信息", "error")
+             return
+             
+        start_date = week_data.get('startDate')
+        end_date = week_data.get('endDate')
+        
+        # 处理标题（第一行作为标题，最多20字）
+        title = content.strip().split('\n')[0][:20] if content else "实习周记"
+        permission = 0 # 默认 仅老师和同学可见 (我们在UI里虽然有combo但是可能没变)
+        if hasattr(self, 'permission_combo') and self.permission_combo.count() > 0:
+             permission = self.permission_combo.currentData()
+        
+        reply = QMessageBox.question(
+            self,
+            "确认提交",
+            f"周次：{start_date} 至 {end_date}\n标题：{title}\n\n确认提交为本周周记？",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.Yes
+        )
+        
+        if reply == QMessageBox.Yes:
+            self._submit_thread = SubmitJournalThread(
+                self.args, self.config,
+                title, content, start_date, end_date,
+                permission, self.trainee_id
+            )
+            self._submit_thread.finished_signal.connect(self._on_submit_finished)
+            self._submit_thread.error_signal.connect(self._on_submit_error)
+            self._submit_thread.start()
+            ToastManager.instance().show("正在提交周记...", "info")
 
-        layout.addWidget(splitter)
+    def _on_submit_finished(self, result):
+        ToastManager.instance().show("🎉 周记提交成功！", "success")
+        if hasattr(self, '_submit_thread'):
+            append_journal_entry("submitted", self._submit_thread.content)
+            self._load_history()
+
+    def _on_submit_error(self, error):
+        ToastManager.instance().show(f"提交失败: {error}", "error")
+    
+    def _scroll_chat_to_bottom(self):
+        """滚动聊天区域到底部"""
+        scrollbar = self.chat_scroll.verticalScrollBar()
+        scrollbar.setValue(scrollbar.maximum())
+
+    def _scroll_smart(self):
+        """智能滚动：如果 AI 消息过长，则对齐顶部；否则对齐底部"""
+        if not self._current_ai_message:
+            self._scroll_chat_to_bottom()
+            return
+            
+        bubble = self._current_ai_message
+        
+        # 确保布局更新以获取正确高度
+        bubble.adjustSize() 
+        self.chat_messages.adjustSize()
+        
+        viewport_height = self.chat_scroll.viewport().height()
+        bubble_height = bubble.height()
+        bubble_y = bubble.y() # 假如 chat_messages 是 ScrollArea 的 widget，pos() 就是相对坐标
+        
+        if bubble_height > viewport_height:
+             # 对齐顶部
+             self.chat_scroll.verticalScrollBar().setValue(bubble_y)
+        else:
+             # 短消息，滚到底部
+             self._scroll_chat_to_bottom()
 
     def _clear_all(self):
-        """清空标题和内容"""
-        self.title_input.clear()
+        """清空内容"""
         self.editor.clear()
+
+    def _clear_generated_history(self):
+        """清空生成历史"""
+        if self.generated_widget.count() == 0:
+            return
+            
+        reply = QMessageBox.question(
+            self,
+            "确认",
+            "确定要清空所有 AI 生成的历史记录吗？",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+        
+        if reply == QMessageBox.Yes:
+            self.history["generated"] = []
+            self.generated_widget.clear()
+            clear_journal_history("generated")
+            ToastManager.instance().show("生成历史已清空", "success")
+
+    def _adjust_editor_height(self):
+        """根据内容自动调整输入框高度"""
+        # 获取文档高度
+        doc = self.editor.document()
+        doc_height = doc.size().height()
+
+        # 计算目标高度（加上一些内边距）
+        target_height = int(doc_height + 20)
+
+        # 限制在最小和最大高度之间
+        target_height = max(self._editor_min_height, min(target_height, self._editor_max_height))
+
+        # 设置新高度
+        self.editor.setMaximumHeight(target_height)
+        self.editor.setMinimumHeight(target_height)
 
     def _create_history_list(self, title: str):
         container = QWidget()
@@ -302,9 +905,17 @@ class WeeklyJournalDialog(QDialog):
             return
         widget.clear()
         for entry in entries:
-            summary = entry["content"].strip().splitlines()[0][:40] if entry["content"].strip() else "(空内容)"
-            item = QListWidgetItem(f"[{entry['timestamp']}] {summary}")
-            item.setData(Qt.UserRole, entry["content"])
+            content = entry.get("content", "")
+            # 截取前20个字符作为预览
+            content_preview = content[:20].replace("\n", " ") + "..." if len(content) > 20 else content
+            # 去除年份显示 (YYYY-MM-DD HH:MM -> MM-DD HH:MM)
+            timestamp = entry.get("timestamp", "")
+            if len(timestamp) >= 5:
+                timestamp = timestamp[5:]
+                
+            item_text = f"[{timestamp}] {content_preview}"
+            item = QListWidgetItem(item_text)
+            item.setData(Qt.UserRole, content)
             widget.addItem(item)
 
     def _generate_with_ai(self):
@@ -312,46 +923,60 @@ class WeeklyJournalDialog(QDialog):
             return
 
         prompt_context = self.editor.toPlainText().strip()
-        role = self.role_input.text().strip()
-
-        if not self._confirm_generation(role):
+        
+        if not prompt_context:
             return
-
-        base_prompt = (
-            "请扮演实习生，根据以下笔记生成不少于300字的中文周记，包含本周工作、收获与下周计划。"
-            if prompt_context else
-            "请随机生成一份通用的实习周记，包含工作内容、问题反思与下周目标。"
-        )
-        prompt = f"{base_prompt}\n\n笔记：{prompt_context}" if prompt_context else base_prompt
-
-        if role:
-            prompt = f"{prompt}\n\n职业/岗位：{role}"
-
+        
+        # 第一次发送消息时，切换布局
+        if self._title_container.isVisible():
+            self._title_container.hide()
+            self._top_spacer.hide()
+            self._bottom_spacer.hide()
+            self._chat_area_widget.setVisible(True)
+        
+        # 添加用户消息到聊天区域
+        self._add_user_message(prompt_context)
+        
         self._set_ai_busy(True)
         self.editor.clear()
+        
+        # 创建 AI 消息标签用于流式更新
+        self._current_ai_message = self._add_ai_message("正在思考...")
+        self._ai_response_text = ""
 
         # 创建并启动异步线程
-        self._ai_thread = AIGenerationThread(self.model_config, prompt, SYSTEM_PROMPT)
+        self._ai_thread = AIGenerationThread(self.args, self.config['input'],
+                                             prompt_context, SYSTEM_PROMPT)
         self._ai_thread.delta_signal.connect(self._on_ai_delta)
         self._ai_thread.finished_signal.connect(self._on_ai_finished)
         self._ai_thread.error_signal.connect(self._on_ai_error)
         self._ai_thread.start()
 
-    def _on_ai_delta(self, delta: str):
-        """处理AI生成的增量内容"""
-        cursor = self.editor.textCursor()
-        cursor.movePosition(QTextCursor.End)
-        cursor.insertText(delta)
-        self.editor.setTextCursor(cursor)
 
-    def _on_ai_finished(self, content: str):
+    def _on_ai_delta(self, delta: str):
+        """处理AI生成的增量内容 - 流式输出效果"""
+        if self._current_ai_message:
+            self._ai_response_text += delta
+            # 更新UI
+            self._current_ai_message.setText(self._ai_response_text)
+            
+            # 智能滚动
+            self._scroll_smart()
+
+    def _on_ai_finished(self, full_text: str):
         """AI生成完成"""
         self._set_ai_busy(False)
-        if not content.strip():
+        if self._current_ai_message:
+            self._current_ai_message.setText(full_text)
+            self._scroll_smart()
+            
+        # 记录到历史
+        if not full_text.strip():
             return
-        append_journal_entry("generated", content)
-        ToastManager.instance().show("AI 周记已生成", "success")
+        append_journal_entry("generated", full_text)
+        # ToastManager.instance().show("AI 回复已生成", "success")
         self._load_history()
+        self._current_ai_message = None
         self._ai_thread = None
 
     def _on_ai_error(self, error_type: str, message: str):
@@ -379,7 +1004,7 @@ class WeeklyJournalDialog(QDialog):
 
     def _on_year_data_loaded(self, login_args, trainee_id, year_data):
         """年份数据加载完成"""
-        self.login_args = login_args
+        self.args = login_args
         self.trainee_id = trainee_id
         self.year_data = year_data
         # 更新UI
@@ -407,9 +1032,9 @@ class WeeklyJournalDialog(QDialog):
     def _load_year_data(self):
         """加载年份和月份数据"""
         try:
-            if not self.login_args or not self.trainee_id:
+            if not self.args or not self.trainee_id:
                 return
-            self.year_data = load_blog_year(self.login_args, self.config['input'])
+            self.year_data = load_blog_year(self.args, self.config['input'])
             self.year_combo.clear()
             for year_item in self.year_data:
                 year_name = year_item.get('name', '')
@@ -477,7 +1102,7 @@ class WeeklyJournalDialog(QDialog):
             month_id = month_item.get('id')
             if not year_id or not month_id:
                 return
-            self.week_data = load_blog_date(self.login_args, self.config['input'], year_id, month_id)
+            self.week_data = load_blog_date(self.args, self.config['input'], year_id, month_id)
             self.week_combo.clear()
             for week_item in self.week_data:
                 week_num = week_item.get('week', 0)
@@ -517,18 +1142,30 @@ class WeeklyJournalDialog(QDialog):
             handle_invalid_session()
             ToastManager.instance().show("JSESSIONID已失效，请先执行签到操作以获取新的登录信息", "warning")
             return
-        
-        # 检查标题
-        title = self.title_input.text().strip()
-        if not title:
-            ToastManager.instance().show("请输入周记标题", "warning")
-            self.title_input.setFocus()
-            return
-        
-        content = self.editor.toPlainText().strip()
-        if not content:
+
+        # 获取内容
+        full_content = self.editor.toPlainText().strip()
+        if not full_content:
             ToastManager.instance().show("请先输入或生成周记内容", "info")
             return
+
+        # 从内容解析标题和正文
+        lines = full_content.split('\n')
+        first_line = lines[0].strip()
+
+        # 如果第一行看起来像标题（较短且不以标点结尾），则使用第一行作为标题
+        if len(first_line) <= 50 and not first_line.endswith(('。', '！', '？', '.', '!', '?', ',')):
+            title = first_line
+            content = '\n'.join(lines[1:]).strip() if len(lines) > 1 else first_line
+        else:
+            # 否则自动生成标题
+            week_item = self.week_combo.currentData()
+            if week_item:
+                week_num = week_item.get('week', '')
+                title = f"第{week_num}周实习周记"
+            else:
+                title = "实习周记"
+            content = full_content
 
         # 检查是否选择了周
         week_item = self.week_combo.currentData()
@@ -537,7 +1174,7 @@ class WeeklyJournalDialog(QDialog):
             return
 
         # 检查登录信息
-        if not self.login_args or not self.trainee_id:
+        if not self.args or not self.trainee_id:
             ToastManager.instance().show("登录信息无效，请先执行签到操作以获取登录信息", "warning")
             return
 
@@ -546,11 +1183,11 @@ class WeeklyJournalDialog(QDialog):
             start_date = week_item.get('startDate', '')
             end_date = week_item.get('endDate', '')
             blog_open_type = self.permission_combo.currentData()
-            
+
             # 提交周记
             try:
                 blog_id = submit_blog(
-                    args=self.login_args,
+                    args=self.args,
                     config=self.config['input'],
                     blog_title=title,
                     blog_body=content,
@@ -559,7 +1196,7 @@ class WeeklyJournalDialog(QDialog):
                     blog_open_type=blog_open_type,
                     trainee_id=self.trainee_id
                 )
-                
+
                 append_journal_entry("submitted", content)
                 ToastManager.instance().show(f"周记提交成功！ID: {blog_id}", "success")
                 self._load_history()
@@ -573,7 +1210,7 @@ class WeeklyJournalDialog(QDialog):
                     # 清除缓存
                     from app.utils.files import clear_session_cache
                     clear_session_cache()
-                    self.login_args = None
+                    self.args = None
                     self.trainee_id = None
                 else:
                     raise
@@ -589,217 +1226,492 @@ class WeeklyJournalDialog(QDialog):
     # ---------------------- Server Helpers ----------------------
     def _setup_styles(self):
         self.setStyleSheet("""
+            /* ========== 全局样式 - DeepSeek 风格 ========== */
+            QWidget {
+                font-family: "Google Sans", "Segoe UI", "Microsoft YaHei", sans-serif;
+            }
             QDialog {
-                background: #111;
-                color: #E6E6E6;
+                background-color: #131726;
+                color: #E8EAED;
             }
+            
+            /* ========== 左侧边栏 ========== */
+            QFrame#Sidebar {
+                background-color: #0D1117;
+                border-right: 1px solid rgba(138, 180, 248, 0.08);
+            }
+            QLabel#SidebarTitle {
+                color: #E8EAED;
+                font-size: 18px;
+                font-weight: 600;
+                padding: 8px 0 16px 0;
+                letter-spacing: 0.5px;
+            }
+            QLabel#SidebarLabel {
+                color: #6B7280;
+                font-size: 11px;
+                font-weight: 500;
+                padding-top: 12px;
+                padding-bottom: 4px;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+            }
+            QListWidget#HistoryList {
+                background-color: transparent;
+                border: none;
+                border-radius: 8px;
+                padding: 0;
+                outline: none;
+            }
+            QListWidget#HistoryList::item {
+                padding: 8px 10px;
+                margin: 1px 0;
+                border-radius: 6px;
+                color: #9AA0A6;
+                font-size: 12px;
+                border-left: 2px solid transparent;
+            }
+            QListWidget#HistoryList::item:selected {
+                background-color: rgba(74, 144, 217, 0.15);
+                color: #E8EAED;
+                border-left: 2px solid #4A90D9;
+            }
+            QListWidget#HistoryList::item:hover {
+                background-color: rgba(255, 255, 255, 0.03);
+            }
+            
+            /* ========== 右侧内容区 ========== */
+            QFrame#ContentArea {
+                background-color: #131726;
+            }
+            QScrollArea#MainScrollArea {
+                background-color: #131726;
+                border: none;
+            }
+            QWidget#CentralWidget {
+                background-color: #131726;
+            }
+            
+            /* ========== 聊天区域 ========== */
+            QFrame#ChatContainer {
+                background-color: transparent;
+            }
+            QScrollArea#ChatScrollArea {
+                background-color: transparent;
+                border: none;
+            }
+            QWidget#ChatMessages {
+                background-color: transparent;
+            }
+            
+            /* ========== 用户消息 ========== */
+            QFrame#UserMessage {
+                background-color: transparent;
+            }
+            QLabel#UserMessageText {
+                background-color: #2563EB;
+                color: #FFFFFF;
+                padding: 12px 16px;
+                border-radius: 18px;
+                border-bottom-right-radius: 4px;
+                font-size: 14px;
+                line-height: 1.5;
+            }
+            
+            /* ========== AI 消息 ========== */
+            QFrame#AIMessage {
+                background-color: transparent;
+            }
+            QLabel#AIIcon {
+                font-size: 20px;
+                padding: 4px 8px 4px 0;
+            }
+            QLabel#AIMessageText {
+                background-color: rgba(32, 39, 55, 0.6);
+                color: #E8EAED;
+                padding: 12px 16px;
+                border-radius: 18px;
+                border-bottom-left-radius: 4px;
+                font-size: 14px;
+                line-height: 1.5;
+            }
+            
+            /* ========== 主标题 ========== */
+            QLabel#MainTitle {
+                color: #E8EAED;
+                font-size: 24px;
+                font-weight: 500;
+                letter-spacing: 0.3px;
+            }
+            
+            /* ========== 输入容器 ========== */
+            QFrame#InputContainer {
+                background-color: rgba(32, 39, 55, 0.6);
+                border: 1px solid rgba(138, 180, 248, 0.12);
+                border-radius: 24px;
+            }
+            
+            /* ========== 配置容器 ========== */
+            QFrame#ConfigContainer {
+                background-color: rgba(32, 39, 55, 0.4);
+                border: 1px solid rgba(138, 180, 248, 0.08);
+                border-radius: 16px;
+            }
+            QLabel#ConfigLabel {
+                color: #9AA0A6;
+                font-size: 12px;
+                font-weight: 500;
+            }
+            
+            /* ========== 标签样式 ========== */
             QLabel {
-                color: #AAA;
+                color: #9AA0A6;
+                font-size: 13px;
+                font-weight: 500;
+                letter-spacing: 0.3px;
             }
+            
+            /* ========== 文本编辑区 - 玻璃态效果 ========== */
             QTextEdit {
-                background: #1C1C1C;
-                border: 1px solid #2F2F2F;
-                border-radius: 8px;
-                padding: 12px;
-                font-size: 12pt;
-                color: #EAEAEA;
+                background-color: rgba(32, 39, 55, 0.85);
+                border: 1px solid rgba(138, 180, 248, 0.15);
+                border-radius: 16px;
+                padding: 20px;
+                font-size: 15px;
+                line-height: 1.8;
+                color: #E8EAED;
+                selection-background-color: rgba(138, 180, 248, 0.3);
             }
-            QLineEdit#PromptInput {
-                background: #1A1C24;
-                border: 1px solid #2F3145;
-                border-radius: 8px;
-                padding: 10px;
-                color: #F5F6FF;
-                font-size: 10pt;
+            QTextEdit:focus {
+                border: 1px solid rgba(138, 180, 248, 0.5);
+                background-color: rgba(32, 39, 55, 0.95);
             }
-            QLineEdit#PromptInput:focus {
-                border-color: #5865F2;
-                box-shadow: 0 0 12px rgba(88,101,242,0.35);
+            QTextEdit#MainEditor {
+                background-color: transparent;
+                border: none;
+                border-radius: 0;
+                padding: 8px 4px;
+                font-size: 15px;
+                min-height: 60px;
             }
+            QTextEdit#MainEditor:focus {
+                border: none;
+                background-color: transparent;
+            }
+            
+            /* ========== 输入框样式 ========== */
+            QLineEdit {
+                background-color: rgba(32, 39, 55, 0.7);
+                border: 1px solid rgba(138, 180, 248, 0.15);
+                border-radius: 12px;
+                padding: 12px 16px;
+                font-size: 14px;
+                color: #E8EAED;
+            }
+            QLineEdit:focus {
+                border: 1px solid rgba(138, 180, 248, 0.6);
+                background-color: rgba(32, 39, 55, 0.9);
+            }
+            QLineEdit::placeholder {
+                color: #5F6368;
+            }
+            
+            /* ========== 历史记录列表 ========== */
             QListWidget {
-                background: #151515;
-                border: 1px solid #222;
-                border-radius: 8px;
-            }
-            QListWidget::item {
+                background-color: rgba(32, 39, 55, 0.6);
+                border: 1px solid rgba(138, 180, 248, 0.1);
+                border-radius: 16px;
+                outline: none;
                 padding: 8px;
             }
-            QListWidget::item:selected {
-                background: #2E74FF;
-                color: white;
+            QListWidget::item {
+                padding: 14px 16px;
+                margin: 4px 0;
+                border-radius: 12px;
+                border: none;
+                color: #BDC1C6;
             }
-            #ServerCard {
-                background: #1B1B1F;
-                border: 1px solid #2D2D32;
+            QListWidget::item:selected {
+                background-color: rgba(138, 180, 248, 0.15);
+                color: #E8EAED;
+            }
+            QListWidget::item:hover {
+                background-color: rgba(138, 180, 248, 0.08);
+            }
+            
+            /* ========== 卡片容器 - 玻璃态 ========== */
+            QFrame#ConfigCard {
+                background-color: rgba(32, 39, 55, 0.75);
+                border: 1px solid rgba(138, 180, 248, 0.12);
+                border-radius: 20px;
+            }
+            QFrame#ContentCard {
+                background-color: rgba(32, 39, 55, 0.65);
+                border: 1px solid rgba(138, 180, 248, 0.10);
+                border-radius: 20px;
+            }
+            QFrame#HistoryCard {
+                background-color: rgba(32, 39, 55, 0.55);
+                border: 1px solid rgba(138, 180, 248, 0.08);
+                border-radius: 20px;
+            }
+            QFrame#RoleCard {
+                background-color: rgba(32, 39, 55, 0.5);
+                border: 1px solid rgba(138, 180, 248, 0.08);
+                border-radius: 14px;
+            }
+            
+            /* ========== 输入框变体 ========== */
+            QLineEdit#PromptInput {
+                background-color: rgba(32, 39, 55, 0.4);
+                font-size: 13px;
                 border-radius: 10px;
             }
-            #PromptCard {
-                background: rgba(24,27,42,0.95);
-                border: 1px solid #2E3147;
-                border-radius: 12px;
-            }
-            #ConfigCard {
-                background: rgba(24,27,42,0.95);
-                border: 1px solid #2E3147;
-                border-radius: 12px;
-            }
-            QComboBox#ConfigCombo {
-                background: #1A1C24;
-                border: 1px solid #2F3145;
-                border-radius: 5px;
-                padding: 3px 0;
-                color: #F5F6FF;
-                font-size: 10pt;
-                min-width: 10px;
-            }
-            QComboBox#ConfigCombo:hover {
-                border-color: #5865F2;
-            }
-            QComboBox#ConfigCombo::drop-down {
-                border: none;
-                width: 20px;
-            }
-            
-            QComboBox#WeekCombo {
-                background: #1A1C24;
-                border: 1px solid #2F3145;
-                border-radius: 5px;
-                padding: 3px;
-                color: #F5F6FF;
-                font-size: 10pt;
-                min-width: 300px;
-            }
-            QComboBox#WeekCombo:hover {
-                border-color: #5865F2;
-            }
-            QComboBox#WeekCombo::drop-down {
-                border: none;
-                width: 20px;
-            }
-            
-            QComboBox#ConfigCombo QAbstractItemView {
-                background: #1A1C24;
-                border: 1px solid #2F3145;
-                selection-background-color: #5865F2;
-                color: #F5F6FF;
-                padding: 2px;
-            }
-            QComboBox#ConfigCombo QAbstractItemView::item {
-                padding: 8px 12px;
-                border-radius: 4px;
-                min-height: 24px;
-            }
-            QComboBox#ConfigCombo QAbstractItemView::item:selected {
-                background-color: #5865F2;
-                color: #FFFFFF;
-            }
-            QComboBox#ConfigCombo QAbstractItemView::item:hover:!selected {
-                background-color: #3A3F5F;
-                color: #F5F6FF;
-            }
-            QPushButton#LoginBtn {
-                background: #4CAF50;
-                color: white;
-                border: none;
-                border-radius: 18px;
-                padding: 8px 18px;
-                font-weight: bold;
-            }
-            QPushButton#LoginBtn:hover {
-                background: #45a049;
-            }
-            QPushButton#FetchBtn {
-                background: #2196F3;
-                color: white;
-                border: none;
-                border-radius: 18px;
-                padding: 8px 18px;
-                font-weight: bold;
-            }
-            QPushButton#FetchBtn:hover {
-                background: #0b7dda;
-            }
-            QPushButton#SmallBtn {
-                background: #2A2D3A;
-                border: 1px solid #3A3F5F;
-                border-radius: 6px;
-                padding: 4px 8px;
-                color: #C2C2C8;
-                font-size: 10pt;
-                min-width: 28px;
-                max-width: 28px;
-            }
-            QPushButton#SmallBtn:hover {
-                background: #3A3F5F;
-                border-color: #5865F2;
-                color: #FFFFFF;
-            }
-            QPushButton#LoadDataBtn {
-                background: #4E8BFF;
-                color: white;
-                border: none;
-                border-radius: 18px;
-                padding: 8px 18px;
-                font-weight: bold;
-            }
-            QPushButton#LoadDataBtn:hover {
-                background: #5C96FF;
-            }
-            QPushButton#LoadDataBtn:disabled {
-                background: #353B5A;
-                color: #7B80A3;
-            }
-            #RoleCard {
-                background: rgba(24,27,42,0.95);
-                border: 1px solid #2E3147;
-                border-radius: 12px;
-            }
             QLineEdit#TitleInput {
-                background: #1C1C1C;
-                border: 1px solid #2F2F2F;
+                font-size: 18px;
+                font-weight: 600;
+                padding: 14px 18px;
+                background-color: rgba(32, 39, 55, 0.5);
+                border-radius: 14px;
+                letter-spacing: 0.5px;
+            }
+            
+            /* ========== 下拉框样式 ========== */
+            QComboBox {
+                background-color: #2a2d3e;
+                border: none;
+                border-radius: 20px;
+                padding: 8px 14px;
+                color: #FFFFFF;
+                min-height: 22px;
+                font-size: 13px;
+            }
+            QComboBox:hover {
+                background-color: #363a4d;
+            }
+            QComboBox::drop-down {
+                border: none;
+                width: 24px;
+            }
+            QComboBox QAbstractItemView {
+                background-color: #202737;
+                border: 1px solid rgba(138, 180, 248, 0.2);
+                border-radius: 12px;
+                selection-background-color: rgba(138, 180, 248, 0.2);
+                color: #E8EAED;
+                outline: none;
+                padding: 6px;
+            }
+            QComboBox QAbstractItemView::item {
+                padding: 10px 14px;
                 border-radius: 8px;
-                padding: 10px;
-                color: #EAEAEA;
-                font-size: 11pt;
             }
-            QLineEdit#TitleInput:focus {
-                border-color: #5865F2;
-                box-shadow: 0 0 8px rgba(88,101,242,0.3);
+            QComboBox QAbstractItemView::item:selected {
+                background-color: rgba(138, 180, 248, 0.25);
             }
-            #ServerStatus {
-                font-weight: bold;
-                color: #A0A0A8;
-            }
+            
+            /* ========== 按钮基础样式 ========== */
             QPushButton {
-                padding: 8px 18px;
-                border-radius: 18px;
-                border: 1px solid transparent;
-                font-weight: bold;
+                border-radius: 12px;
+                padding: 12px 24px;
+                font-weight: 600;
+                font-size: 14px;
+                border: none;
+                letter-spacing: 0.3px;
             }
+            
+            /* ========== 工具栏下拉框 ========== */
+            QComboBox#ToolbarCombo {
+                background-color: #2a2d3e;
+                border: none;
+                border-radius: 20px;
+                padding: 8px 14px;
+                color: #FFFFFF;
+                font-size: 13px;
+                min-height: 18px;
+            }
+            QComboBox#ToolbarCombo:hover {
+                background-color: #363a4d;
+            }
+            
+            /* ========== 工具栏按钮 ========== */
+            QPushButton#ToolbarBtn {
+                background-color: transparent;
+                border: 1px solid rgba(138, 180, 248, 0.2);
+                color: #9AA0A6;
+                padding: 8px 16px;
+                border-radius: 8px;
+                font-size: 13px;
+            }
+            QPushButton#ToolbarBtn:hover {
+                border-color: rgba(138, 180, 248, 0.4);
+                color: #E8EAED;
+                background-color: rgba(138, 180, 248, 0.08);
+            }
+            
+            /* ========== 发送按钮（已废弃，保留兼容） ========== */
+            QPushButton#SendBtn {
+                background-color: #4A90D9;
+                color: #FFFFFF;
+                padding: 8px 12px;
+                border-radius: 10px;
+                font-size: 16px;
+                min-width: 36px;
+                max-width: 36px;
+            }
+            QPushButton#SendBtn:hover {
+                background-color: #5A9FE8;
+            }
+            
+            /* ========== AI 主按钮（纯色） ========== */
             QPushButton#PrimaryBtn {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 #4E8BFF, stop:1 #7C5BFF);
-                color: white;
+                background-color: #4A90D9;
+                color: #FFFFFF;
+                font-weight: 600;
+                padding: 12px 24px;
+                border-radius: 12px;
             }
             QPushButton#PrimaryBtn:hover {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 #5C96FF, stop:1 #8A68FF);
+                background-color: #5A9FE8;
             }
-            QPushButton#GhostBtn {
-                background: transparent;
-                border-color: #3A3A40;
-                color: #C2C2C8;
+            QPushButton#PrimaryBtn:pressed {
+                background-color: #3A80C9;
             }
-            QPushButton#GhostBtn:hover {
-                border-color: #777;
-                color: white;
+            QPushButton#PrimaryBtn:disabled {
+                background-color: rgba(74, 144, 217, 0.4);
+                color: rgba(255, 255, 255, 0.5);
             }
+            
+            /* ========== 提交按钮 - 成功色 ========== */
             QPushButton#SuccessBtn {
-                background: #2CB67D;
-                color: white;
+                background-color: #2a2d3e;
+                color: #FFFFFF;
+                font-weight: 500;
+                padding: 8px 16px;
+                border-radius: 20px;
+                font-size: 13px;
             }
             QPushButton#SuccessBtn:hover {
-                background: #34C889;
+                background-color: #363a4d;
+            }
+            QPushButton#SuccessBtn:pressed {
+                background-color: #22253a;
+            }
+            
+            QPushButton#AIBtn {
+                background: #191B2A;
+                color: #D0D5FF;
+                border: 1px solid #22263A;
+                padding: 8px 16px;
+                border-radius: 10px;
+                font-weight: 600;
+                font-size: 13px;
+            }
+            QPushButton#AIBtn:hover {
+                border-color: #4F6BFF;
+                color: white;
+            }
+            QPushButton#AIBtn:pressed {
+                background: #15182a;
+                border-color: #3A60DD;
+            }
+            QPushButton#AIBtn:disabled {
+                background: rgba(25, 27, 42, 0.5);
+                color: rgba(208, 213, 255, 0.4);
+                border-color: rgba(34, 38, 58, 0.5);
+            }
+            
+            /* ========== 提交按钮（统一样式） ========== */
+            QPushButton#SubmitBtn {
+                background-color: #2a2d3e;
+                color: #FFFFFF;
+                font-weight: 500;
+                padding: 8px 16px;
+                border-radius: 20px;
+                font-size: 13px;
+            }
+            QPushButton#SubmitBtn:hover {
+                background-color: #363a4d;
+            }
+            QPushButton#SubmitBtn:pressed {
+                background-color: #22253a;
+            }
+            
+            /* ========== 幽灵按钮 ========== */
+            QPushButton#GhostBtn {
+                background-color: transparent;
+                border: 1px solid rgba(138, 180, 248, 0.25);
+                color: #9AA0A6;
+                padding: 12px 20px;
+            }
+            QPushButton#GhostBtn:hover {
+                border-color: rgba(138, 180, 248, 0.5);
+                color: #E8EAED;
+                background-color: rgba(138, 180, 248, 0.08);
+            }
+            QPushButton#GhostBtn:pressed {
+                background-color: rgba(138, 180, 248, 0.15);
+            }
+            
+            /* ========== 图标按钮 ========== */
+            QPushButton#IconBtn {
+                background-color: transparent;
+                border: 1px solid rgba(138, 180, 248, 0.2);
+                color: #9AA0A6;
+                padding: 10px 12px;
+                border-radius: 10px;
+                min-width: 36px;
+                max-width: 36px;
+            }
+            QPushButton#IconBtn:hover {
+                border-color: rgba(138, 180, 248, 0.4);
+                color: #E8EAED;
+                background-color: rgba(138, 180, 248, 0.08);
+            }
+            QPushButton#IconBtn:pressed {
+                background-color: rgba(138, 180, 248, 0.15);
+            }
+            
+            /* ========== 分割器 ========== */
+            QSplitter::handle {
+                background-color: rgba(138, 180, 248, 0.1);
+                height: 2px;
+                margin: 8px 0;
+            }
+            QSplitter::handle:hover {
+                background-color: rgba(138, 180, 248, 0.3);
+            }
+            
+            /* ========== 滚动条样式 ========== */
+            QScrollBar:vertical {
+                border: none;
+                background: transparent;
+                width: 10px;
+                margin: 4px;
+            }
+            QScrollBar::handle:vertical {
+                background: rgba(138, 180, 248, 0.2);
+                min-height: 30px;
+                border-radius: 5px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background: rgba(138, 180, 248, 0.4);
+            }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                height: 0px;
+            }
+            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
+                background: transparent;
+            }
+            
+            /* ========== 工具提示 ========== */
+            QToolTip {
+                background-color: #202737;
+                color: #E8EAED;
+                border: 1px solid rgba(138, 180, 248, 0.2);
+                border-radius: 8px;
+                padding: 8px 12px;
+                font-size: 12px;
             }
         """)
 
@@ -821,18 +1733,19 @@ class WeeklyJournalDialog(QDialog):
             user = self.auth_info.get("user", {})
             name = user.get("username") or user.get("name") or "已登录"
             self.server_status.setText(f"已登录：{name}")
-            self.server_status.setStyleSheet("color:#58D68D; font-size: 9pt; padding: 0 8px; cursor: pointer; text-decoration: underline;")
+            self.server_status.setStyleSheet(
+                "color:#58D68D; font-size: 9pt; padding: 0 8px; cursor: pointer; text-decoration: underline;")
         else:
             self.server_status.setText("未登录周记服务器")
             self.server_status.setStyleSheet("color:#AAA; font-size: 9pt; padding: 0 8px; cursor: pointer;")
-    
+
     def _on_server_status_clicked(self, event):
         """点击服务器状态标签时的处理"""
         if self.auth_info:
             self._open_user_center()
         else:
             self._prompt_login()
-    
+
     def _open_user_center(self):
         """打开用户中心页面"""
         if not self.auth_info:
@@ -851,90 +1764,16 @@ class WeeklyJournalDialog(QDialog):
         self._prompt_login()
         return self.auth_info is not None
 
-    def _fetch_from_server(self):
-        base = self._server_base()
-        if not base:
-            ToastManager.instance().show("未配置周记服务器地址", "warning")
-            return
-        # 检查是否登录，如果没有登录则弹出登录/注册页面
-        if not self.auth_info:
-            self._prompt_login()
-            if not self.auth_info:
-                return
-        try:
-            entries = fetch_journals(base, self.auth_info['token'])
-        except JournalServerError as exc:
-            ToastManager.instance().show(str(exc), "warning")
-            return
-        except Exception as exc:
-            ToastManager.instance().show(str(exc), "error")
-            return
-        if not entries:
-            ToastManager.instance().show("服务器没有可用的周记内容", "info")
-            return
-        content = self._select_entry(entries)
-        if not content:
-            return
-        self.editor.setPlainText(content)
-        append_journal_entry("generated", content)
-        ToastManager.instance().show("已从服务器加载周记", "success")
-        self._load_history()
-
-    def _select_entry(self, entries):
-        normalized = []
-        for entry in entries:
-            if isinstance(entry, dict):
-                content = entry.get("content") or entry.get("text") or ""
-                title = entry.get("title") or entry.get("date") or entry.get("id") or "周记"
-            else:
-                content = str(entry)
-                title = content[:20]
-            if content:
-                normalized.append((title, content))
-        if not normalized:
-            return None
-        if len(normalized) == 1:
-            return normalized[0][1]
-
-        dialog = QDialog(self)
-        dialog.setWindowTitle("选择周记")
-        dialog.resize(420, 320)
-        layout = QVBoxLayout(dialog)
-        list_widget = QListWidget()
-        for title, content in normalized:
-            item = QListWidgetItem(title)
-            item.setData(Qt.UserRole, content)
-            list_widget.addItem(item)
-        layout.addWidget(QLabel("请选择一条周记："))
-        layout.addWidget(list_widget)
-        btns = QHBoxLayout()
-        btn_ok = QPushButton("确定")
-        btn_cancel = QPushButton("取消")
-        btn_ok.clicked.connect(dialog.accept)
-        btn_cancel.clicked.connect(dialog.reject)
-        btns.addStretch()
-        btns.addWidget(btn_ok)
-        btns.addWidget(btn_cancel)
-        layout.addLayout(btns)
-
-        list_widget.itemDoubleClicked.connect(lambda _: dialog.accept())
-
-        if dialog.exec() == QDialog.Accepted:
-            item = list_widget.currentItem()
-            if item:
-                return item.data(Qt.UserRole)
-        return None
-
     def _set_ai_busy(self, busy: bool):
         if busy:
             self.btn_ai.setEnabled(False)
-            self.btn_ai.setText("AI 正在生成...")
+            self.btn_ai.setText("生成中...")
             if not self._ai_busy:
                 QApplication.setOverrideCursor(Qt.WaitCursor)
             self._ai_busy = True
         else:
             self.btn_ai.setEnabled(True)
-            self.btn_ai.setText("AI 自动生成")
+            self.btn_ai.setText("✨发送")
             if self._ai_busy:
                 QApplication.restoreOverrideCursor()
                 self._ai_busy = False
@@ -952,4 +1791,3 @@ class WeeklyJournalDialog(QDialog):
             QMessageBox.Yes,
         )
         return reply == QMessageBox.Yes
-

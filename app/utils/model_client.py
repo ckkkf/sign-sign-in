@@ -17,7 +17,6 @@ def _normalize_endpoint(base_url: str) -> str:
         return f"{base}/chat/completions"
     return f"{base}/v1/chat/completions"
 
-
 def call_chat_model(
     model_cfg: dict,
     prompt: str,
@@ -110,5 +109,8 @@ def test_model_connection(model_cfg: dict) -> str:
         "请用一句中文回复：模型连通性测试成功。",
         "你是一个测试助手，用一句中文复述用户信息。"
     )
+
+
+
 
 

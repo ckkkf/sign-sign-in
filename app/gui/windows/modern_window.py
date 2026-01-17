@@ -10,7 +10,7 @@ from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import QMainWindow, QWidget, QHBoxLayout, QFrame, QVBoxLayout, QLabel, QGridLayout, QPushButton, \
     QButtonGroup, QRadioButton, QProgressBar, QSizePolicy, QMessageBox, QApplication, QTextEdit, QDialog
 
-from app.config.common import QQ_GROUP, VERSION, CONFIG_FILE, MITM_PROXY, API_URL
+from app.config.common import QQ_GROUP, PROJECT_VERSION, CONFIG_FILE, MITM_PROXY, API_URL, PROJECT_NAME
 from app.gui.components.log_viewer import QTextEditLogger
 from app.gui.components.toast import ToastManager
 from app.gui.dialogs.dialogs.config_dialog import ConfigDialog
@@ -33,7 +33,7 @@ class ModernWindow(QMainWindow):
     def __init__(self):
         super().__init__()
 
-        self.setWindowTitle(f"🔰 Sign Sign In {VERSION} - 实习打卡助手")
+        self.setWindowTitle(f"{PROJECT_NAME} {PROJECT_VERSION} - 实习打卡助手")
         self.resize(900, 540)  # 进一步收紧高度
         self.is_running = False
         self.is_getting_code = False
@@ -63,7 +63,7 @@ class ModernWindow(QMainWindow):
         l_vbox.setContentsMargins(15, 20, 15, 20)
         l_vbox.setSpacing(5)
 
-        title = QLabel("🔰 Sign Sign In")
+        title = QLabel(PROJECT_NAME)
         title.setObjectName("AppTitle")
         l_vbox.addWidget(title)
         sub = QLabel("—— 自动化实习签到系统")
@@ -551,7 +551,7 @@ class ModernWindow(QMainWindow):
                 ToastManager.instance().show("正在检查更新，请稍候...", "info")
             return
 
-        self.update_worker = UpdateCheckWorker(API_URL + "/api/check-update", VERSION)
+        self.update_worker = UpdateCheckWorker(API_URL + "/api/check-update", PROJECT_VERSION)
         self.update_worker.result_signal.connect(
             lambda success, data: self.on_update_check_result(success, data, silent)
         )
@@ -608,7 +608,7 @@ class ModernWindow(QMainWindow):
             # 其他错误不影响打开对话框
             logging.warning(f"检查jsessionid时出现错误: {e}")
 
-        WeeklyJournalDialog(config.get("model", {}), self).exec()
+        WeeklyJournalDialog(config.get("model", {}), login_args, self).exec()
 
     def get_code_and_session(self):
         """获取Code和JSESSIONID"""

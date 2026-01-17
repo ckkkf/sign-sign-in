@@ -643,3 +643,61 @@ def submit_blog(args, config, blog_title, blog_body, start_date, end_date, blog_
             raise RuntimeError(f"提交周记失败: {res.get('msg', 'Unknown error')}")
     except Exception as e:
         raise RuntimeError(f"提交周记请求异常: {e}")
+
+
+def xyb_completion(args, config, prompt, on_delta=None):
+    """
+    调用 AI 完成接口
+    :param args: 登录参数
+    :param config: 配置
+    :param prompt: 提示词
+    :param on_delta: 流式输出回调函数，接收每个文本片段
+    :return: 完整的生成内容
+    """
+    data = {
+        "processType": "0",
+        "content": prompt,
+        "questionType": "0",
+        "type": "0",
+        "aiSessionMsgType": "4"
+    }
+    header_token = get_header_token(data)
+    headers = {
+        "content-type": "application/x-www-form-urlencoded",
+        "devicecode": get_device_code(openId=args['openId'], device=config['device']),
+        "encryptvalue": args['encryptValue'],
+        "m": header_token['m'],
+        "n": "content,deviceName,keyWord,blogBody,blogTitle,getType,responsibilities,street,text,reason,searchvalue,key,answers,leaveReason,personRemark,selfAppraisal,imgUrl,wxname,deviceId,avatarTempPath,file,file,model,brand,system,deviceId,platform,code,openId,unionid,clockDeviceToken,clockDevice,address,name,enterpriseEmail,responsibilities,practiceTarget,guardianName,guardianPhone,practiceDays,linkman,enterpriseName,companyIntroduction,accommodationStreet,accommodationLongitude,accommodationLatitude,internshipDestination,specialStatement,enterpriseStreet,insuranceName,insuranceFinancing,policyNumber,overtimeRemark,riskStatement,specialStatement",
+        "referer": "https://servicewechat.com/wx9f1c2e0bbc10673c/537/page-frame.html",
+        "s": header_token['s'],
+        "t": header_token['t'],
+        "user-agent": config['userAgent'],
+        "v": XYB_VERSION,
+        "wechat": "1",
+        "xweb_xhr": "1"
+    }
+    cookies = {
+        "JSESSIONID": args['sessionId']
+    }
+    url = "https://xcx.xybsyw.com/careerplanning/saveSession.action"
+    
+    try:
+        import json
+        response = requests.post(url, data=data, headers=headers, cookies=cookies, timeout=60)
+        res = response.json()
+        
+        if res.get('code') == '200' and 'data' in res:
+            content = res['data'].get('content', '')
+            if on_delta and content:
+                # 模拟流式输出效果
+                for char in content:
+                    on_delta(char)
+            return content
+        else:
+            raise RuntimeError(f"AI生成失败: {res.get('msg', 'Unknown error')}")
+    except json.JSONDecodeError as e:
+        logging.error(f"AI响应解析失败: {e}")
+        raise RuntimeError(f"AI响应解析失败: {e}")
+    except Exception as e:
+        logging.error(f"AI生成请求异常: {e}")
+        raise RuntimeError(f"AI生成请求异常: {e}")

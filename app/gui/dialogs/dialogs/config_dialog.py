@@ -126,7 +126,7 @@ class ConfigDialog(QDialog):
         lbl_dev = QLabel("设备")
         lbl_dev.setStyleSheet("color: #007ACC; font-size: 11pt; margin-top: 10px; font-weight: bold;")
 
-        btn_ai = QPushButton("🤖 询问 AI")
+        btn_ai = QPushButton("✨ 询问 AI")
         btn_ai.setObjectName("LinkBtn")
         btn_ai.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://www.doubao.com/chat/")))
 
