@@ -680,12 +680,12 @@ def xyb_completion(args, config, prompt, on_delta=None):
         "JSESSIONID": args['sessionId']
     }
     url = "https://xcx.xybsyw.com/careerplanning/saveSession.action"
-    
+
     try:
         import json
         response = requests.post(url, data=data, headers=headers, cookies=cookies, timeout=60)
         res = response.json()
-        
+
         if res.get('code') == '200' and 'data' in res:
             content = res['data'].get('content', '')
             if on_delta and content:
@@ -701,3 +701,49 @@ def xyb_completion(args, config, prompt, on_delta=None):
     except Exception as e:
         logging.error(f"AI生成请求异常: {e}")
         raise RuntimeError(f"AI生成请求异常: {e}")
+
+
+def blog_list(args, config, page, blogType="1"):
+    logging.info(f'正在加载第{page}页周记列表...')
+    data = {
+        "blogType": blogType,
+        "planId": "",
+        "reviewStatus": "null",
+        "page": str(page)
+    }
+    header_token = get_header_token(data)
+    headers = {
+        "content-type": "application/x-www-form-urlencoded",
+        "devicecode": get_device_code(openId=args['openId'], device=config['device']),
+        "encryptvalue": args['encryptValue'],
+        "m": header_token['m'],
+        "n": "content,deviceName,keyWord,blogBody,blogTitle,getType,responsibilities,street,text,reason,searchvalue,key,answers,leaveReason,personRemark,selfAppraisal,imgUrl,wxname,deviceId,avatarTempPath,file,file,model,brand,system,deviceId,platform,code,openId,unionid,clockDeviceToken,clockDevice,address,name,enterpriseEmail,responsibilities,practiceTarget,guardianName,guardianPhone,practiceDays,linkman,enterpriseName,companyIntroduction,accommodationStreet,accommodationLongitude,accommodationLatitude,internshipDestination,specialStatement,enterpriseStreet,insuranceName,insuranceFinancing,policyNumber,overtimeRemark,riskStatement,specialStatement",
+        "referer": "https://servicewechat.com/wx9f1c2e0bbc10673c/537/page-frame.html",
+        "s": header_token['s'],
+        "t": header_token['t'],
+        "user-agent": config['userAgent'],
+        "v": XYB_VERSION,
+        "wechat": "1",
+        "xweb_xhr": "1"
+    }
+    cookies = {
+        "JSESSIONID": args['sessionId']
+    }
+    url = "https://xcx.xybsyw.com/student/blog/BlogList.action"
+
+    try:
+        logging.debug(f"🛩️ 准备发起请求。url:{url}, headers:{headers}, data:{data}, cookies:{cookies}")
+        response = requests.post(url, headers=headers, cookies=cookies, data=data, timeout=10)
+        logging.debug(f"📡 收到响应:{response} {response.text}")
+        res = response.json()
+
+        if not check_session_validity(res):
+            handle_invalid_session()
+            raise RuntimeError('❌ JSESSIONID已失效，请重新获取code')
+
+        if res.get('code') == '200' and 'data' in res:
+            return res['data']
+        else:
+            raise RuntimeError(f"获取周记列表失败: {res.get('msg', 'Unknown error')}")
+    except Exception as e:
+        raise RuntimeError(f"获取周记列表请求异常: {e}")

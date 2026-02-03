@@ -149,22 +149,22 @@ class ConfigDialog(QDialog):
         # ===========================================================
         # 模型接入
         # ===========================================================
-        model_row = QHBoxLayout()
-        lbl_model = QLabel("模型接入")
-        lbl_model.setStyleSheet("color: #007ACC; font-size: 11pt; margin-top: 10px; font-weight: bold;")
-        btn_test = QPushButton("🧪 测试连通性")
-        btn_test.setObjectName("LinkBtn")
-        btn_test.clicked.connect(self.test_model)
-        model_row.addWidget(lbl_model)
-        model_row.addStretch()
-        model_row.addWidget(btn_test)
-        form.addRow(model_row)
-
-        self.add_row(form, "Base URL", "model_baseUrl", model_conf.get('baseUrl', ''))
-        self.add_row(form, "API Key", "model_apiKey", model_conf.get('apiKey', ''))
-        self.add_row(form, "模型名称", "model_model", model_conf.get('model', ''))
-
-        form.addItem(QSpacerItem(0, 15))
+        # model_row = QHBoxLayout()
+        # lbl_model = QLabel("模型接入")
+        # lbl_model.setStyleSheet("color: #007ACC; font-size: 11pt; margin-top: 10px; font-weight: bold;")
+        # btn_test = QPushButton("🧪 测试连通性")
+        # btn_test.setObjectName("LinkBtn")
+        # btn_test.clicked.connect(self.test_model)
+        # model_row.addWidget(lbl_model)
+        # model_row.addStretch()
+        # model_row.addWidget(btn_test)
+        # form.addRow(model_row)
+        #
+        # self.add_row(form, "Base URL", "model_baseUrl", model_conf.get('baseUrl', ''))
+        # self.add_row(form, "API Key", "model_apiKey", model_conf.get('apiKey', ''))
+        # self.add_row(form, "模型名称", "model_model", model_conf.get('model', ''))
+        #
+        # form.addItem(QSpacerItem(0, 15))
 
         # ===========================================================
         # Scroll + 底部按钮区
@@ -203,14 +203,14 @@ class ConfigDialog(QDialog):
             inp['device'] = {'brand': self.inputs['brand'].text(), 'model': self.inputs['model'].text(),
                 'system': self.inputs['system'].text(), 'platform': self.inputs['platform'].text()}
             model_conf = self.current_data.setdefault('model', {})
-            model_conf['baseUrl'] = self.inputs['model_baseUrl'].text().strip()
-            model_conf['apiKey'] = self.inputs['model_apiKey'].text().strip()
-            model_conf['model'] = self.inputs['model_model'].text().strip()
+            # model_conf['baseUrl'] = self.inputs['model_baseUrl'].text().strip()
+            # model_conf['apiKey'] = self.inputs['model_apiKey'].text().strip()
+            # model_conf['model'] = self.inputs['model_model'].text().strip()
             save_json_file(self.config_path, self.current_data)
             self.is_modified = False
             # QMessageBox.information(self, "成功", "配置已保存")
             ToastManager.instance().show("配置保存成功", "success")
-            # self.accept()
+            self.accept()
         except Exception as e:
             QMessageBox.critical(self, "错误", str(e))
 

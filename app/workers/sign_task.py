@@ -248,6 +248,11 @@ class GetCodeAndSessionThread(QThread):
             ### cert
             self.do_cert()
 
+            ### 唤起微信小程序
+            weixin_url = "weixin://launchapplet/?app_id=wx9f1c2e0bbc10673c"
+            os.startfile(weixin_url)
+            logging.info("🌈 已发送唤醒指令到微信")
+
             logging.warning("⏳ 请重启校友邦小程序，以获取code...")
 
             code = self.wait_code(self.code_file, target_proxy)

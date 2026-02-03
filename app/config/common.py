@@ -5,6 +5,8 @@ from core.paths import get_base_dir
 # 项目信息
 PROJECT_VERSION = "v1.1.3"
 PROJECT_NAME = "🔰 Sign sign in"
+PROJECT_GITHUB = "https://github.com/ckkkf/sign-sign-in"
+PROJECT_GITEE = "https://gitee.com/ckkk524334/sign-sign-in"
 
 # QQ群信息
 QQ_GROUP = "859098272"

@@ -1,9 +1,10 @@
 import logging
+import traceback
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QTimer, QSize
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QTextEdit, QPushButton, QHBoxLayout, QLabel, QFrame, QScrollArea,
                                QWidget, QMessageBox, QApplication, QListWidgetItem, QLineEdit, QListWidget, QSplitter,
-                               QSizePolicy, QComboBox, )
+                               QSizePolicy, QComboBox, QTextBrowser, )
 
 from app.apis.xybsyw import handle_invalid_session, get_plan, login, load_blog_date, load_blog_year, submit_blog
 from app.config.common import CONFIG_FILE, PROJECT_NAME, SYSTEM_PROMPT
@@ -16,42 +17,72 @@ from app.gui.dialogs.weekly_journal.FloatingActionBar import FloatingActionBar
 from app.gui.dialogs.weekly_journal.LoadYearDataThread import LoadYearDataThread
 from app.gui.dialogs.weekly_journal.SubmitJournalThread import SubmitJournalThread
 from app.gui.dialogs.weekly_journal.UserMessageBubble import UserMessageBubble
+from app.gui.dialogs.weekly_journal.LoadBlogListThread import LoadBlogListThread
+from app.gui.dialogs.weekly_journal.LoadWeekDataThread import LoadWeekDataThread
 from app.utils.files import read_config, append_journal_entry, load_journal_history, clear_journal_history
 
 
 class WeeklyJournalDialog(QDialog):
     def __init__(self, model_config: dict, args, parent=None):
-        # 设置 parent 为 None 以确保在任务栏显示独立图标
-        super().__init__(None)
-        self.setWindowTitle("周记提交")
-        # 添加最小化和最大化按钮，以及 Window 标志确保任务栏显示
-        self.setWindowFlags(self.windowFlags() | Qt.Window | Qt.WindowMinimizeButtonHint | Qt.WindowMaximizeButtonHint | Qt.WindowCloseButtonHint)
+        try:
+            with open("debug_crash.txt", "a", encoding="utf-8") as f: f.write("STEP 1: Entering WeeklyJournalDialog.__init__\n")
+            
+            # 设置 parent 为 None 以确保在任务栏显示独立图标
+            super().__init__(None)
+            with open("debug_crash.txt", "a", encoding="utf-8") as f: f.write("STEP 2: super().__init__ done\n")
+            
+            self.setWindowTitle("周记提交")
+            # 添加最小化和最大化按钮，以及 Window 标志确保任务栏显示
+            self.setWindowFlags(
+                self.windowFlags() | Qt.Window | Qt.WindowMinimizeButtonHint | Qt.WindowMaximizeButtonHint | Qt.WindowCloseButtonHint)
+            
+            with open("debug_crash.txt", "a", encoding="utf-8") as f: f.write("STEP 3: Window flags set\n")
 
-        # 自适应屏幕大小
-        self._setup_window_geometry()
+            # 自适应屏幕大小
+            self._setup_window_geometry()
+            with open("debug_crash.txt", "a", encoding="utf-8") as f: f.write("STEP 4: Geometry set\n")
 
-        self.model_config = model_config or {}
-        self.history = {"generated": [], "submitted": []}
-        self._ai_busy = False
-        self._ai_thread = None
-        self._load_data_thread = None
-        self.args = args
-        self.config = None
-        self.trainee_id = None
-        self.year_data = None
-        self.week_data = None
-        self._refresh_timer = QTimer()
-        self._refresh_timer.setSingleShot(True)
-        self._refresh_timer.timeout.connect(self._enable_refresh_buttons)
-        self._refresh_cooldown = 2000  # 2秒冷却时间
-        self._refresh_buttons_enabled = True
-        self._setup_styles()
-        self._setup_ui()
-        self._load_history()
-        # 初始化编辑器高度
-        QTimer.singleShot(0, self._adjust_editor_height)
-        # 自动加载年月数据
-        QTimer.singleShot(100, self._load_year_month_data)
+            self.model_config = model_config or {}
+            self.history = {"generated": [], "submitted": []}
+            self._ai_busy = False
+            self._ai_thread = None
+            self._load_data_thread = None
+            self.args = args
+            self.config = None
+            self.trainee_id = None
+            self.year_data = None
+            self.week_data = None
+            self.current_months = [] # 存储当前选中的月份列表
+            self._refresh_timer = QTimer()
+            self._refresh_timer.setSingleShot(True)
+            self._refresh_timer.timeout.connect(self._enable_refresh_buttons)
+            self._refresh_cooldown = 2000  # 2秒冷却时间
+            self._refresh_buttons_enabled = True
+            self.current_page = 1
+            self.total_pages = 1
+            self.current_page = 1
+            self.total_pages = 1
+            self._load_blog_list_thread = None
+            self._load_week_data_thread = None
+            
+            self._setup_styles()
+            self._setup_ui()
+            with open("debug_crash.txt", "a", encoding="utf-8") as f: f.write("STEP 7: UI setup done\n")
+            
+            self._load_history()
+            with open("debug_crash.txt", "a", encoding="utf-8") as f: f.write("STEP 8: History loaded\n")
+            
+            # 初始化编辑器高度
+            QTimer.singleShot(0, self._adjust_editor_height)
+            # 自动加载年月数据
+            QTimer.singleShot(100, self._load_year_month_data)
+            
+            with open("debug_crash.txt", "a", encoding="utf-8") as f: f.write("STEP 9: Init finished completely\n")
+            
+        except Exception as e:
+            err_msg = traceback.format_exc()
+            with open("debug_crash.txt", "a", encoding="utf-8") as f: f.write(f"CRASH IN INIT: {e}\n{err_msg}\n")
+            raise e
 
     def _setup_window_geometry(self):
         """设置窗口尺寸，自适应屏幕大小"""
@@ -149,8 +180,41 @@ class WeeklyJournalDialog(QDialog):
 
         self.submitted_widget = QListWidget()
         self.submitted_widget.setObjectName("HistoryList")
-        self.submitted_widget.itemDoubleClicked.connect(self._fill_from_history)
+        self.submitted_widget = QListWidget()
+        self.submitted_widget.setObjectName("HistoryList")
+        self.submitted_widget.itemDoubleClicked.connect(self._open_blog_detail)
         sidebar_layout.addWidget(self.submitted_widget)
+        sidebar_layout.addWidget(self.submitted_widget)
+
+        # 分页控件
+        pagination_layout = QHBoxLayout()
+        pagination_layout.setContentsMargins(0, 0, 0, 0)
+        
+        self.btn_prev = QPushButton("◀")
+        self.btn_prev.setFixedSize(24, 24)
+        self.btn_prev.setCursor(Qt.PointingHandCursor)
+        self.btn_prev.clicked.connect(self._prev_page)
+        self.btn_prev.setStyleSheet("""
+            QPushButton { background: transparent; color: #6B7280; border: 1px solid #2D313E; border-radius: 4px; }
+            QPushButton:hover { border-color: #4A90D9; color: #E8EAED; }
+            QPushButton:disabled { color: #2D313E; border-color: #1F2233; }
+        """)
+        
+        self.lbl_page = QLabel("1/1")
+        self.lbl_page.setAlignment(Qt.AlignCenter)
+        self.lbl_page.setStyleSheet("color: #6B7280; font-size: 11px;")
+        
+        self.btn_next = QPushButton("▶")
+        self.btn_next.setFixedSize(24, 24)
+        self.btn_next.setCursor(Qt.PointingHandCursor)
+        self.btn_next.clicked.connect(self._next_page)
+        self.btn_next.setStyleSheet(self.btn_prev.styleSheet())
+
+        pagination_layout.addWidget(self.btn_prev)
+        pagination_layout.addWidget(self.lbl_page)
+        pagination_layout.addWidget(self.btn_next)
+        
+        sidebar_layout.addLayout(pagination_layout)
 
         # 兼容旧代码
         self.generated_container = self.generated_widget
@@ -281,10 +345,12 @@ class WeeklyJournalDialog(QDialog):
         self.year_combo = QComboBox()
         self.year_combo.setVisible(False)
         self.year_combo.currentIndexChanged.connect(self._on_year_changed)
-
+        self.year_combo.activated.connect(self._stop_auto_finding)
+        
         self.month_combo = QComboBox()
-        self.month_combo.setVisible(False)
+        self.month_combo.setPlaceholderText("选择月份")
         self.month_combo.currentIndexChanged.connect(self._on_month_changed)
+        self.month_combo.activated.connect(self._stop_auto_finding)
 
         self.week_combo = QComboBox()
         self.week_combo.setVisible(False)
@@ -495,8 +561,9 @@ class WeeklyJournalDialog(QDialog):
             return
 
         if not self._show_custom_confirm("确认清空",
-                "确定要清空所有 AI 生成的历史记录吗？\n此操作将清除左侧列表中的所有记录。", confirm_text="🗑️ 清空",
-                is_danger=True):
+                                         "确定要清空所有 AI 生成的历史记录吗？\n此操作将清除左侧列表中的所有记录。",
+                                         confirm_text="🗑️ 清空",
+                                         is_danger=True):
             return
 
         self.history["generated"] = []
@@ -536,7 +603,180 @@ class WeeklyJournalDialog(QDialog):
         data = load_journal_history()
         self.history = data
         self._populate_list(self.generated_widget, data.get("generated", []))
-        self._populate_list(self.submitted_widget, data.get("submitted", []))
+        # self._populate_list(self.submitted_widget, data.get("submitted", [])) # 不再加载本地提交记录
+
+    def _load_blog_list_from_server(self, page=1):
+        """从服务器加载周记列表"""
+        if not self.args:
+            return
+
+        self.current_page = page
+        self.lbl_page.setText(f"{self.current_page}/...")
+        
+        self.submitted_widget.clear()
+        item = QListWidgetItem("正在加载...")
+        item.setTextAlignment(Qt.AlignCenter)
+        item.setFlags(Qt.NoItemFlags)
+        self.submitted_widget.addItem(item)
+        
+        self.btn_prev.setEnabled(False)
+        self.btn_next.setEnabled(False)
+
+        if not self.config:
+             self.config = read_config(CONFIG_FILE)
+
+        self._load_blog_list_thread = LoadBlogListThread(self.args, self.config['input'], page)
+        self._load_blog_list_thread.finished_signal.connect(self._on_blog_list_loaded)
+        self._load_blog_list_thread.error_signal.connect(self._on_blog_list_error)
+        self._load_blog_list_thread.start()
+
+    def _on_blog_list_loaded(self, data):
+        self.submitted_widget.clear()
+        
+        # 假设 data 是一个列表或者包含 list 的字典
+        # 根据XYB接口通常返回，data可能直接是list，或者包含 list 和 pagination info
+        # 这里先做通用处理
+        blog_list = []
+        total_pages = 1
+        
+        # 尝试解析数据结构
+        if isinstance(data, list):
+            blog_list = data
+            # 如果是纯列表，可能没法知道总页数，除非列表为空说明到底了
+            total_pages = self.current_page + 1 if len(blog_list) > 0 else self.current_page
+        elif isinstance(data, dict):
+            blog_list = data.get('list', [])
+            total_pages = data.get('maxPage', 1)
+
+        self.total_pages = int(total_pages)
+        self.lbl_page.setText(f"{self.current_page}/{self.total_pages}")
+        
+        self.btn_prev.setEnabled(self.current_page > 1)
+        self.btn_next.setEnabled(self.current_page < self.total_pages)
+
+        if not blog_list:
+            item = QListWidgetItem("暂无数据")
+            item.setTextAlignment(Qt.AlignCenter)
+            item.setFlags(Qt.NoItemFlags)
+            self.submitted_widget.addItem(item)
+            return
+
+        for blog in blog_list:
+            self._add_server_blog_item(blog)
+
+    def _add_server_blog_item(self, blog):
+        # 提取字段
+        title = blog.get('blogTitle', '无标题')
+        # 优先使用提交日期，如果没有则使用结束日期
+        date_str = blog.get('commitDate') or blog.get('endDate') or ''
+        # 如果包含年份则简化（假设当前年份）
+        if len(date_str) > 5 and '.' in date_str:
+            # 2025.11.23 -> 11.23
+            parts = date_str.split('.')
+            if len(parts) >= 2:
+                date_str = f"{parts[-2]}.{parts[-1]}"
+        
+        blog_id = blog.get('blogId')
+        content = blog.get('blogBody', '')
+        week_range = f"{blog.get('startDate', '')}-{blog.get('endDate', '')}"
+        
+        # 创建列表项
+        item = QListWidgetItem()
+        # 存储数据
+        item.setData(Qt.UserRole, content) 
+        item.setData(Qt.UserRole + 1, blog_id)
+        item.setData(Qt.UserRole + 2, title)
+        item.setData(Qt.UserRole + 3, f"{date_str}  |  {week_range}")
+        
+        # 创建自定义 Widget
+        widget = QWidget()
+        widget.setStyleSheet("""
+            QWidget {
+                background-color: transparent;
+            }
+            QLabel {
+                border: none;
+                background: transparent;
+            }
+        """)
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(12, 10, 12, 10)
+        layout.setSpacing(4)
+        
+        # 标题行
+        title_label = QLabel(title)
+        title_label.setStyleSheet("""
+            font-family: "Microsoft YaHei", "Segoe UI";
+            font-size: 13px;
+            font-weight: bold;
+            color: #E8EAED;
+        """)
+        title_label.setWordWrap(True)
+        
+        # 信息行 (日期 | 时间范围)
+        info_layout = QHBoxLayout()
+        info_layout.setSpacing(10)
+        info_layout.setContentsMargins(0, 2, 0, 0)
+        
+        date_label = QLabel(f"{date_str}")
+        date_label.setStyleSheet("color: #4A90D9; font-size: 11px; font-weight: 500;")
+        
+        range_label = QLabel(week_range)
+        range_label.setStyleSheet("color: #80868B; font-size: 11px;")
+        
+        info_layout.addWidget(date_label)
+        info_layout.addWidget(range_label)
+        info_layout.addStretch()
+        
+        layout.addWidget(title_label)
+        layout.addLayout(info_layout)
+        
+        # 强制设置合适的高度，避免挤压
+        item.setSizeHint(QSize(200, 68))
+        
+        self.submitted_widget.addItem(item)
+        self.submitted_widget.setItemWidget(item, widget)
+
+    def _open_blog_detail(self, item: QListWidgetItem):
+        """打开周记详情弹窗"""
+        content = item.data(Qt.UserRole)
+        blog_id = item.data(Qt.UserRole + 1)
+        
+        # 从 ItemWidget 中获取标题等信息（或者重新解析）
+        # 这里简单起见，我们根据 Item 的显示习惯，或者重新获取 currentData?
+        # 由于我们存了 content，但 title 没有存 UserRole，我们可以存一下
+        title = item.data(Qt.UserRole + 2)
+        date_info = item.data(Qt.UserRole + 3) # date | range
+        
+        dialog = BlogDetailDialog(title, date_info, content, self)
+        if dialog.exec() == QDialog.Accepted and dialog.action == "use":
+             # "使用此内容" - 覆盖当前编辑器
+             self.editor.setPlainText(content)
+             # 如果需要，也可以切换界面状态
+             if self._title_container.isVisible():
+                self._title_container.hide()
+                self._top_spacer.hide()
+                self._bottom_spacer.hide()
+                self._chat_area_widget.setVisible(True)
+
+    def _on_blog_list_error(self, err_msg):
+        self.submitted_widget.clear()
+        item = QListWidgetItem(f"加载失败")
+        item.setToolTip(err_msg)
+        item.setForeground(Qt.red)
+        self.submitted_widget.addItem(item)
+        self.btn_prev.setEnabled(self.current_page > 1)
+        # 如果出错，允许尝试下一页或者重试当前页? 简单起见允许翻页
+        self.btn_next.setEnabled(True) 
+        ToastManager.instance().show(f"加载列表失败: {err_msg}", "warning")
+
+    def _prev_page(self):
+        if self.current_page > 1:
+            self._load_blog_list_from_server(self.current_page - 1)
+
+    def _next_page(self):
+        # 这里简单判断，只要当前页不是最后一页
+        self._load_blog_list_from_server(self.current_page + 1)
 
     def _populate_list(self, widget: QListWidget, entries):
         if widget is None:
@@ -625,35 +865,63 @@ class WeeklyJournalDialog(QDialog):
     def _load_year_month_data(self):
         """加载年月数据（用户手动触发）"""
         try:
+            with open("debug_crash.txt", "a", encoding="utf-8") as f: f.write("STEP 10: Entering _load_year_month_data\n")
             if not self.config:
                 self.config = read_config(CONFIG_FILE)
             # 在子线程中加载数据，避免阻塞UI
+            with open("debug_crash.txt", "a", encoding="utf-8") as f: f.write("STEP 11: Creating LoadYearDataThread\n")
             self._load_data_thread = LoadYearDataThread(self.config)
             self._load_data_thread.finished_signal.connect(self._on_year_data_loaded)
             self._load_data_thread.error_signal.connect(self._on_year_data_error)
             self._load_data_thread.start()
+            with open("debug_crash.txt", "a", encoding="utf-8") as f: f.write("STEP 12: LoadYearDataThread started\n")
             self.btn_load_data.setEnabled(False)
             self.btn_load_data.setText("加载中...")
         except Exception as e:
+            with open("debug_crash.txt", "a", encoding="utf-8") as f: f.write(f"CRASH IN _load_year_month_data: {e}\n")
             logging.error(f"加载年月数据失败: {e}")
             ToastManager.instance().show(f"加载失败: {str(e)}", "warning")
 
     def _on_year_data_loaded(self, login_args, trainee_id, year_data):
         """年份数据加载完成"""
-        self.args = login_args
-        self.trainee_id = trainee_id
-        self.year_data = year_data
-        # 更新UI
-        self.year_combo.clear()
-        for year_item in self.year_data:
-            year_name = year_item.get('name', '')
-            self.year_combo.addItem(year_name, year_item)
-        if self.year_combo.count() > 0:
-            self.year_combo.setCurrentIndex(0)
-            self._on_year_changed()
-        self.btn_load_data.setEnabled(True)
-        self.btn_load_data.setText("加载年月")
-        ToastManager.instance().show("年月数据加载成功", "success")
+        try:
+            with open("debug_crash.txt", "a", encoding="utf-8") as f: f.write("STEP 13: _on_year_data_loaded called\n")
+            self.args = login_args
+            self.trainee_id = trainee_id
+            self.year_data = year_data
+            # 更新UI
+            self.year_combo.clear()
+            
+            if self.year_data is None:
+                self.year_data = []
+
+            for i, year_item in enumerate(self.year_data):
+                year_name = str(year_item.get('name', ''))
+                # 改为存储索引，避免C++层崩溃
+                self.year_combo.addItem(year_name, i)
+            
+            # 保持阻断直到设置完 index
+            if self.year_combo.count() > 0:
+                self.year_combo.setCurrentIndex(0)
+            
+            self.year_combo.blockSignals(False)
+            
+            if self.year_combo.count() > 0:
+                self._on_year_changed()
+
+            self.btn_load_data.setEnabled(True)
+            self.btn_load_data.setText("加载年月")
+            
+            ToastManager.instance().show("年月数据加载成功", "success")
+            
+            # 登录信息更新后，加载第一页周记列表
+            self._load_blog_list_from_server(1)
+
+        except Exception as e:
+            import traceback
+            err_msg = traceback.format_exc()
+            # 再次抛出以便全局捕获（如果有）
+            raise e
 
     def _on_year_data_error(self, error_msg):
         """年份数据加载失败"""
@@ -681,6 +949,10 @@ class WeeklyJournalDialog(QDialog):
         except Exception as e:
             logging.error(f"加载年份数据失败: {e}")
             ToastManager.instance().show(f"加载年份失败: {str(e)}", "warning")
+
+    def _stop_auto_finding(self):
+        """用户手动操作时停止自动跳转"""
+        self._auto_finding_next = False
 
     def _enable_refresh_buttons(self):
         """启用刷新按钮"""
@@ -713,46 +985,166 @@ class WeeklyJournalDialog(QDialog):
     def _on_year_changed(self):
         """年份改变时更新月份"""
         try:
-            year_item = self.year_combo.currentData()
-            if not year_item:
+            with open("debug_crash.txt", "a", encoding="utf-8") as f: f.write("STEP YC.1: _on_year_changed called\n")
+            year_idx = self.year_combo.currentData()
+
+            if year_idx is None or not isinstance(year_idx, int):
+                with open("debug_crash.txt", "a", encoding="utf-8") as f: f.write(f"STEP YC.1.1: Invalid year_idx: {year_idx}, returning\n")
                 return
-            months = year_item.get('months', [])
+
+            if not self.year_data or year_idx >= len(self.year_data):
+                with open("debug_crash.txt", "a", encoding="utf-8") as f: f.write(f"STEP YC.1.2: year_data empty or index out of bounds: {year_idx}, returning\n")
+                return
+
+            year_item = self.year_data[year_idx]
+            with open("debug_crash.txt", "a", encoding="utf-8") as f: f.write(f"STEP YC.2: Got year_item index {year_idx} (name: {year_item.get('name')})\n")
+
+            raw_months = year_item.get('months', [])
+            try:
+                self.current_months = sorted(raw_months, key=lambda x: int(x.get('id', 0)))
+            except Exception as e:
+                logging.error(f"月份排序失败: {e}")
+                self.current_months = raw_months
+
+            with open("debug_crash.txt", "a", encoding="utf-8") as f: f.write(f"STEP YC.3: months sorted ({len(self.current_months)} items)\n")
+
+            # 阻断信号
+            self.month_combo.blockSignals(True)
             self.month_combo.clear()
-            for month_item in months:
+            for i, month_item in enumerate(self.current_months):
                 month_name = month_item.get('name', '')
-                self.month_combo.addItem(month_name, month_item)
+                self.month_combo.addItem(month_name, i) # 存储索引
+
+            with open("debug_crash.txt", "a", encoding="utf-8") as f: f.write("STEP YC.4: month_combo populated\n")
+
+            # 手动调用一次自动查找逻辑
             if self.month_combo.count() > 0:
                 self.month_combo.setCurrentIndex(0)
-                self._on_month_changed()
+
+            # 解除阻断 (但在手动调用前保持阻断也可以，或者解除后不依靠信号)
+            # 为了防止 setCurrentIndex 触发信号（如果它变了），我们将解除阻断放在后面，或者就是依靠显式调用
+            # 实际上 setCurrentIndex(0) 如果之前是空，可能会触发。我们希望屏蔽它。
+
+            self.month_combo.blockSignals(False)
+
+            if self.month_combo.count() > 0:
+                 with open("debug_crash.txt", "a", encoding="utf-8") as f: f.write("STEP YC.5: calling _on_month_changed explicitly\n")
+                 self._on_month_changed()
+
+            with open("debug_crash.txt", "a", encoding="utf-8") as f: f.write("STEP YC.End: _on_year_changed finished\n")
         except Exception as e:
+            msg = f"CRASH IN _on_year_changed: {e}"
+            with open("debug_crash.txt", "a", encoding="utf-8") as f: f.write(msg + "\n")
             logging.error(f"更新月份失败: {e}")
+
 
     def _on_month_changed(self):
         """月份改变时更新周信息"""
         try:
-            year_item = self.year_combo.currentData()
-            month_item = self.month_combo.currentData()
-            if not year_item or not month_item:
+            with open("debug_crash.txt", "a", encoding="utf-8") as f: f.write("STEP MC.1: _on_month_changed called\n")
+            year_idx = self.year_combo.currentData()
+            month_idx = self.month_combo.currentData()
+            
+            if year_idx is None or month_idx is None: 
                 return
+            
+            if not isinstance(year_idx, int) or not isinstance(month_idx, int):
+                with open("debug_crash.txt", "a", encoding="utf-8") as f: f.write(f"STEP MC.Error: invalid indices {year_idx}, {month_idx}\n")
+                return
+
+            year_item = self.year_data[year_idx]
+            month_item = self.current_months[month_idx]
+            with open("debug_crash.txt", "a", encoding="utf-8") as f: f.write(f"STEP MC.2: Selected {year_item.get('name')} - {month_item.get('name')}\n")
+
             year_id = year_item.get('id')
             month_id = month_item.get('id')
             if not year_id or not month_id:
                 return
-            self.week_data = load_blog_date(self.args, self.config['input'], year_id, month_id)
+            
+            # 使用线程异步加载
+            self.week_combo.blockSignals(True)
             self.week_combo.clear()
-            for week_item in self.week_data:
+            self.week_combo.addItem("加载中...", None)
+            self.week_combo.blockSignals(False)
+            
+            # 禁用相关控件防止并发操作
+            self.year_combo.setEnabled(False)
+            self.month_combo.setEnabled(False)
+            self.week_combo.setEnabled(False)
+
+            self._load_week_data_thread = LoadWeekDataThread(self.args, self.config['input'], year_id, month_id)
+            self._load_week_data_thread.finished_signal.connect(self._on_week_data_loaded)
+            self._load_week_data_thread.error_signal.connect(self._on_week_data_error)
+            self._load_week_data_thread.start()
+            with open("debug_crash.txt", "a", encoding="utf-8") as f: f.write("STEP MC.3: Week thread started\n")
+
+        except Exception as e:
+            msg = f"CRASH IN _on_month_changed: {e}"
+            with open("debug_crash.txt", "a", encoding="utf-8") as f: f.write(msg + "\n")
+            logging.error(f"更新周信息失败: {e}")
+            ToastManager.instance().show(f"加载周信息失败: {str(e)}", "warning")
+
+    def _on_week_data_loaded(self, week_data):
+        try:
+            with open("debug_crash.txt", "a", encoding="utf-8") as f: f.write("STEP WD.1: _on_week_data_loaded called\n")
+            self.week_data = week_data
+            self.week_combo.clear()
+            target_index = 0
+            found_unsubmitted = False
+
+            with open("debug_crash.txt", "a", encoding="utf-8") as f: f.write(f"STEP WD.2: week_data len: {len(week_data)}\n")
+
+            for i, week_item in enumerate(self.week_data):
                 week_num = week_item.get('week', 0)
                 start_date = week_item.get('startDate', '')
                 end_date = week_item.get('endDate', '')
                 blog_count = week_item.get('blogCount', 0)
-                status = week_item.get('status', 2)
-                # status: 1-已提交，2-未提交
-                status_text = "已提交" if status == 1 else "未提交"
+
+                # 调试：更稳健的状态检查
+                raw_status = week_item.get('status')
+                status_code = str(raw_status) if raw_status is not None else "2"
+                is_submitted = (status_code == "1")
+
+                status_text = "已提交" if is_submitted else "未提交"
                 week_text = f"第{week_num}周 ({start_date} ~ {end_date}) - {status_text} ({blog_count}篇)"
-                self.week_combo.addItem(week_text, week_item)
+                # 改为存储索引
+                self.week_combo.addItem(week_text, i)
+
+                # 记录第一个未提交的周次索引
+                if not found_unsubmitted and not is_submitted:
+                    target_index = i
+                    found_unsubmitted = True
+
+            with open("debug_crash.txt", "a", encoding="utf-8") as f: f.write("STEP WD.3: week_combo populated\n")
+
+            # 恢复控件状态
+            self.year_combo.setEnabled(True)
+            self.month_combo.setEnabled(True)
+            self.week_combo.setEnabled(True)
+            self._load_week_data_thread = None
+
+            # 默认选中第一个
+            if self.week_combo.count() > 0:
+                self.week_combo.setCurrentIndex(0)
+
+
+
         except Exception as e:
-            logging.error(f"更新周信息失败: {e}")
-            ToastManager.instance().show(f"加载周信息失败: {str(e)}", "warning")
+            with open("debug_crash.txt", "a", encoding="utf-8") as f: f.write(f"CRASH IN _on_week_data_loaded: {e}\n")
+            logging.error(f"加载周数据失败: {e}")
+
+
+
+    def _on_week_data_error(self, err_msg):
+        self.week_combo.clear()
+        self.week_combo.addItem("加载失败", None)
+        ToastManager.instance().show(f"加载周信息失败: {err_msg}", "warning")
+        
+        # 恢复控件状态
+        self.year_combo.setEnabled(True)
+        self.month_combo.setEnabled(True)
+        self.week_combo.setEnabled(True)
+        self._load_week_data_thread = None
 
     def _check_jsessionid_validity(self):
         """检查jsessionid是否有效"""
@@ -823,7 +1215,8 @@ class WeeklyJournalDialog(QDialog):
             # 提交周记
             try:
                 blog_id = submit_blog(args=self.args, config=self.config['input'], blog_title=title, blog_body=content,
-                    start_date=start_date, end_date=end_date, blog_open_type=blog_open_type, trainee_id=self.trainee_id)
+                                      start_date=start_date, end_date=end_date, blog_open_type=blog_open_type,
+                                      trainee_id=self.trainee_id)
 
                 append_journal_entry("submitted", content)
                 ToastManager.instance().show(f"周记提交成功！ID: {blog_id}", "success")
@@ -852,37 +1245,20 @@ class WeeklyJournalDialog(QDialog):
             ToastManager.instance().show("正在提交中，请稍后...", "warning")
             return
 
-        # 1. 弹出配置与确认对话框
-        confirmed, final_title, final_content = self._show_submit_config_dialog(content)
-        if not confirmed:
-            return
-
-        week_id = self.week_combo.currentData()
-        start_date = self.week_combo.itemData(self.week_combo.currentIndex(), Qt.UserRole + 1)
-        end_date = self.week_combo.itemData(self.week_combo.currentIndex(), Qt.UserRole + 2)
-        permission = self.permission_combo.currentData()
-
-        # 2. 启动提交线程
-        self.btn_ai.setEnabled(False)
-        self._submit_thread = SubmitJournalThread(final_content, final_title, start_date, end_date, permission, week_id)
-        self._submit_thread.finished_signal.connect(self._on_submit_finished)
-        self._submit_thread.error_signal.connect(self._on_submit_error)
-        self._submit_thread.start()
-
-    def _on_submit_finished(self, msg):
-        self.btn_ai.setEnabled(True)
-        ToastManager.instance().show(msg, "success")
-        append_journal_entry("submitted", self._submit_thread.content)  # Record submission
-        self._load_history()
-        self._submit_thread = None
-
-    def _on_submit_error(self, err):
-        self.btn_ai.setEnabled(True)
-        ToastManager.instance().show(f"提交失败: {err}", "error")
-        self._submit_thread = None
+        # 弹出配置与确认对话框 (内部处理提交逻辑)
+        self._show_submit_config_dialog(content)
 
     def _show_submit_config_dialog(self, content):
         """显示提交配置对话框"""
+        # 检查当前是否需要自动跳转（如果当前已加载的全部已提交）
+        if self.week_data:
+            all_submitted = all(w.get('status') == 1 for w in self.week_data)
+            if all_submitted:
+                self._auto_finding_next = True
+                # 尝试触发一次跳转
+                if not self._try_auto_switch_next():
+                    self._auto_finding_next = False
+
         dialog = QDialog(self)
         dialog.setWindowTitle("提交周记配置")
         dialog.setFixedWidth(500)
@@ -944,8 +1320,9 @@ class WeeklyJournalDialog(QDialog):
         title_layout.addWidget(QLabel("标题:"))
         title_edit = QLineEdit()
         # 默认标题
-        current_week_item = self.week_combo.currentData()
-        if current_week_item:
+        week_idx = self.week_combo.currentData()
+        if week_idx is not None and isinstance(week_idx, int) and self.week_data:
+            current_week_item = self.week_data[week_idx]
             title_edit.setText(f"第{current_week_item.get('week', '')}周实习周记")
         else:
             title_edit.setText("实习周记")
@@ -968,10 +1345,63 @@ class WeeklyJournalDialog(QDialog):
                 background-color: #2563EB; color: white; border: none; font-weight: bold;
             }
             QPushButton:hover { background-color: #1D4ED8; }
+            QPushButton:disabled { background-color: #4B5563; color: #9CA3AF; }
         """)
 
         btn_cancel.clicked.connect(dialog.reject)
-        btn_submit.clicked.connect(dialog.accept)
+        
+        # 定义提交逻辑
+        def on_submit_click():
+             week_idx = self.week_combo.currentData()
+             if week_idx is None or not isinstance(week_idx, int):
+                 ToastManager.instance().show("请先选择周次", "warning")
+                 return
+             
+             week_item = self.week_data[week_idx]
+             
+             start_date = week_item.get('startDate')
+             end_date = week_item.get('endDate')
+             permission = self.permission_combo.currentData()
+             final_title = title_edit.text().strip()
+             final_content = content_edit.toPlainText()
+             
+             # 禁用UI
+             btn_submit.setEnabled(False)
+             btn_submit.setText("提交中...")
+             title_edit.setEnabled(False)
+             content_edit.setEnabled(False)
+             btn_cancel.setEnabled(False)
+             
+             # 启动线程 (临时属性挂到 dialog 上避免被回收)
+             dialog._thread = SubmitJournalThread(
+                args=self.args, config=self.config['input'],
+                blog_title=final_title, blog_body=final_content, 
+                start_date=start_date, end_date=end_date,
+                blog_open_type=permission, trainee_id=self.trainee_id
+             )
+             
+             def on_success(msg):
+                 ToastManager.instance().show(msg, "success")
+                 append_journal_entry("submitted", final_content)
+                 # 刷新列表
+                 self._load_blog_list_from_server(1)
+                 # 关闭对话框
+                 dialog.accept()
+                 
+             def on_error(err):
+                 ToastManager.instance().show(f"提交失败: {err}", "error")
+                 # 恢复UI
+                 btn_submit.setEnabled(True)
+                 btn_submit.setText("🚀 确认提交")
+                 title_edit.setEnabled(True)
+                 content_edit.setEnabled(True)
+                 btn_cancel.setEnabled(True)
+                 
+             dialog._thread.finished_signal.connect(on_success)
+             dialog._thread.error_signal.connect(on_error)
+             dialog._thread.start()
+
+        btn_submit.clicked.connect(on_submit_click)
 
         btn_box.addStretch()
         btn_box.addWidget(btn_cancel)
@@ -979,7 +1409,7 @@ class WeeklyJournalDialog(QDialog):
         layout.addLayout(btn_box)
 
         # 执行对话框
-        result = dialog.exec()
+        dialog.exec()
 
         # 4. 恢复 Combos (无论结果如何都归还)
         # 必须先重新设置 parent，否则 visible 设为 false 可能没用（如果 dialog 销毁）
@@ -992,10 +1422,6 @@ class WeeklyJournalDialog(QDialog):
         self.month_combo.setVisible(False)
         self.week_combo.setVisible(False)
         self.permission_combo.setVisible(False)
-
-        if result == QDialog.Accepted:
-            return True, title_edit.text().strip(), content_edit.toPlainText()
-        return False, None, None
 
     def _fill_from_history(self, item: QListWidgetItem):
         content = item.data(Qt.UserRole)
@@ -1024,9 +1450,9 @@ class WeeklyJournalDialog(QDialog):
             return
 
         # 使用自定义确认对话框
-        if not self._show_custom_confirm("确认清空", "确定要清空当前对话内容吗？\n此操作无法撤销。",
-                confirm_text="🗑️ 清空", is_danger=True):
-            return
+        # if not self._show_custom_confirm("确认清空", "确定要清空当前对话内容吗？\n此操作无法撤销。",
+        #                                  confirm_text="🗑️ 清空", is_danger=True):
+        #     return
 
         # 清空聊天消息
         while self.chat_messages_layout.count() > 0:
@@ -1600,18 +2026,102 @@ class WeeklyJournalDialog(QDialog):
         if busy:
             self.btn_ai.setEnabled(False)
             self.btn_ai.setText("生成中...")
-            if not self._ai_busy:
-                QApplication.setOverrideCursor(Qt.WaitCursor)
             self._ai_busy = True
         else:
             self.btn_ai.setEnabled(True)
             self.btn_ai.setText("🔺发送")
-            if self._ai_busy:
-                QApplication.restoreOverrideCursor()
-                self._ai_busy = False
+            self._ai_busy = False
 
     def _confirm_generation(self, role: str) -> bool:
         summary = (f"职业/岗位：{role or '未填写'}\n\n"
                    "请确认这些提示词信息无误，是否继续生成？")
         reply = QMessageBox.question(self, "确认提示词", summary, QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes, )
         return reply == QMessageBox.Yes
+
+
+class BlogDetailDialog(QDialog):
+    def __init__(self, title, date_info, content, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("周记详情")
+        self.setFixedSize(600, 700)
+        self.action = None # "use" or None
+        
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(24, 24, 24, 24)
+        layout.setSpacing(16)
+        
+        # 样式
+        self.setStyleSheet("""
+            QDialog { background-color: #1E1E2E; color: #E8EAED; }
+            QLabel { color: #E8EAED; }
+            QTextBrowser { 
+                background-color: #262939; 
+                border: 1px solid #363A4D; 
+                border-radius: 8px; 
+                padding: 16px;
+                color: #B0B5C2;
+                font-size: 14px;
+                line-height: 1.6;
+            }
+            QPushButton {
+                padding: 8px 16px;
+                border-radius: 6px;
+                font-weight: 600;
+                font-size: 13px;
+            }
+            QPushButton#Primary { background-color: #4F6BFF; color: white; border: none; }
+            QPushButton#Primary:hover { background-color: #3D5CE5; }
+            QPushButton#Secondary { background-color: #2D313E; color: #9AA0A6; border: 1px solid #3E4252; }
+            QPushButton#Secondary:hover { background-color: #363A4D; color: white; }
+        """)
+
+        # 头部
+        header_layout = QVBoxLayout()
+        title_lbl = QLabel(title)
+        title_lbl.setStyleSheet("font-size: 20px; font-weight: bold; color: white;")
+        title_lbl.setWordWrap(True)
+        
+        meta_layout = QHBoxLayout()
+        date_lbl = QLabel(date_info)
+        date_lbl.setStyleSheet("color: #717684; font-size: 12px;")
+        meta_layout.addWidget(date_lbl)
+        meta_layout.addStretch()
+        
+        header_layout.addWidget(title_lbl)
+        header_layout.addLayout(meta_layout)
+        
+        layout.addLayout(header_layout)
+        
+        # 内容
+        self.browser = QTextBrowser()
+        # 简单的 HTML 渲染
+        html = content.replace('\n', '<br>')
+        self.browser.setHtml(html)
+        layout.addWidget(self.browser)
+        
+        # 底部按钮
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+        
+        btn_copy = QPushButton("复制内容")
+        btn_copy.setObjectName("Secondary")
+        btn_copy.clicked.connect(self._copy_content)
+        
+        btn_use = QPushButton("✏️ 编辑引用")
+        btn_use.setObjectName("Primary")
+        btn_use.setToolTip("将此内容填入主编辑器")
+        btn_use.clicked.connect(self._use_content)
+        
+        btn_layout.addWidget(btn_copy)
+        btn_layout.addWidget(btn_use)
+        
+        layout.addLayout(btn_layout)
+
+    def _copy_content(self):
+        clipboard = QApplication.clipboard()
+        clipboard.setText(self.browser.toPlainText())
+        ToastManager.instance().show("内容已复制到剪贴板", "success")
+
+    def _use_content(self):
+        self.action = "use"
+        self.accept()

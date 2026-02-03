@@ -10,7 +10,7 @@ from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import QMainWindow, QWidget, QHBoxLayout, QFrame, QVBoxLayout, QLabel, QGridLayout, QPushButton, \
     QButtonGroup, QRadioButton, QProgressBar, QSizePolicy, QMessageBox, QApplication, QTextEdit, QDialog, QFileDialog
 
-from app.config.common import QQ_GROUP, PROJECT_VERSION, CONFIG_FILE, MITM_PROXY, API_URL, PROJECT_NAME
+from app.config.common import QQ_GROUP, PROJECT_VERSION, CONFIG_FILE, MITM_PROXY, API_URL, PROJECT_NAME, PROJECT_GITHUB
 from app.gui.components.log_viewer import QTextEditLogger
 from app.gui.components.toast import ToastManager
 from app.gui.dialogs.dialogs.config_dialog import ConfigDialog
@@ -216,7 +216,7 @@ class ModernWindow(QMainWindow):
 
         btn_git = QPushButton("开源仓库")
         btn_git.setObjectName("BtnGit")
-        btn_git.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://gitee.com/ckkk524334/sign-sign-in")))
+        btn_git.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(PROJECT_GITHUB)))
         btn_row2.addWidget(btn_git)
 
         l_vbox.addLayout(btn_row2)
@@ -627,8 +627,13 @@ class ModernWindow(QMainWindow):
             self.weekly_journal_dialog.close()
             self.weekly_journal_dialog.deleteLater()
 
-        self.weekly_journal_dialog = WeeklyJournalDialog(config.get("model", {}), login_args, self)
-        self.weekly_journal_dialog.show()
+        try:
+            self.weekly_journal_dialog = WeeklyJournalDialog(config.get("model", {}), login_args, self)
+            self.weekly_journal_dialog.show()
+        except Exception as e:
+            import traceback
+            logging.error(f"打开周记页面失败: {e}\n{traceback.format_exc()}")
+            QMessageBox.critical(self, "程序错误", f"打开周记页面时发生错误:\n{str(e)}\n\n详情请查看日志文件。")
 
     def get_code_and_session(self):
         """获取Code和JSESSIONID"""
@@ -667,14 +672,21 @@ class ModernWindow(QMainWindow):
         self.is_getting_code = False
         self.btn_get_code.setEnabled(True)
         self.btn_get_code.setText("获取code")
-        # 恢复原始样式
+        # 无论成功失败，都恢复原始样式
+        self.btn_get_code.setStyleSheet("")
+        self.btn_get_code.setObjectName("BtnGetCode") # Re-apply ID to be safe
+        self.style().polish(self.btn_get_code)        # Force re-polish
+
+
         if success:
             ToastManager.instance().show("获取成功！", "success")
             # 更新JSESSIONID显示
             self._update_session_display()
         else:
-            # 恢复原始样式以便可以再次点击
-            self.btn_get_code.setStyleSheet("")
+            if msg and msg != "任务已停止":
+                # 只有非手动停止的错误才弹窗
+                ToastManager.instance().show(msg, "error")
+        
         self.prog.hide()
         self.btn_run.setEnabled(True)
         for btn in self.grp.buttons():
@@ -770,6 +782,8 @@ class ModernWindow(QMainWindow):
         self.btn_run.setEnabled(True)
         self.btn_run.setText("开始执行")
         self.btn_run.setStyleSheet("")
+        self.btn_run.setObjectName("BtnStart")
+        self.style().polish(self.btn_run)
         self.prog.hide()
         self.btn_get_code.setEnabled(True)
         for btn in self.grp.buttons():
