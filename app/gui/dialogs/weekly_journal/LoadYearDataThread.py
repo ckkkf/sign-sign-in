@@ -12,6 +12,8 @@ class LoadYearDataThread(QThread):
 
     def run(self):
         try:
+            if self.isInterruptionRequested():
+                return
             with open("debug_crash.txt", "a", encoding="utf-8") as f: f.write("THREAD STEP 1: Thread started\n")
             from app.apis.xybsyw import login, get_plan, load_blog_year
 
@@ -19,6 +21,8 @@ class LoadYearDataThread(QThread):
             try:
                 with open("debug_crash.txt", "a", encoding="utf-8") as f: f.write("THREAD STEP 2: Attempting login\n")
                 login_args = login(self.config['input'], use_cache=True)
+                if self.isInterruptionRequested():
+                    return
                 with open("debug_crash.txt", "a", encoding="utf-8") as f: f.write("THREAD STEP 3: Login successful\n")
             except Exception as login_err:
                 with open("debug_crash.txt", "a", encoding="utf-8") as f: f.write(f"THREAD ERROR: Login failed - {login_err}\n")
@@ -28,6 +32,8 @@ class LoadYearDataThread(QThread):
             # 获取traineeId
             with open("debug_crash.txt", "a", encoding="utf-8") as f: f.write("THREAD STEP 4: Getting plan\n")
             plan_data = get_plan(userAgent=self.config['input']['userAgent'], args=login_args)
+            if self.isInterruptionRequested():
+                return
             with open("debug_crash.txt", "a", encoding="utf-8") as f: f.write("THREAD STEP 5: Plan got\n")
             
             trainee_id = None
@@ -40,6 +46,8 @@ class LoadYearDataThread(QThread):
             # 加载年份数据
             with open("debug_crash.txt", "a", encoding="utf-8") as f: f.write("THREAD STEP 7: Loading year data\n")
             year_data = load_blog_year(login_args, self.config['input'])
+            if self.isInterruptionRequested():
+                return
             with open("debug_crash.txt", "a", encoding="utf-8") as f: f.write("THREAD STEP 8: Year data loaded\n")
 
             self.finished_signal.emit(login_args, str(trainee_id), year_data)

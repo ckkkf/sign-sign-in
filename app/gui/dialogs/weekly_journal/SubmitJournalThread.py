@@ -20,11 +20,15 @@ class SubmitJournalThread(QThread):
 
     def run(self):
         try:
+            if self.isInterruptionRequested():
+                return
             from app.apis.xybsyw import submit_blog
             submit_blog(
                 args=self.args, config=self.config, blog_title=self.blog_title, blog_body=self.blog_body,
                 start_date=self.start_date, end_date=self.end_date, blog_open_type=self.blog_open_type,
                 trainee_id=self.trainee_id)
+            if self.isInterruptionRequested():
+                return
             self.finished_signal.emit("周记提交成功！")
         except Exception as e:
             self.error_signal.emit(str(e))

@@ -64,6 +64,12 @@ class WeeklyJournalDialog(QDialog):
             self.total_pages = 1
             self._load_blog_list_thread = None
             self._load_week_data_thread = None
+            self._is_loading_week_data = False
+            self._is_loading_year_data = False
+            self._is_loading_blog_list = False
+            self._blog_list_request_id = 0
+            self._current_year_month_key = None
+            self._last_loaded_year_month_key = None
             
             self._setup_styles()
             self._setup_ui()
@@ -113,6 +119,12 @@ class WeeklyJournalDialog(QDialog):
         if self._load_data_thread and self._load_data_thread.isRunning():
             self._load_data_thread.requestInterruption()
             self._load_data_thread.wait(1000)  # 等待最多1秒
+        if self._load_week_data_thread and self._load_week_data_thread.isRunning():
+            self._load_week_data_thread.requestInterruption()
+            self._load_week_data_thread.wait(1000)
+        if self._load_blog_list_thread and self._load_blog_list_thread.isRunning():
+            self._load_blog_list_thread.requestInterruption()
+            self._load_blog_list_thread.wait(1000)
         event.accept()
 
     def _setup_ui(self):
@@ -180,10 +192,7 @@ class WeeklyJournalDialog(QDialog):
 
         self.submitted_widget = QListWidget()
         self.submitted_widget.setObjectName("HistoryList")
-        self.submitted_widget = QListWidget()
-        self.submitted_widget.setObjectName("HistoryList")
         self.submitted_widget.itemDoubleClicked.connect(self._open_blog_detail)
-        sidebar_layout.addWidget(self.submitted_widget)
         sidebar_layout.addWidget(self.submitted_widget)
 
         # 分页控件
@@ -609,6 +618,8 @@ class WeeklyJournalDialog(QDialog):
         """从服务器加载周记列表"""
         if not self.args:
             return
+        if self._is_loading_blog_list:
+            return
 
         self.current_page = page
         self.lbl_page.setText(f"{self.current_page}/...")
@@ -621,16 +632,27 @@ class WeeklyJournalDialog(QDialog):
         
         self.btn_prev.setEnabled(False)
         self.btn_next.setEnabled(False)
+        self._is_loading_blog_list = True
 
         if not self.config:
              self.config = read_config(CONFIG_FILE)
 
+        self._blog_list_request_id += 1
+        req_id = self._blog_list_request_id
         self._load_blog_list_thread = LoadBlogListThread(self.args, self.config['input'], page)
-        self._load_blog_list_thread.finished_signal.connect(self._on_blog_list_loaded)
-        self._load_blog_list_thread.error_signal.connect(self._on_blog_list_error)
+        self._load_blog_list_thread.finished_signal.connect(
+            lambda data, rid=req_id: self._on_blog_list_loaded(data, rid)
+        )
+        self._load_blog_list_thread.error_signal.connect(
+            lambda err, rid=req_id: self._on_blog_list_error(err, rid)
+        )
         self._load_blog_list_thread.start()
 
-    def _on_blog_list_loaded(self, data):
+    def _on_blog_list_loaded(self, data, req_id=None):
+        if req_id is not None and req_id != self._blog_list_request_id:
+            return
+        self._is_loading_blog_list = False
+        self._load_blog_list_thread = None
         self.submitted_widget.clear()
         
         # 假设 data 是一个列表或者包含 list 的字典
@@ -648,7 +670,11 @@ class WeeklyJournalDialog(QDialog):
             blog_list = data.get('list', [])
             total_pages = data.get('maxPage', 1)
 
-        self.total_pages = int(total_pages)
+        try:
+            parsed_total_pages = int(total_pages)
+        except (TypeError, ValueError):
+            parsed_total_pages = self.current_page
+        self.total_pages = max(1, parsed_total_pages)
         self.lbl_page.setText(f"{self.current_page}/{self.total_pages}")
         
         self.btn_prev.setEnabled(self.current_page > 1)
@@ -759,15 +785,18 @@ class WeeklyJournalDialog(QDialog):
                 self._bottom_spacer.hide()
                 self._chat_area_widget.setVisible(True)
 
-    def _on_blog_list_error(self, err_msg):
+    def _on_blog_list_error(self, err_msg, req_id=None):
+        if req_id is not None and req_id != self._blog_list_request_id:
+            return
+        self._is_loading_blog_list = False
+        self._load_blog_list_thread = None
         self.submitted_widget.clear()
         item = QListWidgetItem(f"加载失败")
         item.setToolTip(err_msg)
         item.setForeground(Qt.red)
         self.submitted_widget.addItem(item)
         self.btn_prev.setEnabled(self.current_page > 1)
-        # 如果出错，允许尝试下一页或者重试当前页? 简单起见允许翻页
-        self.btn_next.setEnabled(True) 
+        self.btn_next.setEnabled(self.current_page < self.total_pages)
         ToastManager.instance().show(f"加载列表失败: {err_msg}", "warning")
 
     def _prev_page(self):
@@ -776,7 +805,8 @@ class WeeklyJournalDialog(QDialog):
 
     def _next_page(self):
         # 这里简单判断，只要当前页不是最后一页
-        self._load_blog_list_from_server(self.current_page + 1)
+        if self.current_page < self.total_pages:
+            self._load_blog_list_from_server(self.current_page + 1)
 
     def _populate_list(self, widget: QListWidget, entries):
         if widget is None:
@@ -866,10 +896,13 @@ class WeeklyJournalDialog(QDialog):
         """加载年月数据（用户手动触发）"""
         try:
             with open("debug_crash.txt", "a", encoding="utf-8") as f: f.write("STEP 10: Entering _load_year_month_data\n")
+            if self._is_loading_year_data:
+                return
             if not self.config:
                 self.config = read_config(CONFIG_FILE)
             # 在子线程中加载数据，避免阻塞UI
             with open("debug_crash.txt", "a", encoding="utf-8") as f: f.write("STEP 11: Creating LoadYearDataThread\n")
+            self._is_loading_year_data = True
             self._load_data_thread = LoadYearDataThread(self.config)
             self._load_data_thread.finished_signal.connect(self._on_year_data_loaded)
             self._load_data_thread.error_signal.connect(self._on_year_data_error)
@@ -878,6 +911,7 @@ class WeeklyJournalDialog(QDialog):
             self.btn_load_data.setEnabled(False)
             self.btn_load_data.setText("加载中...")
         except Exception as e:
+            self._is_loading_year_data = False
             with open("debug_crash.txt", "a", encoding="utf-8") as f: f.write(f"CRASH IN _load_year_month_data: {e}\n")
             logging.error(f"加载年月数据失败: {e}")
             ToastManager.instance().show(f"加载失败: {str(e)}", "warning")
@@ -889,7 +923,8 @@ class WeeklyJournalDialog(QDialog):
             self.args = login_args
             self.trainee_id = trainee_id
             self.year_data = year_data
-            # 更新UI
+            # 更新UI（阻断信号，避免填充过程触发重复加载）
+            self.year_combo.blockSignals(True)
             self.year_combo.clear()
             
             if self.year_data is None:
@@ -909,6 +944,8 @@ class WeeklyJournalDialog(QDialog):
             if self.year_combo.count() > 0:
                 self._on_year_changed()
 
+            self._is_loading_year_data = False
+            self._load_data_thread = None
             self.btn_load_data.setEnabled(True)
             self.btn_load_data.setText("加载年月")
             
@@ -920,12 +957,16 @@ class WeeklyJournalDialog(QDialog):
         except Exception as e:
             import traceback
             err_msg = traceback.format_exc()
+            self._is_loading_year_data = False
+            self._load_data_thread = None
             # 再次抛出以便全局捕获（如果有）
             raise e
 
     def _on_year_data_error(self, error_msg):
         """年份数据加载失败"""
         logging.error(f"加载年份数据失败: {error_msg}")
+        self._is_loading_year_data = False
+        self._load_data_thread = None
         self.btn_load_data.setEnabled(True)
         self.btn_load_data.setText("加载年月")
         if "缓存登录失败" in error_msg or "过期" in error_msg or "失效" in error_msg:
@@ -939,12 +980,15 @@ class WeeklyJournalDialog(QDialog):
             if not self.args or not self.trainee_id:
                 return
             self.year_data = load_blog_year(self.args, self.config['input'])
+            self.year_combo.blockSignals(True)
             self.year_combo.clear()
-            for year_item in self.year_data:
+            for i, year_item in enumerate(self.year_data):
                 year_name = year_item.get('name', '')
-                self.year_combo.addItem(year_name, year_item)
+                self.year_combo.addItem(year_name, i)
             if self.year_combo.count() > 0:
                 self.year_combo.setCurrentIndex(0)
+            self.year_combo.blockSignals(False)
+            if self.year_combo.count() > 0:
                 self._on_year_changed()
         except Exception as e:
             logging.error(f"加载年份数据失败: {e}")
@@ -1042,6 +1086,11 @@ class WeeklyJournalDialog(QDialog):
         """月份改变时更新周信息"""
         try:
             with open("debug_crash.txt", "a", encoding="utf-8") as f: f.write("STEP MC.1: _on_month_changed called\n")
+            # 标志位：防止重复触发导致并发请求堆积
+            if self._is_loading_week_data:
+                with open("debug_crash.txt", "a", encoding="utf-8") as f: f.write("STEP MC.Skip: already loading week data\n")
+                return
+
             year_idx = self.year_combo.currentData()
             month_idx = self.month_combo.currentData()
             
@@ -1060,7 +1109,13 @@ class WeeklyJournalDialog(QDialog):
             month_id = month_item.get('id')
             if not year_id or not month_id:
                 return
-            
+
+            current_key = f"{year_id}-{month_id}"
+            if self._last_loaded_year_month_key == current_key and self.week_combo.count() > 0:
+                with open("debug_crash.txt", "a", encoding="utf-8") as f: f.write(f"STEP MC.Skip: duplicated year-month {current_key}\n")
+                return
+            self._current_year_month_key = current_key
+             
             # 使用线程异步加载
             self.week_combo.blockSignals(True)
             self.week_combo.clear()
@@ -1071,6 +1126,7 @@ class WeeklyJournalDialog(QDialog):
             self.year_combo.setEnabled(False)
             self.month_combo.setEnabled(False)
             self.week_combo.setEnabled(False)
+            self._is_loading_week_data = True
 
             self._load_week_data_thread = LoadWeekDataThread(self.args, self.config['input'], year_id, month_id)
             self._load_week_data_thread.finished_signal.connect(self._on_week_data_loaded)
@@ -1081,6 +1137,7 @@ class WeeklyJournalDialog(QDialog):
         except Exception as e:
             msg = f"CRASH IN _on_month_changed: {e}"
             with open("debug_crash.txt", "a", encoding="utf-8") as f: f.write(msg + "\n")
+            self._is_loading_week_data = False
             logging.error(f"更新周信息失败: {e}")
             ToastManager.instance().show(f"加载周信息失败: {str(e)}", "warning")
 
@@ -1122,6 +1179,8 @@ class WeeklyJournalDialog(QDialog):
             self.month_combo.setEnabled(True)
             self.week_combo.setEnabled(True)
             self._load_week_data_thread = None
+            self._is_loading_week_data = False
+            self._last_loaded_year_month_key = self._current_year_month_key
 
             # 默认选中第一个
             if self.week_combo.count() > 0:
@@ -1145,6 +1204,7 @@ class WeeklyJournalDialog(QDialog):
         self.month_combo.setEnabled(True)
         self.week_combo.setEnabled(True)
         self._load_week_data_thread = None
+        self._is_loading_week_data = False
 
     def _check_jsessionid_validity(self):
         """检查jsessionid是否有效"""
@@ -1180,6 +1240,10 @@ class WeeklyJournalDialog(QDialog):
         # 从内容解析标题和正文
         lines = full_content.split('\n')
         first_line = lines[0].strip()
+        week_idx = self.week_combo.currentData()
+        week_item = None
+        if isinstance(week_idx, int) and self.week_data and 0 <= week_idx < len(self.week_data):
+            week_item = self.week_data[week_idx]
 
         # 如果第一行看起来像标题（较短且不以标点结尾），则使用第一行作为标题
         if len(first_line) <= 50 and not first_line.endswith(('。', '！', '？', '.', '!', '?', ',')):
@@ -1187,7 +1251,6 @@ class WeeklyJournalDialog(QDialog):
             content = '\n'.join(lines[1:]).strip() if len(lines) > 1 else first_line
         else:
             # 否则自动生成标题
-            week_item = self.week_combo.currentData()
             if week_item:
                 week_num = week_item.get('week', '')
                 title = f"第{week_num}周实习周记"
@@ -1196,7 +1259,6 @@ class WeeklyJournalDialog(QDialog):
             content = full_content
 
         # 检查是否选择了周
-        week_item = self.week_combo.currentData()
         if not week_item:
             ToastManager.instance().show("请选择要绑定的周", "warning")
             return

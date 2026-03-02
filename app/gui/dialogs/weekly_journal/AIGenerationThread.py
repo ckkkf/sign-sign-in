@@ -19,8 +19,12 @@ class AIGenerationThread(QThread):
 
     def run(self):
         try:
+            if self.isInterruptionRequested():
+                return
+
             def on_delta(delta: str):
-                self.delta_signal.emit(delta)
+                if not self.isInterruptionRequested():
+                    self.delta_signal.emit(delta)
 
             content = xyb_completion(
                 args=self.args,
@@ -29,6 +33,8 @@ class AIGenerationThread(QThread):
                 on_delta=on_delta
             )
 
+            if self.isInterruptionRequested():
+                return
             self.finished_signal.emit(content)
         except ModelConfigurationError as e:
             self.error_signal.emit("config", str(e))

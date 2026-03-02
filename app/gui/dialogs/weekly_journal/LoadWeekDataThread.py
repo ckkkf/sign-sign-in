@@ -14,7 +14,11 @@ class LoadWeekDataThread(QThread):
 
     def run(self):
         try:
+            if self.isInterruptionRequested():
+                return
             data = load_blog_date(self.args, self.config, self.year_id, self.month_id)
+            if self.isInterruptionRequested():
+                return
             self.finished_signal.emit(data)
         except Exception as e:
             self.error_signal.emit(str(e))
