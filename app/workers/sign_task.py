@@ -250,8 +250,13 @@ class GetCodeAndSessionThread(QThread):
 
             ### 唤起微信小程序
             weixin_url = "weixin://launchapplet/?app_id=wx9f1c2e0bbc10673c"
-            os.startfile(weixin_url)
-            logging.info("🌈 已发送唤醒指令到微信")
+            try:
+                os.startfile(weixin_url)
+                logging.info("🌈 已发送唤醒指令到微信")
+            except Exception as e:
+                # 用户环境未注册 weixin:// 协议时，不中断流程，提示手动打开小程序
+                logging.warning(f"⚠️ 自动唤起微信失败: {e}")
+                logging.warning("👉 请手动启动【微信 -> 校友邦】小程序，然后保持页面操作以获取 code")
 
             logging.warning("⏳ 请重启校友邦小程序，以获取code...")
 
