@@ -3,9 +3,10 @@ import os
 import subprocess
 import threading
 import time
+import ctypes
 from datetime import datetime
 
-from PySide6.QtCore import Qt, QUrl
+from PySide6.QtCore import Qt, QUrl, QTimer
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import QMainWindow, QWidget, QHBoxLayout, QFrame, QVBoxLayout, QLabel, QGridLayout, QPushButton, \
     QButtonGroup, QRadioButton, QProgressBar, QSizePolicy, QMessageBox, QApplication, QTextEdit, QDialog, QFileDialog
@@ -670,6 +671,8 @@ class ModernWindow(QMainWindow):
 
     def on_get_code_done(self, success, msg):
         """获取Code和JSESSIONID完成"""
+        if success:
+            self._bring_to_front_retry(tries=4, delay_ms=350)
         self.is_getting_code = False
         self.btn_get_code.setEnabled(True)
         self.btn_get_code.setText("获取code")
@@ -693,13 +696,34 @@ class ModernWindow(QMainWindow):
         for btn in self.grp.buttons():
             btn.setEnabled(True)
 
-        if success:
-            ToastManager.instance().show("获取成功！", "success")
-            # 更新JSESSIONID显示
-            self._update_session_display()
-        else:
-            if msg != "任务已停止":
-                ToastManager.instance().show(msg, "error")
+    def _bring_to_front(self):
+        """尽量将主窗口切回前台活动状态"""
+        if self.isMinimized():
+            self.showNormal()
+        self.raise_()
+        self.activateWindow()
+        self._force_foreground_windows()
+
+    def _bring_to_front_retry(self, tries: int = 3, delay_ms: int = 400):
+        self._bring_to_front()
+        if tries <= 1:
+            return
+        QTimer.singleShot(delay_ms, lambda: self._bring_to_front_retry(tries - 1, delay_ms))
+
+    def _force_foreground_windows(self):
+        """Windows 下尝试强制前置窗口（Qt 激活失败时兜底）"""
+        if os.name != "nt":
+            return
+        try:
+            hwnd = int(self.winId())
+            user32 = ctypes.windll.user32
+            SW_RESTORE = 9
+            user32.ShowWindow(hwnd, SW_RESTORE)
+            user32.SetForegroundWindow(hwnd)
+            user32.BringWindowToTop(hwnd)
+        except Exception:
+            pass
+
 
     def _update_session_display(self):
         """更新JSESSIONID显示"""

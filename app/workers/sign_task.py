@@ -269,6 +269,7 @@ class SignTaskThread(QThread):
 class GetCodeAndSessionThread(QThread):
     """获取Code和JSESSIONID的线程"""
     finished_signal = Signal(bool, str)
+    applet_wake_signal = Signal()
 
     def __init__(self, config_file):
         super().__init__()
@@ -309,8 +310,9 @@ class GetCodeAndSessionThread(QThread):
             weixin_url = f"weixin://launchapplet/?app_id={XYB_APP_ID}"
             try:
                 self.kill_wechat_before_launch()
-                os.startfile(weixin_url)
+                self.wake_applet_with_retry(weixin_url)
                 logging.info("🌈 已发送唤醒指令到微信")
+                self.applet_wake_signal.emit()
             except Exception as e:
                 # 用户环境未注册 weixin:// 协议时，不中断流程，提示手动打开小程序
                 logging.warning(f"⚠️ 自动唤起微信失败: {e}")
@@ -331,6 +333,7 @@ class GetCodeAndSessionThread(QThread):
             logging.info("🔐 正在获取JSESSIONID...")
             args = login(config['input'], use_cache=False)
             logging.info(f"✅ JSESSIONID: {args['sessionId'][:20]}...")
+            self.close_applet_after_login()
 
             self.finished_signal.emit(True, "获取成功")
 
@@ -412,8 +415,8 @@ class GetCodeAndSessionThread(QThread):
 
     @staticmethod
     def kill_wechat_before_launch():
-        # 仅关闭小程序容器进程，不关闭微信主进程
-        process_names = ["WeChatAppEx.exe", "WeChatAppHost.exe"]
+        # 唤醒前仅关闭“小程序渲染进程”，不关闭 Host/微信主进程，避免影响 URI 唤起
+        process_names = ["WeChatAppEx.exe", "WeixinAppEx.exe"]
         for name in process_names:
             try:
                 subprocess.run(
@@ -425,4 +428,45 @@ class GetCodeAndSessionThread(QThread):
                 )
             except Exception:
                 pass
-        time.sleep(0.6)
+        time.sleep(0.3)
+
+    @staticmethod
+    def wake_applet_with_retry(weixin_url: str, retries: int = 3):
+        last_exc = None
+        for i in range(retries):
+            try:
+                os.startfile(weixin_url)
+                return
+            except Exception as e:
+                last_exc = e
+                logging.warning(f"⚠️ 唤醒微信失败（第 {i + 1}/{retries} 次）：{e}")
+                time.sleep(0.8)
+        if last_exc:
+            raise last_exc
+
+    @staticmethod
+    def close_applet_after_login():
+        # 登录成功后仅关闭小程序渲染进程，避免影响微信主进程和后续唤醒
+        process_names = [
+            "WeChatAppEx.exe",
+            "WeixinAppEx.exe",
+        ]
+        killed = 0
+        for name in process_names:
+            try:
+                cp = subprocess.run(
+                    ["taskkill", "/F", "/IM", name],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    check=False,
+                    creationflags=subprocess.CREATE_NO_WINDOW,
+                )
+                if cp.returncode == 0:
+                    killed += 1
+            except Exception:
+                pass
+
+        if killed > 0:
+            logging.info(f"🧹 已关闭小程序容器进程 {killed} 个")
+        else:
+            logging.warning("⚠️ 未识别到可关闭的小程序容器进程，可手动关闭校友邦小程序页面")

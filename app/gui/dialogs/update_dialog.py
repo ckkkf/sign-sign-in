@@ -1,8 +1,12 @@
 import os
+import subprocess
+import tempfile
+from pathlib import Path
 
 from PySide6.QtCore import Qt, QUrl
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
+    QApplication,
     QDialog,
     QVBoxLayout,
     QLabel,
@@ -10,9 +14,10 @@ from PySide6.QtWidgets import (
     QPushButton,
     QProgressBar,
     QTextEdit,
+    QMessageBox,
 )
 
-from app.config.common import PROJECT_VERSION
+from app.config.common import PROJECT_VERSION, BASE_DIR
 from app.gui.components.toast import ToastManager
 from app.workers.update_worker import UpdateDownloadWorker
 
@@ -249,9 +254,9 @@ class UpdateDialog(QDialog):
         self.progress.setFormat("下载完成")
         self.download_file_path = data.get("file_path")
         if self.btn_download:
-            self.btn_download.setText("打开目录")
+            self.btn_download.setText("一键更新")
             self.btn_download.clicked.disconnect()
-            self.btn_download.clicked.connect(self._open_download_folder)
+            self.btn_download.clicked.connect(self._install_update)
 
         ToastManager.instance().show(f"下载完成：{self.download_file_path}", "success")
 
@@ -260,6 +265,103 @@ class UpdateDialog(QDialog):
             return
         folder = os.path.dirname(self.download_file_path)
         QDesktopServices.openUrl(QUrl.fromLocalFile(folder))
+
+    def _install_update(self):
+        if not self.download_file_path:
+            ToastManager.instance().show("未找到下载文件", "error")
+            return
+
+        package = Path(self.download_file_path)
+        if not package.exists():
+            ToastManager.instance().show("下载文件不存在，可能已被移动或删除", "error")
+            return
+
+        suffix = package.suffix.lower()
+        if suffix == ".exe":
+            # 安装器模式：直接交给安装器处理
+            try:
+                os.startfile(str(package))
+                ToastManager.instance().show("已启动安装程序，请按安装向导完成更新", "info")
+            except Exception as e:
+                ToastManager.instance().show(f"启动安装程序失败：{e}", "error")
+            return
+
+        if suffix != ".zip":
+            ToastManager.instance().show("暂不支持该更新包格式，请使用浏览器下载手动更新", "warning")
+            return
+
+        reply = QMessageBox.question(
+            self,
+            "一键更新",
+            "将自动替换当前程序并保留 config 配置，完成后自动重启。是否继续？",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.Yes,
+        )
+        if reply != QMessageBox.Yes:
+            return
+
+        try:
+            self._launch_replace_script(str(package), BASE_DIR)
+            ToastManager.instance().show("已开始更新，程序即将退出并自动重启...", "info")
+            QApplication.instance().quit()
+        except Exception as e:
+            ToastManager.instance().show(f"启动更新失败：{e}", "error")
+
+    def _launch_replace_script(self, package_path: str, app_dir: str):
+        pid = os.getpid()
+        script = f"""
+$ErrorActionPreference = 'Stop'
+$pkg = '{package_path.replace("'", "''")}'
+$app = '{app_dir.replace("'", "''")}'
+$pidToWait = {pid}
+
+while (Get-Process -Id $pidToWait -ErrorAction SilentlyContinue) {{
+    Start-Sleep -Milliseconds 300
+}}
+
+$extract = Join-Path $env:TEMP ("sign_update_unpack_" + [guid]::NewGuid().ToString("N"))
+$cfgSrc = Join-Path $app "resources\\config"
+$cfgBak = Join-Path $env:TEMP ("sign_cfg_backup_" + [guid]::NewGuid().ToString("N"))
+
+if (Test-Path $cfgSrc) {{
+    Copy-Item -Path $cfgSrc -Destination $cfgBak -Recurse -Force
+}}
+
+Expand-Archive -LiteralPath $pkg -DestinationPath $extract -Force
+$items = Get-ChildItem -LiteralPath $extract
+$copyFrom = $extract
+if ($items.Count -eq 1 -and $items[0].PSIsContainer) {{
+    $copyFrom = $items[0].FullName
+}}
+
+Copy-Item -Path (Join-Path $copyFrom "*") -Destination $app -Recurse -Force
+
+if (Test-Path $cfgBak) {{
+    New-Item -ItemType Directory -Path (Join-Path $app "resources") -Force | Out-Null
+    Copy-Item -Path $cfgBak -Destination (Join-Path $app "resources\\config") -Recurse -Force
+}}
+
+$mainExe = Join-Path $app "main.exe"
+if (Test-Path $mainExe) {{
+    Start-Process -FilePath $mainExe
+}}
+"""
+        fd, script_path = tempfile.mkstemp(prefix="sign_update_", suffix=".ps1")
+        os.close(fd)
+        with open(script_path, "w", encoding="utf-8") as f:
+            f.write(script)
+
+        subprocess.Popen(
+            [
+                "powershell.exe",
+                "-NoProfile",
+                "-ExecutionPolicy", "Bypass",
+                "-File", script_path,
+            ],
+            creationflags=subprocess.CREATE_NO_WINDOW,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
 
 
 class UpdateCheckResultDialog(QDialog):
