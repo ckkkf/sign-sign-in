@@ -24,12 +24,7 @@ def get_device_code(openId, device):
         mode=XYB_SM2_MODE,
     )
     return sm2_crypt.encrypt(
-        (
-            f'b|_{device["brand"]},{device["model"]},{device["system"]},{device["platform"]}'
-            f'aid|_{XYB_APP_ID}'
-            f'ct|_{int(time.time() * 1000)}uid|_{rand_str()}oid|_{openId}'
-        ).encode()
-    ).hex().strip()
+            f'b|_{device["brand"]},{device["model"]},{device["system"]},{device["platform"]}aid|_{XYB_APP_ID}t|_{int(time.time() * 1000)}uid|_{rand_str()}oid|_{openId}'.encode()).hex().strip()
 
 
 def get_header_token(e):
