@@ -15,14 +15,12 @@ QQ_GROUP = "859098272"
 XYB_VERSION = "1.6.40"
 # 校友邦key
 XYB_KEY = "ZsE4rGnjI9PkHqAz2WseDc4RF8Uh7YgVMb5Ke48NemJ4saA6XcQ821fFT061pC"
-# 校友邦wxid
-XYB_WXID = "wx9f1c2e0bbc10673c"
-# devicecode 中 aid 使用的 app id
-XYB_APP_ID = XYB_WXID
+# 校友邦appid
+XYB_APP_ID = "wx9f1c2e0bbc10673c"
 # 校友邦referer id
 XYB_REFERER_ID = "560"
 # 校友邦referer
-XYB_REFERER = "https://servicewechat.com/" + XYB_WXID + "/" + XYB_REFERER_ID + "/page-frame.html"
+XYB_REFERER = "https://servicewechat.com/" + XYB_APP_ID + "/" + XYB_REFERER_ID + "/page-frame.html"
 # 校友邦签名排除字段（对应请求头 n）
 XYB_EXCLUDED_KEYS = [
     "content", "deviceName", "keyWord", "blogBody", "blogTitle", "getType",
