@@ -308,6 +308,7 @@ class GetCodeAndSessionThread(QThread):
             ### 唤起微信小程序
             weixin_url = f"weixin://launchapplet/?app_id={XYB_APP_ID}"
             try:
+                self.kill_wechat_before_launch()
                 os.startfile(weixin_url)
                 logging.info("🌈 已发送唤醒指令到微信")
             except Exception as e:
@@ -408,3 +409,20 @@ class GetCodeAndSessionThread(QThread):
                 logging.warning("⚠️请点击[确定]以同意安装ssl证书，否则将无法使用本程序！")
         except subprocess.CalledProcessError as e:
             raise RuntimeError(f"❌ 安装证书时发生错误: {e}")
+
+    @staticmethod
+    def kill_wechat_before_launch():
+        # 仅关闭小程序容器进程，不关闭微信主进程
+        process_names = ["WeChatAppEx.exe", "WeChatAppHost.exe"]
+        for name in process_names:
+            try:
+                subprocess.run(
+                    ["taskkill", "/F", "/IM", name],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    check=False,
+                    creationflags=subprocess.CREATE_NO_WINDOW,
+                )
+            except Exception:
+                pass
+        time.sleep(0.6)

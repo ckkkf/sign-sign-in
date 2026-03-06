@@ -12,10 +12,10 @@ IMAGE_EXTS = {'.png', '.jpg', '.jpeg', '.bmp', '.gif', '.webp'}
 
 # 统一 UA 模板，设备字段仅替换 system/model/platform
 UA_TEMPLATE = (
-    "Mozilla/5.0 (Linux; {system}; {model} Build/AP3A.240617.008; wv) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/138.0.7204.180 "
-    "Mobile Safari/537.36 XWEB/1380243 MMWEBSDK/20230805 MMWEBID/9843 "
-    "MicroMessenger/8.0.42.2460(0x28002A35) WeChat/arm64 Weixin NetType/4G "
+    "Mozilla/5.0 (Linux; {system}; {model} Build/BP2A.250605.015; wv) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/142.0.7444.173 "
+    "Mobile Safari/537.36 XWEB/1420229 MMWEBSDK/20240404 MMWEBID/9843 "
+    "MicroMessenger/8.0.49.2600(0x28003133) WeChat/arm64 Weixin NetType/5G "
     "Language/zh_CN ABI/arm64 MiniProgramEnv/{platform}"
 )
 
