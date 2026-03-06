@@ -10,7 +10,7 @@ from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import QMainWindow, QWidget, QHBoxLayout, QFrame, QVBoxLayout, QLabel, QGridLayout, QPushButton, \
     QButtonGroup, QRadioButton, QProgressBar, QSizePolicy, QMessageBox, QApplication, QTextEdit, QDialog, QFileDialog
 
-from app.config.common import QQ_GROUP, PROJECT_VERSION, CONFIG_FILE, MITM_PROXY, API_URL, PROJECT_NAME, PROJECT_GITHUB
+from app.config.common import QQ_GROUP, PROJECT_VERSION, CONFIG_FILE, MITM_PROXY, PROJECT_NAME, PROJECT_GITHUB
 from app.gui.components.log_viewer import QTextEditLogger
 from app.gui.components.toast import ToastManager
 from app.gui.dialogs.dialogs.config_dialog import ConfigDialog
@@ -566,7 +566,8 @@ class ModernWindow(QMainWindow):
                 ToastManager.instance().show("正在检查更新，请稍候...", "info")
             return
 
-        self.update_worker = UpdateCheckWorker(API_URL + "/api/check-update", PROJECT_VERSION)
+        # 直接基于 GitHub Release 检查更新
+        self.update_worker = UpdateCheckWorker(PROJECT_GITHUB, PROJECT_VERSION)
         self.update_worker.result_signal.connect(
             lambda success, data: self.on_update_check_result(success, data, silent)
         )
