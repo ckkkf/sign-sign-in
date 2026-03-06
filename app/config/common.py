@@ -1,6 +1,6 @@
 import os
-from core.paths import get_base_dir
 
+from core.paths import get_base_dir
 
 # 项目信息
 PROJECT_VERSION = "v1.2.1"
@@ -13,9 +13,14 @@ QQ_GROUP = "859098272"
 
 # 校友邦版本
 XYB_VERSION = "1.6.40"
-
 # 校友邦key
 XYB_KEY = "ZsE4rGnjI9PkHqAz2WseDc4RF8Uh7YgVMb5Ke48NemJ4saA6XcQ821fFT061pC"
+# 校友邦wxid
+XYB_WXID = "wx9f1c2e0bbc10673c"
+# 校友邦referer id
+XYB_REFERER_ID = "560"
+# 校友邦referer
+XYB_REFERER = "https://servicewechat.com/" + XYB_WXID + "/" + XYB_REFERER_ID + "/page-frame.html"
 
 # 后端接口
 API_URL = "https://langoo.cn"

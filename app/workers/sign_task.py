@@ -1,6 +1,8 @@
 import json
 import logging
+import math
 import os
+import random
 import subprocess
 import time
 
@@ -35,6 +37,7 @@ class SignTaskThread(QThread):
             ### 获取配置文件相关
             # 读取并校验配置文件
             config = read_config(self.config_file)
+            self._apply_location_jitter(config.get("input", {}))
             # 校验其他文件
             if "拍照" in self.sign_option['action']:
                 check_img(self.sign_option.get("image_path"))
@@ -103,6 +106,60 @@ class SignTaskThread(QThread):
             self.finished_signal.emit(False, str(e))
         finally:
             reset_proxy(self.origin_proxy, f"{self.target_host}:{self.target_port}")
+
+    @staticmethod
+    def _jitter_location(latitude: float, longitude: float, radius_meters: float) -> tuple[float, float]:
+        """
+        在给定半径内随机生成新坐标（米级抖动）。
+        """
+        # 使用 sqrt 保证在圆内均匀分布
+        distance = radius_meters * math.sqrt(random.random())
+        bearing = random.random() * 2 * math.pi
+
+        earth_radius = 6378137.0
+        lat1 = math.radians(latitude)
+        lon1 = math.radians(longitude)
+        ang_dist = distance / earth_radius
+
+        lat2 = math.asin(
+            math.sin(lat1) * math.cos(ang_dist)
+            + math.cos(lat1) * math.sin(ang_dist) * math.cos(bearing)
+        )
+        lon2 = lon1 + math.atan2(
+            math.sin(bearing) * math.sin(ang_dist) * math.cos(lat1),
+            math.cos(ang_dist) - math.sin(lat1) * math.sin(lat2),
+        )
+
+        return math.degrees(lat2), math.degrees(lon2)
+
+    def _apply_location_jitter(self, input_cfg: dict):
+        location = input_cfg.get("location")
+        if not isinstance(location, dict):
+            return
+
+        try:
+            lon = float(location.get("longitude"))
+            lat = float(location.get("latitude"))
+        except (TypeError, ValueError):
+            return
+
+        # 允许在配置中覆盖抖动半径（米），默认 80 米
+        radius = input_cfg.get("locationJitterMeters", 80)
+        try:
+            radius = float(radius)
+        except (TypeError, ValueError):
+            radius = 80.0
+        radius = max(0.0, min(radius, 500.0))
+
+        if radius <= 0:
+            return
+
+        new_lat, new_lon = self._jitter_location(lat, lon, radius)
+        location["latitude"] = f"{new_lat:.6f}"
+        location["longitude"] = f"{new_lon:.6f}"
+        logging.info(
+            f"📍 已应用位置抖动，半径≈{int(radius)}m，坐标更新为 {location['longitude']}, {location['latitude']}"
+        )
 
     def check_stop(self):
         if self.isInterruptionRequested(): raise RuntimeError("用户停止执行")

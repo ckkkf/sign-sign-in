@@ -2,7 +2,7 @@ import logging
 
 import requests
 
-from app.config.common import XYB_VERSION
+from app.config.common import XYB_VERSION, XYB_REFERER
 from app.utils.common import get_timestamp
 from app.utils.files import get_img_file, clear_session_cache
 from app.utils.params import get_header_token, get_device_code
@@ -32,7 +32,7 @@ def regeo(userAgent, location):
     url = "https://restapi.amap.com/v3/geocode/regeo"
     headers = {
         "xweb_xhr": "1", "Content-Type": "application/json",
-        "Referer": "https://servicewechat.com/wx9f1c2e0bbc10673c/533/page-frame.html",
+        "Referer": XYB_REFERER,
         "User-Agent": userAgent,
     }
     params = {
@@ -68,7 +68,7 @@ def get_plan(userAgent, args):
         "content-type": "application/x-www-form-urlencoded",
         "encryptvalue": args['encryptValue'],
         "n": "content,deviceName,keyWord,blogBody,blogTitle,getType,responsibilities,street,text,reason,searchvalue,key,answers,leaveReason,personRemark,selfAppraisal,imgUrl,wxname,deviceId,avatarTempPath,file,file,model,brand,system,deviceId,platform,code,openId,unionid,clockDeviceToken,clockDevice,address,name,enterpriseEmail,responsibilities,practiceTarget,guardianName,guardianPhone,practiceDays,linkman,enterpriseName,companyIntroduction,accommodationStreet,accommodationLongitude,accommodationLatitude,internshipDestination,specialStatement,enterpriseStreet,insuranceName,insuranceFinancing,policyNumber,overtimeRemark,riskStatement,specialStatement",
-        "referer": "https://servicewechat.com/wx9f1c2e0bbc10673c/534/page-frame.html",
+        "referer": XYB_REFERER,
         "m": header_token['m'],
         "s": header_token['s'],
         "t": header_token['t'],
@@ -100,7 +100,7 @@ def get_open_id(config, code):
         "v": XYB_VERSION,
         "xweb_xhr": "1",
         "content-type": "application/x-www-form-urlencoded",
-        "referer": "https://servicewechat.com/wx9f1c2e0bbc10673c/534/page-frame.html",
+        "referer": XYB_REFERER,
         'User-Agent': config['userAgent'],
         "devicecode": get_device_code("", config['device']),
     }
@@ -131,7 +131,7 @@ def wx_login(config, openIdData):
         "v": XYB_VERSION,
         "xweb_xhr": "1",
         "content-type": "application/x-www-form-urlencoded",
-        "referer": "https://servicewechat.com/wx9f1c2e0bbc10673c/534/page-frame.html",
+        "referer": XYB_REFERER,
         "n": "content,deviceName,keyWord,blogBody,blogTitle,getType,responsibilities,street,text,reason,searchvalue,key,answers,leaveReason,personRemark,selfAppraisal,imgUrl,wxname,deviceId,avatarTempPath,file,file,model,brand,system,deviceId,platform,code,openId,unionid,clockDeviceToken,clockDevice,address,name,enterpriseEmail,responsibilities,practiceTarget,guardianName,guardianPhone,practiceDays,linkman,enterpriseName,companyIntroduction,accommodationStreet,accommodationLongitude,accommodationLatitude,internshipDestination,specialStatement,enterpriseStreet,insuranceName,insuranceFinancing,policyNumber,overtimeRemark,riskStatement,specialStatement",
         "devicecode": get_device_code(openId=openIdData['openId'], device=config['device']),
         "encryptvalue": openIdData['encryptValue'],
@@ -243,7 +243,7 @@ def watermark_info(args, config, traineeId):
         "n": "content,deviceName,keyWord,blogBody,blogTitle,getType,responsibilities,street,text,reason,searchvalue,key,answers,leaveReason,personRemark,selfAppraisal,imgUrl,wxname,deviceId,avatarTempPath,file,file,model,brand,system,deviceId,platform,code,openId,unionid,clockDeviceToken,clockDevice,address,name,enterpriseEmail,responsibilities,practiceTarget,guardianName,guardianPhone,practiceDays,linkman,enterpriseName,companyIntroduction,accommodationStreet,accommodationLongitude,accommodationLatitude,internshipDestination,specialStatement,enterpriseStreet,insuranceName,insuranceFinancing,policyNumber,overtimeRemark,riskStatement,specialStatement",
         "s": header_token['s'],
         "t": header_token['t'],
-        "referer": "https://servicewechat.com/wx9f1c2e0bbc10673c/537/page-frame.html",
+        "referer": XYB_REFERER,
         "user-agent": config['userAgent'],
         "v": XYB_VERSION,
         "wechat": "1",
@@ -275,7 +275,7 @@ def commonPostPolicy(args, config):
         "encryptvalue": args['encryptValue'],
         "m": header_token['m'],
         "n": "content,deviceName,keyWord,blogBody,blogTitle,getType,responsibilities,street,text,reason,searchvalue,key,answers,leaveReason,personRemark,selfAppraisal,imgUrl,wxname,deviceId,avatarTempPath,file,file,model,brand,system,deviceId,platform,code,openId,unionid,clockDeviceToken,clockDevice,address,name,enterpriseEmail,responsibilities,practiceTarget,guardianName,guardianPhone,practiceDays,linkman,enterpriseName,companyIntroduction,accommodationStreet,accommodationLongitude,accommodationLatitude,internshipDestination,specialStatement,enterpriseStreet,insuranceName,insuranceFinancing,policyNumber,overtimeRemark,riskStatement,specialStatement",
-        "referer": "https://servicewechat.com/wx9f1c2e0bbc10673c/537/page-frame.html",
+        "referer": XYB_REFERER,
         "s": header_token['s'],
         "t": header_token['t'],
         "user-agent": config['userAgent'],
@@ -305,7 +305,7 @@ def aliyun_OSS(files, timestamp, policyData):
 
     # headers = {
     #     "Content-Type": "multipart/form-data;",
-    #     "Referer": "https://servicewechat.com/wx9f1c2e0bbc10673c/537/page-frame.html",
+    #     "Referer": XYB_REFERER,
     #     "User-Agent": config['userAgent'],
     #     "devicecode": get_device_code(openId=args['openId'], device=config['device']),
     #     "encryptValue": args['encryptValue'],
@@ -326,7 +326,7 @@ def aliyun_OSS(files, timestamp, policyData):
     url = policyData['host']
 
     headers = {
-        "Referer": "https://servicewechat.com/wx9f1c2e0bbc10673c/537/page-frame.html",
+        "Referer": XYB_REFERER,
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36 MicroMessenger/7.0.20.1781(0x6700143B) NetType/WIFI MiniProgramEnv/Windows WindowsWechat/WMPF WindowsWechat(0x63090a13) UnifiedPCWindowsWechat(0xf2541211) XWEB/16815",
     }
 
@@ -383,7 +383,7 @@ def post_new(args, config, traineeId, geo, imgUrl, opt):
         "encryptvalue": args['encryptValue'],
         "m": header_token['m'],
         "n": "content,deviceName,keyWord,blogBody,blogTitle,getType,responsibilities,street,text,reason,searchvalue,key,answers,leaveReason,personRemark,selfAppraisal,imgUrl,wxname,deviceId,avatarTempPath,file,file,model,brand,system,deviceId,platform,code,openId,unionid,clockDeviceToken,clockDevice,address,name,enterpriseEmail,responsibilities,practiceTarget,guardianName,guardianPhone,practiceDays,linkman,enterpriseName,companyIntroduction,accommodationStreet,accommodationLongitude,accommodationLatitude,internshipDestination,specialStatement,enterpriseStreet,insuranceName,insuranceFinancing,policyNumber,overtimeRemark,riskStatement,specialStatement",
-        "referer": "https://servicewechat.com/wx9f1c2e0bbc10673c/537/page-frame.html",
+        "referer": XYB_REFERER,
         "s": header_token['s'],
         "t": header_token['t'],
         "user-agent": config['userAgent'],
@@ -415,7 +415,7 @@ def deliver_value(args, config, traineeId):
         "encryptvalue": args['encryptValue'],
         "m": header_token['m'],
         "n": "content,deviceName,keyWord,blogBody,blogTitle,getType,responsibilities,street,text,reason,searchvalue,key,answers,leaveReason,personRemark,selfAppraisal,imgUrl,wxname,deviceId,avatarTempPath,file,file,model,brand,system,deviceId,platform,code,openId,unionid,clockDeviceToken,clockDevice,address,name,enterpriseEmail,responsibilities,practiceTarget,guardianName,guardianPhone,practiceDays,linkman,enterpriseName,companyIntroduction,accommodationStreet,accommodationLongitude,accommodationLatitude,internshipDestination,specialStatement,enterpriseStreet,insuranceName,insuranceFinancing,policyNumber,overtimeRemark,riskStatement,specialStatement",
-        "referer": "https://servicewechat.com/wx9f1c2e0bbc10673c/537/page-frame.html",
+        "referer": XYB_REFERER,
         "s": header_token['s'],
         "t": header_token['t'],
         "user-agent": config['userAgent'],
@@ -447,7 +447,7 @@ def simple_sign_in_or_out(args, geo, traineeId, config, opt):
             'address': geo['formatted_address'], 'deviceName': device['model'], }
     header_token = get_header_token(data)
     headers = {'v': XYB_VERSION, 'wechat': "1",
-               'Referer': "https://servicewechat.com/wx9f1c2e0bbc10673c/534/page-frame.html",
+               'Referer': XYB_REFERER,
                'User-Agent': config['userAgent'],
                'n': "content,deviceName,keyWord,blogBody,blogTitle,getType,responsibilities,street,text,reason,searchvalue,key,answers,leaveReason,personRemark,selfAppraisal,imgUrl,wxname,deviceId,avatarTempPath,file,file,model,brand,system,deviceId,platform,code,openId,unionid,clockDeviceToken,clockDevice,address,name,enterpriseEmail,responsibilities,practiceTarget,guardianName,guardianPhone,practiceDays,linkman,enterpriseName,companyIntroduction,accommodationStreet,accommodationLongitude,accommodationLatitude,internshipDestination,specialStatement,enterpriseStreet,insuranceName,insuranceFinancing,policyNumber,overtimeRemark,riskStatement,specialStatement",
                'm': header_token['m'], 's': header_token['s'], 't': header_token['t'],
@@ -507,7 +507,7 @@ def load_blog_year(args, config):
         "encryptvalue": args['encryptValue'],
         "m": header_token['m'],
         "n": "content,deviceName,keyWord,blogBody,blogTitle,getType,responsibilities,street,text,reason,searchvalue,key,answers,leaveReason,personRemark,selfAppraisal,imgUrl,wxname,deviceId,avatarTempPath,file,file,model,brand,system,deviceId,platform,code,openId,unionid,clockDeviceToken,clockDevice,address,name,enterpriseEmail,responsibilities,practiceTarget,guardianName,guardianPhone,practiceDays,linkman,enterpriseName,companyIntroduction,accommodationStreet,accommodationLongitude,accommodationLatitude,internshipDestination,specialStatement,enterpriseStreet,insuranceName,insuranceFinancing,policyNumber,overtimeRemark,riskStatement,specialStatement",
-        "referer": "https://servicewechat.com/wx9f1c2e0bbc10673c/539/page-frame.html",
+        "referer": XYB_REFERER,
         "s": header_token['s'],
         "t": header_token['t'],
         "user-agent": config['userAgent'],
@@ -556,7 +556,7 @@ def load_blog_date(args, config, year, month):
         "encryptvalue": args['encryptValue'],
         "m": header_token['m'],
         "n": "content,deviceName,keyWord,blogBody,blogTitle,getType,responsibilities,street,text,reason,searchvalue,key,answers,leaveReason,personRemark,selfAppraisal,imgUrl,wxname,deviceId,avatarTempPath,file,file,model,brand,system,deviceId,platform,code,openId,unionid,clockDeviceToken,clockDevice,address,name,enterpriseEmail,responsibilities,practiceTarget,guardianName,guardianPhone,practiceDays,linkman,enterpriseName,companyIntroduction,accommodationStreet,accommodationLongitude,accommodationLatitude,internshipDestination,specialStatement,enterpriseStreet,insuranceName,insuranceFinancing,policyNumber,overtimeRemark,riskStatement,specialStatement",
-        "referer": "https://servicewechat.com/wx9f1c2e0bbc10673c/539/page-frame.html",
+        "referer": XYB_REFERER,
         "s": header_token['s'],
         "t": header_token['t'],
         "user-agent": config['userAgent'],
@@ -613,7 +613,7 @@ def submit_blog(args, config, blog_title, blog_body, start_date, end_date, blog_
         "encryptvalue": args['encryptValue'],
         "m": header_token['m'],
         "n": "content,deviceName,keyWord,blogBody,blogTitle,getType,responsibilities,street,text,reason,searchvalue,key,answers,leaveReason,personRemark,selfAppraisal,imgUrl,wxname,deviceId,avatarTempPath,file,file,model,brand,system,deviceId,platform,code,openId,unionid,clockDeviceToken,clockDevice,address,name,enterpriseEmail,responsibilities,practiceTarget,guardianName,guardianPhone,practiceDays,linkman,enterpriseName,companyIntroduction,accommodationStreet,accommodationLongitude,accommodationLatitude,internshipDestination,specialStatement,enterpriseStreet,insuranceName,insuranceFinancing,policyNumber,overtimeRemark,riskStatement,specialStatement",
-        "referer": "https://servicewechat.com/wx9f1c2e0bbc10673c/539/page-frame.html",
+        "referer": XYB_REFERER,
         "s": header_token['s'],
         "t": header_token['t'],
         "user-agent": config['userAgent'],
@@ -668,7 +668,7 @@ def xyb_completion(args, config, prompt, on_delta=None):
         "encryptvalue": args['encryptValue'],
         "m": header_token['m'],
         "n": "content,deviceName,keyWord,blogBody,blogTitle,getType,responsibilities,street,text,reason,searchvalue,key,answers,leaveReason,personRemark,selfAppraisal,imgUrl,wxname,deviceId,avatarTempPath,file,file,model,brand,system,deviceId,platform,code,openId,unionid,clockDeviceToken,clockDevice,address,name,enterpriseEmail,responsibilities,practiceTarget,guardianName,guardianPhone,practiceDays,linkman,enterpriseName,companyIntroduction,accommodationStreet,accommodationLongitude,accommodationLatitude,internshipDestination,specialStatement,enterpriseStreet,insuranceName,insuranceFinancing,policyNumber,overtimeRemark,riskStatement,specialStatement",
-        "referer": "https://servicewechat.com/wx9f1c2e0bbc10673c/537/page-frame.html",
+        "referer": XYB_REFERER,
         "s": header_token['s'],
         "t": header_token['t'],
         "user-agent": config['userAgent'],
@@ -718,7 +718,7 @@ def blog_list(args, config, page, blogType="1"):
         "encryptvalue": args['encryptValue'],
         "m": header_token['m'],
         "n": "content,deviceName,keyWord,blogBody,blogTitle,getType,responsibilities,street,text,reason,searchvalue,key,answers,leaveReason,personRemark,selfAppraisal,imgUrl,wxname,deviceId,avatarTempPath,file,file,model,brand,system,deviceId,platform,code,openId,unionid,clockDeviceToken,clockDevice,address,name,enterpriseEmail,responsibilities,practiceTarget,guardianName,guardianPhone,practiceDays,linkman,enterpriseName,companyIntroduction,accommodationStreet,accommodationLongitude,accommodationLatitude,internshipDestination,specialStatement,enterpriseStreet,insuranceName,insuranceFinancing,policyNumber,overtimeRemark,riskStatement,specialStatement",
-        "referer": "https://servicewechat.com/wx9f1c2e0bbc10673c/537/page-frame.html",
+        "referer": XYB_REFERER,
         "s": header_token['s'],
         "t": header_token['t'],
         "user-agent": config['userAgent'],
