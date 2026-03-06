@@ -17,10 +17,34 @@ XYB_VERSION = "1.6.40"
 XYB_KEY = "ZsE4rGnjI9PkHqAz2WseDc4RF8Uh7YgVMb5Ke48NemJ4saA6XcQ821fFT061pC"
 # 校友邦wxid
 XYB_WXID = "wx9f1c2e0bbc10673c"
+# devicecode 中 aid 使用的 app id
+XYB_APP_ID = XYB_WXID
 # 校友邦referer id
 XYB_REFERER_ID = "560"
 # 校友邦referer
 XYB_REFERER = "https://servicewechat.com/" + XYB_WXID + "/" + XYB_REFERER_ID + "/page-frame.html"
+# 校友邦签名排除字段（对应请求头 n）
+XYB_EXCLUDED_KEYS = [
+    "content", "deviceName", "keyWord", "blogBody", "blogTitle", "getType",
+    "responsibilities", "street", "text", "reason", "searchvalue", "key",
+    "answers", "leaveReason", "personRemark", "selfAppraisal", "imgUrl",
+    "wxname", "deviceId", "avatarTempPath", "file", "model", "brand", "system",
+    "platform", "code", "openId", "unionid", "clockDeviceToken", "clockDevice",
+    "address", "name", "enterpriseEmail", "practiceTarget", "guardianName",
+    "guardianPhone", "practiceDays", "linkman", "enterpriseName",
+    "companyIntroduction", "accommodationStreet", "accommodationLongitude",
+    "accommodationLatitude", "internshipDestination", "specialStatement",
+    "enterpriseStreet", "insuranceName", "insuranceFinancing", "policyNumber",
+    "overtimeRemark", "riskStatement", "specialStatement"
+]
+XYB_N_HEADER = ",".join(XYB_EXCLUDED_KEYS)
+
+# 高德逆地理解析 key
+AMAP_WEB_KEY = "c222383ff12d31b556c3ad6145bb95f4"
+
+# SM2 设备指纹加密参数
+XYB_SM2_PUBLIC_KEY = "04a3c35de075a2e86f28d52a41989a08e740a82fb96d43d9af8a5509e0a4e837ecb384c44fe1ee95f601ef36f3c892214d45c9b3f75b57556466876ad6052f0f1f"
+XYB_SM2_MODE = 1
 
 # 后端接口
 API_URL = "https://langoo.cn"

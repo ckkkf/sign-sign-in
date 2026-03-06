@@ -2,7 +2,7 @@ import logging
 
 import requests
 
-from app.config.common import XYB_VERSION, XYB_REFERER
+from app.config.common import XYB_VERSION, XYB_REFERER, AMAP_WEB_KEY
 from app.utils.common import get_timestamp
 from app.utils.files import get_img_file, clear_session_cache
 from app.utils.params import get_header_token, get_device_code
@@ -37,8 +37,8 @@ def regeo(userAgent, location):
     }
     params = {
         "s": "rsx", "platform": "WXJS", "logversion": "2.0", "extensions": "all",
-        "sdkversion": "1.2.0", "key": "c222383ff12d31b556c3ad6145bb95f4",
-        "appname": "c222383ff12d31b556c3ad6145bb95f4",
+        "sdkversion": "1.2.0", "key": AMAP_WEB_KEY,
+        "appname": AMAP_WEB_KEY,
         "location": f"{location['longitude']},{location['latitude']}",
     }
     try:
@@ -67,7 +67,7 @@ def get_plan(userAgent, args):
         "xweb_xhr": "1",
         "content-type": "application/x-www-form-urlencoded",
         "encryptvalue": args['encryptValue'],
-        "n": "content,deviceName,keyWord,blogBody,blogTitle,getType,responsibilities,street,text,reason,searchvalue,key,answers,leaveReason,personRemark,selfAppraisal,imgUrl,wxname,deviceId,avatarTempPath,file,file,model,brand,system,deviceId,platform,code,openId,unionid,clockDeviceToken,clockDevice,address,name,enterpriseEmail,responsibilities,practiceTarget,guardianName,guardianPhone,practiceDays,linkman,enterpriseName,companyIntroduction,accommodationStreet,accommodationLongitude,accommodationLatitude,internshipDestination,specialStatement,enterpriseStreet,insuranceName,insuranceFinancing,policyNumber,overtimeRemark,riskStatement,specialStatement",
+        "n": header_token['n'],
         "referer": XYB_REFERER,
         "m": header_token['m'],
         "s": header_token['s'],
@@ -132,7 +132,7 @@ def wx_login(config, openIdData):
         "xweb_xhr": "1",
         "content-type": "application/x-www-form-urlencoded",
         "referer": XYB_REFERER,
-        "n": "content,deviceName,keyWord,blogBody,blogTitle,getType,responsibilities,street,text,reason,searchvalue,key,answers,leaveReason,personRemark,selfAppraisal,imgUrl,wxname,deviceId,avatarTempPath,file,file,model,brand,system,deviceId,platform,code,openId,unionid,clockDeviceToken,clockDevice,address,name,enterpriseEmail,responsibilities,practiceTarget,guardianName,guardianPhone,practiceDays,linkman,enterpriseName,companyIntroduction,accommodationStreet,accommodationLongitude,accommodationLatitude,internshipDestination,specialStatement,enterpriseStreet,insuranceName,insuranceFinancing,policyNumber,overtimeRemark,riskStatement,specialStatement",
+        "n": header_token['n'],
         "devicecode": get_device_code(openId=openIdData['openId'], device=config['device']),
         "encryptvalue": openIdData['encryptValue'],
         "m": header_token['m'],
@@ -240,7 +240,7 @@ def watermark_info(args, config, traineeId):
         "content-type": "application/x-www-form-urlencoded",
         "encryptvalue": args['encryptValue'],
         "m": header_token['m'],
-        "n": "content,deviceName,keyWord,blogBody,blogTitle,getType,responsibilities,street,text,reason,searchvalue,key,answers,leaveReason,personRemark,selfAppraisal,imgUrl,wxname,deviceId,avatarTempPath,file,file,model,brand,system,deviceId,platform,code,openId,unionid,clockDeviceToken,clockDevice,address,name,enterpriseEmail,responsibilities,practiceTarget,guardianName,guardianPhone,practiceDays,linkman,enterpriseName,companyIntroduction,accommodationStreet,accommodationLongitude,accommodationLatitude,internshipDestination,specialStatement,enterpriseStreet,insuranceName,insuranceFinancing,policyNumber,overtimeRemark,riskStatement,specialStatement",
+        "n": header_token['n'],
         "s": header_token['s'],
         "t": header_token['t'],
         "referer": XYB_REFERER,
@@ -274,7 +274,7 @@ def commonPostPolicy(args, config):
         "devicecode": get_device_code(openId=args['openId'], device=config['device']),
         "encryptvalue": args['encryptValue'],
         "m": header_token['m'],
-        "n": "content,deviceName,keyWord,blogBody,blogTitle,getType,responsibilities,street,text,reason,searchvalue,key,answers,leaveReason,personRemark,selfAppraisal,imgUrl,wxname,deviceId,avatarTempPath,file,file,model,brand,system,deviceId,platform,code,openId,unionid,clockDeviceToken,clockDevice,address,name,enterpriseEmail,responsibilities,practiceTarget,guardianName,guardianPhone,practiceDays,linkman,enterpriseName,companyIntroduction,accommodationStreet,accommodationLongitude,accommodationLatitude,internshipDestination,specialStatement,enterpriseStreet,insuranceName,insuranceFinancing,policyNumber,overtimeRemark,riskStatement,specialStatement",
+        "n": header_token['n'],
         "referer": XYB_REFERER,
         "s": header_token['s'],
         "t": header_token['t'],
@@ -310,7 +310,7 @@ def aliyun_OSS(files, timestamp, policyData):
     #     "devicecode": get_device_code(openId=args['openId'], device=config['device']),
     #     "encryptValue": args['encryptValue'],
     #     "m": header_token['m'],
-    #     "n": "content,deviceName,keyWord,blogBody,blogTitle,getType,responsibilities,street,text,reason,searchvalue,key,answers,leaveReason,personRemark,selfAppraisal,imgUrl,wxname,deviceId,avatarTempPath,file,file,model,brand,system,deviceId,platform,code,openId,unionid,clockDeviceToken,clockDevice,address,name,enterpriseEmail,responsibilities,practiceTarget,guardianName,guardianPhone,practiceDays,linkman,enterpriseName,companyIntroduction,accommodationStreet,accommodationLongitude,accommodationLatitude,internshipDestination,specialStatement,enterpriseStreet,insuranceName,insuranceFinancing,policyNumber,overtimeRemark,riskStatement,specialStatement",
+    #     "n": header_token['n'],
     #     "s": header_token['s'],
     #     "t": header_token['t'],
     #     "v": XYB_VERSION,
@@ -382,7 +382,7 @@ def post_new(args, config, traineeId, geo, imgUrl, opt):
         "devicecode": get_device_code(openId=args['openId'], device=config['device']),
         "encryptvalue": args['encryptValue'],
         "m": header_token['m'],
-        "n": "content,deviceName,keyWord,blogBody,blogTitle,getType,responsibilities,street,text,reason,searchvalue,key,answers,leaveReason,personRemark,selfAppraisal,imgUrl,wxname,deviceId,avatarTempPath,file,file,model,brand,system,deviceId,platform,code,openId,unionid,clockDeviceToken,clockDevice,address,name,enterpriseEmail,responsibilities,practiceTarget,guardianName,guardianPhone,practiceDays,linkman,enterpriseName,companyIntroduction,accommodationStreet,accommodationLongitude,accommodationLatitude,internshipDestination,specialStatement,enterpriseStreet,insuranceName,insuranceFinancing,policyNumber,overtimeRemark,riskStatement,specialStatement",
+        "n": header_token['n'],
         "referer": XYB_REFERER,
         "s": header_token['s'],
         "t": header_token['t'],
@@ -414,7 +414,7 @@ def deliver_value(args, config, traineeId):
         "content-type": "application/x-www-form-urlencoded",
         "encryptvalue": args['encryptValue'],
         "m": header_token['m'],
-        "n": "content,deviceName,keyWord,blogBody,blogTitle,getType,responsibilities,street,text,reason,searchvalue,key,answers,leaveReason,personRemark,selfAppraisal,imgUrl,wxname,deviceId,avatarTempPath,file,file,model,brand,system,deviceId,platform,code,openId,unionid,clockDeviceToken,clockDevice,address,name,enterpriseEmail,responsibilities,practiceTarget,guardianName,guardianPhone,practiceDays,linkman,enterpriseName,companyIntroduction,accommodationStreet,accommodationLongitude,accommodationLatitude,internshipDestination,specialStatement,enterpriseStreet,insuranceName,insuranceFinancing,policyNumber,overtimeRemark,riskStatement,specialStatement",
+        "n": header_token['n'],
         "referer": XYB_REFERER,
         "s": header_token['s'],
         "t": header_token['t'],
@@ -449,7 +449,7 @@ def simple_sign_in_or_out(args, geo, traineeId, config, opt):
     headers = {'v': XYB_VERSION, 'wechat': "1",
                'Referer': XYB_REFERER,
                'User-Agent': config['userAgent'],
-               'n': "content,deviceName,keyWord,blogBody,blogTitle,getType,responsibilities,street,text,reason,searchvalue,key,answers,leaveReason,personRemark,selfAppraisal,imgUrl,wxname,deviceId,avatarTempPath,file,file,model,brand,system,deviceId,platform,code,openId,unionid,clockDeviceToken,clockDevice,address,name,enterpriseEmail,responsibilities,practiceTarget,guardianName,guardianPhone,practiceDays,linkman,enterpriseName,companyIntroduction,accommodationStreet,accommodationLongitude,accommodationLatitude,internshipDestination,specialStatement,enterpriseStreet,insuranceName,insuranceFinancing,policyNumber,overtimeRemark,riskStatement,specialStatement",
+               'n': header_token['n'],
                'm': header_token['m'], 's': header_token['s'], 't': header_token['t'],
                'encryptvalue': args['encryptValue'],
                'devicecode': get_device_code(openId=args['openId'], device=config['device']), }
@@ -506,7 +506,7 @@ def load_blog_year(args, config):
         "content-type": "application/x-www-form-urlencoded",
         "encryptvalue": args['encryptValue'],
         "m": header_token['m'],
-        "n": "content,deviceName,keyWord,blogBody,blogTitle,getType,responsibilities,street,text,reason,searchvalue,key,answers,leaveReason,personRemark,selfAppraisal,imgUrl,wxname,deviceId,avatarTempPath,file,file,model,brand,system,deviceId,platform,code,openId,unionid,clockDeviceToken,clockDevice,address,name,enterpriseEmail,responsibilities,practiceTarget,guardianName,guardianPhone,practiceDays,linkman,enterpriseName,companyIntroduction,accommodationStreet,accommodationLongitude,accommodationLatitude,internshipDestination,specialStatement,enterpriseStreet,insuranceName,insuranceFinancing,policyNumber,overtimeRemark,riskStatement,specialStatement",
+        "n": header_token['n'],
         "referer": XYB_REFERER,
         "s": header_token['s'],
         "t": header_token['t'],
@@ -555,7 +555,7 @@ def load_blog_date(args, config, year, month):
         "content-type": "application/x-www-form-urlencoded",
         "encryptvalue": args['encryptValue'],
         "m": header_token['m'],
-        "n": "content,deviceName,keyWord,blogBody,blogTitle,getType,responsibilities,street,text,reason,searchvalue,key,answers,leaveReason,personRemark,selfAppraisal,imgUrl,wxname,deviceId,avatarTempPath,file,file,model,brand,system,deviceId,platform,code,openId,unionid,clockDeviceToken,clockDevice,address,name,enterpriseEmail,responsibilities,practiceTarget,guardianName,guardianPhone,practiceDays,linkman,enterpriseName,companyIntroduction,accommodationStreet,accommodationLongitude,accommodationLatitude,internshipDestination,specialStatement,enterpriseStreet,insuranceName,insuranceFinancing,policyNumber,overtimeRemark,riskStatement,specialStatement",
+        "n": header_token['n'],
         "referer": XYB_REFERER,
         "s": header_token['s'],
         "t": header_token['t'],
@@ -612,7 +612,7 @@ def submit_blog(args, config, blog_title, blog_body, start_date, end_date, blog_
         "devicecode": get_device_code(openId=args['openId'], device=config['device']),
         "encryptvalue": args['encryptValue'],
         "m": header_token['m'],
-        "n": "content,deviceName,keyWord,blogBody,blogTitle,getType,responsibilities,street,text,reason,searchvalue,key,answers,leaveReason,personRemark,selfAppraisal,imgUrl,wxname,deviceId,avatarTempPath,file,file,model,brand,system,deviceId,platform,code,openId,unionid,clockDeviceToken,clockDevice,address,name,enterpriseEmail,responsibilities,practiceTarget,guardianName,guardianPhone,practiceDays,linkman,enterpriseName,companyIntroduction,accommodationStreet,accommodationLongitude,accommodationLatitude,internshipDestination,specialStatement,enterpriseStreet,insuranceName,insuranceFinancing,policyNumber,overtimeRemark,riskStatement,specialStatement",
+        "n": header_token['n'],
         "referer": XYB_REFERER,
         "s": header_token['s'],
         "t": header_token['t'],
@@ -667,7 +667,7 @@ def xyb_completion(args, config, prompt, on_delta=None):
         "devicecode": get_device_code(openId=args['openId'], device=config['device']),
         "encryptvalue": args['encryptValue'],
         "m": header_token['m'],
-        "n": "content,deviceName,keyWord,blogBody,blogTitle,getType,responsibilities,street,text,reason,searchvalue,key,answers,leaveReason,personRemark,selfAppraisal,imgUrl,wxname,deviceId,avatarTempPath,file,file,model,brand,system,deviceId,platform,code,openId,unionid,clockDeviceToken,clockDevice,address,name,enterpriseEmail,responsibilities,practiceTarget,guardianName,guardianPhone,practiceDays,linkman,enterpriseName,companyIntroduction,accommodationStreet,accommodationLongitude,accommodationLatitude,internshipDestination,specialStatement,enterpriseStreet,insuranceName,insuranceFinancing,policyNumber,overtimeRemark,riskStatement,specialStatement",
+        "n": header_token['n'],
         "referer": XYB_REFERER,
         "s": header_token['s'],
         "t": header_token['t'],
@@ -717,7 +717,7 @@ def blog_list(args, config, page, blogType="1"):
         "devicecode": get_device_code(openId=args['openId'], device=config['device']),
         "encryptvalue": args['encryptValue'],
         "m": header_token['m'],
-        "n": "content,deviceName,keyWord,blogBody,blogTitle,getType,responsibilities,street,text,reason,searchvalue,key,answers,leaveReason,personRemark,selfAppraisal,imgUrl,wxname,deviceId,avatarTempPath,file,file,model,brand,system,deviceId,platform,code,openId,unionid,clockDeviceToken,clockDevice,address,name,enterpriseEmail,responsibilities,practiceTarget,guardianName,guardianPhone,practiceDays,linkman,enterpriseName,companyIntroduction,accommodationStreet,accommodationLongitude,accommodationLatitude,internshipDestination,specialStatement,enterpriseStreet,insuranceName,insuranceFinancing,policyNumber,overtimeRemark,riskStatement,specialStatement",
+        "n": header_token['n'],
         "referer": XYB_REFERER,
         "s": header_token['s'],
         "t": header_token['t'],

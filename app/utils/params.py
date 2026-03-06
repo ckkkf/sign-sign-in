@@ -1,4 +1,4 @@
-import hashlib
+﻿import hashlib
 import random
 import re
 import time
@@ -6,16 +6,30 @@ import urllib.parse
 
 from gmssl import sm2
 
-from app.config.common import XYB_KEY
+from app.config.common import (
+    XYB_APP_ID,
+    XYB_EXCLUDED_KEYS,
+    XYB_KEY,
+    XYB_N_HEADER,
+    XYB_SM2_MODE,
+    XYB_SM2_PUBLIC_KEY,
+)
 from app.utils.common import rand_str
 
 
 def get_device_code(openId, device):
     sm2_crypt = sm2.CryptSM2(
-        public_key='04a3c35de075a2e86f28d52a41989a08e740a82fb96d43d9af8a5509e0a4e837ecb384c44fe1ee95f601ef36f3c892214d45c9b3f75b57556466876ad6052f0f1f',
-        private_key=None, mode=1)
+        public_key=XYB_SM2_PUBLIC_KEY,
+        private_key=None,
+        mode=XYB_SM2_MODE,
+    )
     return sm2_crypt.encrypt(
-        f'b|_{device["brand"]},{device["model"]},{device["system"]},{device["platform"]}aid|_wx9f1c2e0bbc10673ct|_{int(time.time() * 1000)}uid|_{rand_str()}oid|_{openId}'.encode()).hex().strip()
+        (
+            f'b|_{device["brand"]},{device["model"]},{device["system"]},{device["platform"]}'
+            f'aid|_{XYB_APP_ID}'
+            f'ct|_{int(time.time() * 1000)}uid|_{rand_str()}oid|_{openId}'
+        ).encode()
+    ).hex().strip()
 
 
 def get_header_token(e):
@@ -40,28 +54,13 @@ def get_header_token(e):
     # 初始化结果字符串d
     d = ""
 
-    # 排除的字段列表，根据r()返回的结果
-    excluded_keys = [
-        "content", "deviceName", "keyWord", "blogBody", "blogTitle", "getType",
-        "responsibilities", "street", "text", "reason", "searchvalue", "key",
-        "answers", "leaveReason", "personRemark", "selfAppraisal", "imgUrl",
-        "wxname", "deviceId", "avatarTempPath", "file", "model", "brand", "system",
-        "platform", "code", "openId", "unionid", "clockDeviceToken", "clockDevice",
-        "address", "name", "enterpriseEmail", "practiceTarget", "guardianName",
-        "guardianPhone", "practiceDays", "linkman", "enterpriseName",
-        "companyIntroduction", "accommodationStreet", "accommodationLongitude",
-        "accommodationLatitude", "internshipDestination", "specialStatement",
-        "enterpriseStreet", "insuranceName", "insuranceFinancing", "policyNumber",
-        "overtimeRemark", "riskStatement", "specialStatement"
-    ]
-
     # 正则表达式：匹配特殊字符
     special_char_regex = re.compile(r"[`~!@#$%^&*()+=|{}':;',\[\].<>/?~！@#￥%……&*（）——+|{}【】‘；：”“’。，、？]")
 
     # 遍历u字典，构建d字符串
     for c in u:
         # 如果字段值不包含特殊字符且不在排除字段中
-        if c not in excluded_keys and not special_char_regex.search(u[c]):
+        if c not in XYB_EXCLUDED_KEYS and not special_char_regex.search(u[c]):
             d += u[c]
 
     # 拼接最终的字符串
@@ -87,5 +86,7 @@ def get_header_token(e):
     return {
         "m": md5_value,
         "t": str(l),
-        "s": "_".join(p) if len(p) > 0 else ""
+        "s": "_".join(p) if len(p) > 0 else "",
+        "n": XYB_N_HEADER
     }
+

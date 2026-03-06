@@ -10,7 +10,7 @@ import requests
 from PySide6.QtCore import QThread, Signal
 
 from app.apis.xybsyw import login, get_plan, regeo, photo_sign_in_or_out, simple_sign_in_or_out
-from app.config.common import CODE_FILE, CERT_FILE, MITM_PROXY
+from app.config.common import CODE_FILE, CERT_FILE, MITM_PROXY, XYB_APP_ID
 from app.utils.commands import get_system_proxy, set_proxy, check_port_listening, reset_proxy, check_cert, bash
 from app.utils.files import read_config, check_img
 
@@ -306,7 +306,7 @@ class GetCodeAndSessionThread(QThread):
             self.do_cert()
 
             ### 唤起微信小程序
-            weixin_url = "weixin://launchapplet/?app_id=wx9f1c2e0bbc10673c"
+            weixin_url = f"weixin://launchapplet/?app_id={XYB_APP_ID}"
             try:
                 os.startfile(weixin_url)
                 logging.info("🌈 已发送唤醒指令到微信")
