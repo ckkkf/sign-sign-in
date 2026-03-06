@@ -10,6 +10,15 @@ from app.config.common import IMAGE_DIR, JOURNAL_DIR, JOURNAL_HISTORY_FILE, SESS
 
 IMAGE_EXTS = {'.png', '.jpg', '.jpeg', '.bmp', '.gif', '.webp'}
 
+# 统一 UA 模板，设备字段仅替换 system/model/platform
+UA_TEMPLATE = (
+    "Mozilla/5.0 (Linux; {system}; {model} Build/AP3A.240617.008; wv) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/138.0.7204.180 "
+    "Mobile Safari/537.36 XWEB/1380243 MMWEBSDK/20230805 MMWEBID/9843 "
+    "MicroMessenger/8.0.42.2460(0x28002A35) WeChat/arm64 Weixin NetType/4G "
+    "Language/zh_CN ABI/arm64 MiniProgramEnv/{platform}"
+)
+
 
 def ensure_dir(directory: str) -> None:
     if directory:
@@ -36,37 +45,86 @@ def read_config(file_path: str) -> dict:
     return config
 
 
+def build_user_agent(device: dict) -> str:
+    system = str(device.get("system", "")).strip()
+    model = str(device.get("model", "")).strip()
+    platform = str(device.get("platform", "")).strip().lower()
+    return UA_TEMPLATE.format(system=system, model=model, platform=platform)
+
+
+def validate_user_agent_matches_device(device: dict, ua: str):
+    if not ua:
+        return "未检测到 User-Agent。请在【配置】里点击“生成UA”后再保存。"
+
+    system = str(device.get("system", "")).strip()
+    model = str(device.get("model", "")).strip()
+    platform = str(device.get("platform", "")).strip().lower()
+
+    if system and f"; {system};" not in ua:
+        return f"设备系统与UA不一致：UA中缺少“{system}”。请在【配置】点击“生成UA”自动修复。"
+    if model and model not in ua:
+        return f"设备型号与UA不一致：UA中缺少“{model}”。请在【配置】点击“生成UA”自动修复。"
+    if platform and f"MiniProgramEnv/{platform}" not in ua:
+        return (
+            f"设备平台与UA不一致：UA中缺少“MiniProgramEnv/{platform}”。"
+            "请在【配置】点击“生成UA”自动修复。"
+        )
+    return None
+
+
 def validate_config(data: dict):
     if "input" not in data or not isinstance(data["input"], dict):
-        return "缺少 input 字段"
+        return "配置格式不完整：缺少 input。建议重新打开配置页后点击“保存并应用”。"
     input_data = data["input"]
 
     # location
     loc = input_data.get("location")
     if not isinstance(loc, dict):
-        return "缺少 input.location"
+        return "缺少位置信息。请填写经纬度（可用“获取坐标”按钮）。"
 
     required_loc = ["longitude", "latitude"]
     for key in required_loc:
         val = loc.get(key)
         if not val or str(val).strip() == "":
-            return f"input.location.{key} 不能为空"
+            if key == "longitude":
+                return "经度不能为空。示例：116.397128"
+            return "纬度不能为空。示例：39.916527"
+
+    try:
+        lng = float(str(loc.get("longitude")).strip())
+        lat = float(str(loc.get("latitude")).strip())
+    except ValueError:
+        return "经纬度格式错误：只能填写数字。示例：经度 116.397128，纬度 39.916527"
+    if not (-180 <= lng <= 180):
+        return "经度超出范围：应在 -180 到 180 之间。"
+    if not (-90 <= lat <= 90):
+        return "纬度超出范围：应在 -90 到 90 之间。"
 
     # device
     dev = input_data.get("device")
     if not isinstance(dev, dict):
-        return "缺少 input.device"
+        return "缺少设备信息。请填写品牌、型号、系统、平台。"
 
     required_dev = ["brand", "model", "system", "platform"]
     for key in required_dev:
         val = dev.get(key)
         if not val or str(val).strip() == "":
-            return f"input.device.{key} 不能为空"
+            name_map = {
+                "brand": "品牌",
+                "model": "型号",
+                "system": "系统版本（如 15）",
+                "platform": "平台（如 android）",
+            }
+            return f"{name_map.get(key, key)}不能为空。请在【配置】里补全后保存。"
 
     # userAgent
     ua = input_data.get("userAgent")
     if not ua or str(ua).strip() == "":
-        return "input.userAgent 不能为空"
+        return "User-Agent 为空。请在【配置】点击“生成UA”后再保存。"
+
+    ua_err = validate_user_agent_matches_device(dev, str(ua))
+    if ua_err:
+        return ua_err
 
     # 校验通过
     return None

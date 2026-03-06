@@ -1,13 +1,20 @@
 import json
 import os
+import re
 
-from PySide6.QtCore import QUrl
+from PySide6.QtCore import QTimer, QUrl
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import QDialog, QVBoxLayout, QScrollArea, QWidget, QFormLayout, QHBoxLayout, QLabel, QPushButton, \
-    QSpacerItem, QMessageBox, QLineEdit
+    QSpacerItem, QMessageBox, QLineEdit, QComboBox
 
 from app.gui.components.toast import ToastManager
-from app.utils.files import read_config, save_json_file
+from app.utils.files import (
+    build_user_agent,
+    read_config,
+    save_json_file,
+    validate_config,
+    validate_user_agent_matches_device,
+)
 from app.utils.model_client import test_model_connection, ModelConfigurationError
 
 
@@ -52,6 +59,45 @@ class ConfigDialog(QDialog):
                 border-color: #6E7BFF;
                 box-shadow: 0 0 12px rgba(110,123,255,0.24);
             }
+            QComboBox {
+                background: #1C2033;
+                border: 1px solid #2F3654;
+                color: #F5F6FF;
+                padding: 8px 10px;
+                border-radius: 10px;
+                min-height: 22px;
+            }
+            QComboBox:hover {
+                border-color: #7C89FF;
+            }
+            QComboBox:focus {
+                border-color: #6E7BFF;
+            }
+            QComboBox::drop-down {
+                subcontrol-origin: padding;
+                subcontrol-position: top right;
+                width: 28px;
+                border: none;
+                background: transparent;
+            }
+            QComboBox::down-arrow {
+                image: none;
+                border-left: 5px solid transparent;
+                border-right: 5px solid transparent;
+                border-top: 7px solid #AAB3E8;
+                width: 0px;
+                height: 0px;
+                margin-right: 10px;
+            }
+            QComboBox QAbstractItemView {
+                background: #1C2033;
+                color: #F5F6FF;
+                border: 1px solid #2F3654;
+                selection-background-color: #2D365A;
+                selection-color: #FFFFFF;
+                outline: 0;
+                padding: 4px;
+            }
             QPushButton {
                 background: #1F2336;
                 color: #D5D9FF;
@@ -78,6 +124,12 @@ class ConfigDialog(QDialog):
                 color: white;
                 border: none;
             }
+            QLabel#Tip {
+                color: #9AA4CF;
+                font-size: 12px;
+                font-weight: 500;
+                padding: 2px 0 6px 0;
+            }
         """)
 
     def setup_ui(self):
@@ -93,6 +145,7 @@ class ConfigDialog(QDialog):
         input_conf = self.current_data.get('input', {})
         loc = input_conf.get('location', {})
         dev = input_conf.get('device', {})
+        system_ver = self.extract_android_version(dev.get('system', ''))
         model_conf = self.current_data.get('model', {})
 
         # ===========================================================
@@ -115,6 +168,7 @@ class ConfigDialog(QDialog):
         # 经纬度
         self.add_row(form, "经度", "lng", loc.get('longitude', ''))
         self.add_row(form, "纬度", "lat", loc.get('latitude', ''))
+        self.add_tip(form, "提示：经纬度可用高德拾取器获取，建议保留 6 位小数。")
 
         # 区块底部空白
         form.addItem(QSpacerItem(0, 15))
@@ -139,9 +193,36 @@ class ConfigDialog(QDialog):
         # 设备参数
         self.add_row(form, "品牌", "brand", dev.get('brand', ''))
         self.add_row(form, "型号", "model", dev.get('model', ''))
-        self.add_row(form, "系统", "system", dev.get('system', ''))
-        self.add_row(form, "平台", "platform", dev.get('platform', ''))
-        self.add_row(form, "User-Agent", "userAgent", input_conf.get('userAgent', ''))
+        self.add_row(form, "系统版本", "system_version", system_ver)
+        self.add_tip(form, "提示：系统版本只填数字，例如 15（程序会自动拼成 Android 15）。")
+
+        platform_combo = QComboBox()
+        platform_combo.addItems(["android", "ios"])
+        platform = str(dev.get('platform', 'android')).strip().lower()
+        idx = platform_combo.findText(platform)
+        platform_combo.setCurrentIndex(idx if idx >= 0 else 0)
+        platform_combo.currentIndexChanged.connect(lambda: setattr(self, 'is_modified', True))
+        form.addRow("平台", platform_combo)
+        self.inputs['platform'] = platform_combo
+        self.add_tip(form, "提示：安卓选 android，iPhone 选 ios。")
+
+        ua_row = QHBoxLayout()
+        ua_row.addWidget(QLabel("User-Agent"))
+        btn_ua = QPushButton("↻ 生成UA")
+        btn_ua.setObjectName("LinkBtn")
+        btn_ua.clicked.connect(self.refresh_user_agent)
+        ua_row.addStretch()
+        ua_row.addWidget(btn_ua)
+        form.addRow(ua_row)
+        self.add_row(form, "", "userAgent", input_conf.get('userAgent', ''))
+        self.inputs['userAgent'].setReadOnly(True)
+        self.inputs['userAgent'].setPlaceholderText("根据设备参数自动生成")
+        self.add_tip(form, "提示：UA 会随设备参数自动生成，无需手动修改。")
+
+        for key in ('brand', 'model', 'system_version'):
+            self.inputs[key].textChanged.connect(self.refresh_user_agent)
+        self.inputs['platform'].currentIndexChanged.connect(self.refresh_user_agent)
+        self.refresh_user_agent()
 
         # 设备区块底部空白
         form.addItem(QSpacerItem(0, 15))
@@ -195,13 +276,37 @@ class ConfigDialog(QDialog):
         layout.addRow(label, le)
         self.inputs[key] = le
 
+    def add_tip(self, layout, text):
+        tip = QLabel(text)
+        tip.setObjectName("Tip")
+        tip.setWordWrap(True)
+        layout.addRow("", tip)
+
     def save_config(self):
         try:
             inp = self.current_data['input']
-            inp['userAgent'] = self.inputs['userAgent'].text()
+            system_version = self.get_input_value('system_version')
+            system = f"Android {system_version}" if system_version else ""
+            device = {
+                'brand': self.get_input_value('brand'),
+                'model': self.get_input_value('model'),
+                'system': system,
+                'platform': self.get_input_value('platform').lower()
+            }
+            inp['userAgent'] = build_user_agent(device)
             inp['location'] = {'longitude': self.inputs['lng'].text(), 'latitude': self.inputs['lat'].text()}
-            inp['device'] = {'brand': self.inputs['brand'].text(), 'model': self.inputs['model'].text(),
-                'system': self.inputs['system'].text(), 'platform': self.inputs['platform'].text()}
+            inp['device'] = device
+
+            ua_err = validate_user_agent_matches_device(device, inp['userAgent'])
+            if ua_err:
+                self.focus_error_field(ua_err)
+                raise RuntimeError(ua_err)
+
+            cfg_err = validate_config(self.current_data)
+            if cfg_err:
+                self.focus_error_field(cfg_err)
+                raise RuntimeError(cfg_err)
+
             model_conf = self.current_data.setdefault('model', {})
             # model_conf['baseUrl'] = self.inputs['model_baseUrl'].text().strip()
             # model_conf['apiKey'] = self.inputs['model_apiKey'].text().strip()
@@ -212,7 +317,71 @@ class ConfigDialog(QDialog):
             ToastManager.instance().show("配置保存成功", "success")
             self.accept()
         except Exception as e:
-            QMessageBox.critical(self, "错误", str(e))
+            QMessageBox.critical(self, "配置校验未通过", str(e))
+
+    def refresh_user_agent(self):
+        system_version = self.get_input_value('system_version')
+        system = f"Android {system_version}" if system_version else ""
+        device = {
+            'brand': self.get_input_value('brand'),
+            'model': self.get_input_value('model'),
+            'system': system,
+            'platform': self.get_input_value('platform').lower()
+        }
+        ua = build_user_agent(device)
+        if 'userAgent' in self.inputs and self.inputs['userAgent'].text() != ua:
+            self.inputs['userAgent'].setText(ua)
+
+    def focus_error_field(self, err_msg: str):
+        msg = str(err_msg)
+        key = None
+        if "经度" in msg or "longitude" in msg:
+            key = "lng"
+        elif "纬度" in msg or "latitude" in msg:
+            key = "lat"
+        elif "品牌" in msg or "brand" in msg:
+            key = "brand"
+        elif "型号" in msg or "model" in msg:
+            key = "model"
+        elif "系统" in msg or "system" in msg:
+            key = "system_version"
+        elif "平台" in msg or "platform" in msg:
+            key = "platform"
+        elif "UA" in msg or "User-Agent" in msg or "userAgent" in msg:
+            key = "userAgent"
+
+        if not key or key not in self.inputs:
+            return
+
+        target = self.inputs[key]
+        target.setFocus()
+        try:
+            target.selectAll()
+        except Exception:
+            pass
+
+        target.setStyleSheet("border: 2px solid #FF6B6B; background: #2A1E24;")
+        QTimer.singleShot(1800, lambda: target.setStyleSheet(""))
+
+    def get_input_value(self, key: str) -> str:
+        widget = self.inputs.get(key)
+        if widget is None:
+            return ""
+        if hasattr(widget, "text"):
+            return widget.text().strip()
+        if hasattr(widget, "currentText"):
+            return widget.currentText().strip()
+        return ""
+
+    @staticmethod
+    def extract_android_version(system_text: str) -> str:
+        txt = str(system_text or "").strip()
+        if not txt:
+            return ""
+        m = re.match(r"(?i)^android\s+(.+)$", txt)
+        if m:
+            return m.group(1).strip()
+        return txt
 
     def test_model(self):
         cfg = {
@@ -248,4 +417,3 @@ class ConfigDialog(QDialog):
                 return
         else:
             e.accept()
-
