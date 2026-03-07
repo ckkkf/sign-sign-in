@@ -218,7 +218,7 @@ def photo_sign_in_or_out(args, config, geo, traineeId, opt):
 
     files = get_img_file(timestamp, opt.get('image_path'))
     try:
-        ossData = aliyun_OSS(files=files, timestamp=timestamp, policyData=policyData)
+        ossData = aliyun_OSS(files=files, timestamp=timestamp, policyData=policyData,config=config)
         post_new(args=args, config=config, traineeId=traineeId, geo=geo, imgUrl=ossData['key'], opt=opt)
         # deliver_value(args=args, config=config, traineeId=traineeId)
     finally:
@@ -300,34 +300,14 @@ def commonPostPolicy(args, config):
     return res['data']
 
 
-def aliyun_OSS(files, timestamp, policyData):
+def aliyun_OSS(files, timestamp, policyData,config):
     logging.info('正在上传至阿里云OSS...')
-
-    # headers = {
-    #     "Content-Type": "multipart/form-data;",
-    #     "Referer": XYB_REFERER,
-    #     "User-Agent": config['userAgent'],
-    #     "devicecode": get_device_code(openId=args['openId'], device=config['device']),
-    #     "encryptValue": args['encryptValue'],
-    #     "m": header_token['m'],
-    #     "n": header_token['n'],
-    #     "s": header_token['s'],
-    #     "t": header_token['t'],
-    #     "v": XYB_VERSION,
-    #     "wechat": "1",
-    #     "xweb_xhr": "1"
-    # }
-    # cookies = {
-    #     "JSESSIONID": args['sessionId']
-    # }
-    # url = "https://xyb001-new.oss-cn-hangzhou.aliyuncs.com/"
-    # response = requests.post(url, headers=headers, files=files, cookies=cookies, data=data)
 
     url = policyData['host']
 
     headers = {
         "Referer": XYB_REFERER,
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36 MicroMessenger/7.0.20.1781(0x6700143B) NetType/WIFI MiniProgramEnv/Windows WindowsWechat/WMPF WindowsWechat(0x63090a13) UnifiedPCWindowsWechat(0xf2541211) XWEB/16815",
+        "User-Agent": config['userAgent'],
     }
 
     key = f"{policyData['dir']}/{timestamp}.jpg"
