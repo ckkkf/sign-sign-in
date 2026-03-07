@@ -1,19 +1,9 @@
 import json
-import os
-import time
+import urllib.request
 
 from mitmproxy import http
 
-# code_file = sys.argv[4]
-
-# 当前 addon 文件夹：app/mitm/addons
-ADDON_DIR = os.path.dirname(os.path.abspath(__file__))
-
-# 跳到 openSource（往上跳 3 层）
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(ADDON_DIR)))
-
-# resources/config/code.json
-code_file = os.path.join(PROJECT_ROOT,"resources", "config", "code.json")
+CODE_RECEIVER_URL = "http://127.0.0.1:13141/code"
 
 class GetCode:
     TARGET = "getOpenId.action"
@@ -29,17 +19,20 @@ class GetCode:
         if not code:
             return
 
-        # 3. 写入文件
-        with open(code_file, "w", encoding="utf-8") as f:
-            json.dump({"code": code, "ts": time.time()}, f, ensure_ascii=False, indent=2)
-        print(f"[addon] ⚔️成功拦截code: {code}并写入{code_file} ")
-
-        # 关键：阻止请求继续发送
-        flow.response = http.Response.make(
-            200,  # 状态码
-            b'{"msg": ""}',  # 响应体
-            {"Content-Type": "application/json"}  # 响应头
+        # 3. 回传到主程序
+        body = json.dumps({"code": code}).encode("utf-8")
+        req = urllib.request.Request(
+            CODE_RECEIVER_URL,
+            data=body,
+            headers={"Content-Type": "application/json"},
+            method="POST"
         )
+        with urllib.request.urlopen(req, timeout=2):
+            pass
+        print(f"[addon] ⚔️成功拦截code并回传到 {CODE_RECEIVER_URL}")
+
+        # 关键：直接中断请求，不伪造响应
+        flow.kill()
 
 
 # 导出为 addon

@@ -50,6 +50,10 @@ API_URL = "https://langoo.cn"
 # 代理地址
 MITM_PROXY = "127.0.0.1:13140"
 
+# code 本地接收服务
+CODE_RECEIVER_HOST = "127.0.0.1"
+CODE_RECEIVER_PORT = 13141
+
 # 项目根目录（openSource）
 BASE_DIR = get_base_dir()
 
@@ -64,9 +68,6 @@ MITM_DIR = os.path.join(RES_DIR, "mitm")
 
 # 配置文件目录（你如果想放 resources/config/ 也可以）
 CONFIG_FILE = os.path.join(RES_DIR, "config", "config.json")
-
-# code文件目录
-CODE_FILE = os.path.join(RES_DIR, "config", "code.json")
 
 # code文件目录
 CERT_FILE = os.path.join(RES_DIR, "cert", "mitmproxy-ca-cert.p12")

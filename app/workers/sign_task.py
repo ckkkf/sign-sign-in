@@ -1,4 +1,3 @@
-import json
 import logging
 import math
 import os
@@ -10,8 +9,9 @@ import requests
 from PySide6.QtCore import QThread, Signal
 
 from app.apis.xybsyw import login, get_plan, regeo, photo_sign_in_or_out, simple_sign_in_or_out
-from app.config.common import CODE_FILE, CERT_FILE, MITM_PROXY, XYB_APP_ID
+from app.config.common import CERT_FILE, MITM_PROXY, XYB_APP_ID
 from app.utils.commands import get_system_proxy, set_proxy, check_port_listening, reset_proxy, check_cert, bash
+from app.utils.code_channel import CodeChannel
 from app.utils.files import read_config, check_img
 
 
@@ -27,7 +27,6 @@ class SignTaskThread(QThread):
         proxy_split = MITM_PROXY.split(':')
         self.target_host = proxy_split[0]
         self.target_port = proxy_split[1]
-        self.code_file = CODE_FILE
         self.cert_file = CERT_FILE
 
     def run(self):
@@ -57,10 +56,10 @@ class SignTaskThread(QThread):
                     'sessionId': cached_session.get('sessionId')
                 })
             else:
-                # 没有有效缓存，需要获取code
-                # 删除旧code文件
-                if os.path.exists(self.code_file):
-                    os.remove(self.code_file)
+                # 没有有效缓存，需要重新获取 code
+                channel = CodeChannel.instance()
+                channel.start()
+                channel.reset()
 
                 ### 代理
                 target_proxy = f"{self.target_host}:{self.target_port}"
@@ -80,7 +79,7 @@ class SignTaskThread(QThread):
 
                 logging.warning("⏳ 请重启校友邦小程序，以获取code...")
 
-                code = self.wait_code(self.code_file, target_proxy)
+                code = self.wait_code(target_proxy)
                 config['input']['code'] = code
                 logging.info(f"✅ Code: {code}")
 
@@ -164,22 +163,19 @@ class SignTaskThread(QThread):
     def check_stop(self):
         if self.isInterruptionRequested(): raise RuntimeError("用户停止执行")
 
-    def wait_code(self, fpath, proxy):
+    def wait_code(self, proxy):
         last = time.time()
-        for _ in range(1200):
+        channel = CodeChannel.instance()
+
+        def heartbeat():
+            nonlocal last
             self.check_stop()
             if time.time() - last > 1.0:
-                if get_system_proxy() != proxy: set_proxy(proxy)
+                if get_system_proxy() != proxy:
+                    set_proxy(proxy)
                 last = time.time()
-            if os.path.exists(fpath):
-                try:
-                    with open(fpath) as f:
-                        d = json.load(f)
-                        if d.get("code"): return d['code'].strip()
-                except:
-                    pass
-            time.sleep(0.1)
-        raise RuntimeError("获取 Code 超时")
+
+        return channel.wait_code(timeout_seconds=120, stop_check=self.check_stop, heartbeat=heartbeat)
 
     def execute_logic(self, config):
         logging.info("🚀 开始业务逻辑...")
@@ -278,7 +274,6 @@ class GetCodeAndSessionThread(QThread):
         proxy_split = MITM_PROXY.split(':')
         self.target_host = proxy_split[0]
         self.target_port = proxy_split[1]
-        self.code_file = CODE_FILE
         self.cert_file = CERT_FILE
 
     def run(self):
@@ -288,9 +283,9 @@ class GetCodeAndSessionThread(QThread):
             ### 获取配置文件相关
             config = read_config(self.config_file)
 
-            # 删除旧code文件
-            if os.path.exists(self.code_file):
-                os.remove(self.code_file)
+            channel = CodeChannel.instance()
+            channel.start()
+            channel.reset()
 
             ### 代理
             target_proxy = f"{self.target_host}:{self.target_port}"
@@ -320,7 +315,7 @@ class GetCodeAndSessionThread(QThread):
 
             logging.warning("⏳ 请重启校友邦小程序，以获取code...")
 
-            code = self.wait_code(self.code_file, target_proxy)
+            code = self.wait_code(target_proxy)
             config['input']['code'] = code
             logging.info(f"✅ Code: {code}")
 
@@ -355,24 +350,19 @@ class GetCodeAndSessionThread(QThread):
         if self.isInterruptionRequested():
             raise RuntimeError("用户停止执行")
 
-    def wait_code(self, fpath, proxy):
+    def wait_code(self, proxy):
         last = time.time()
-        for _ in range(1200):
+        channel = CodeChannel.instance()
+
+        def heartbeat():
+            nonlocal last
             self.check_stop()
             if time.time() - last > 1.0:
                 if get_system_proxy() != proxy:
                     set_proxy(proxy)
                 last = time.time()
-            if os.path.exists(fpath):
-                try:
-                    with open(fpath) as f:
-                        d = json.load(f)
-                        if d.get("code"):
-                            return d['code'].strip()
-                except:
-                    pass
-            time.sleep(0.1)
-        raise RuntimeError("获取 Code 超时")
+
+        return channel.wait_code(timeout_seconds=120, stop_check=self.check_stop, heartbeat=heartbeat)
 
     def do_cert(self):
         if check_cert():
