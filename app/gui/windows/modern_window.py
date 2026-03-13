@@ -159,16 +159,16 @@ class ModernWindow(QMainWindow):
             b.clicked.connect(func)
             t_grid.addWidget(b, i // 4, i % 4)
 
+        btn_journal = QPushButton("✨ AI 与 周记（测试）")
+        btn_journal.setObjectName("ToolBtn")
+        btn_journal.clicked.connect(self.open_weekly_journal)
+        t_grid.addWidget(btn_journal, 2, 0, 1, 2)
+
         btn_auto_clock = QPushButton("定时打卡配置")
         btn_auto_clock.setObjectName("ToolBtn")
         btn_auto_clock.clicked.connect(self.open_auto_clock_config)
         t_grid.addWidget(btn_auto_clock, 2, 2, 1, 2)
         l_vbox.addLayout(t_grid)
-
-        btn_journal = QPushButton("✨ AI 与 周记（测试）")
-        btn_journal.setObjectName("ToolBtn")
-        btn_journal.clicked.connect(self.open_weekly_journal)
-        t_grid.addWidget(btn_journal, 3, 0, 1, 2)
 
         # ------------------------- Mode -------------------------
         label = QLabel("执行操作（拍照签到签退经纬度不准会导致外勤）")
