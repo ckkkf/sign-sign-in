@@ -509,7 +509,7 @@ def load_blog_year(args, config):
             handle_invalid_session()
             raise RuntimeError('❌ JSESSIONID已失效，请重新获取code')
 
-        logging.info(f'加载周记年份和月份：{res.get('data', 'Unknown error')}')
+        logging.info(f"加载周记年份和月份：{res.get('data', 'Unknown error')}")
         if res.get('code') == '200' and 'data' in res:
             return res['data']
         else:
@@ -558,7 +558,7 @@ def load_blog_date(args, config, year, month):
             handle_invalid_session()
             raise RuntimeError('❌ JSESSIONID已失效，请重新获取code')
 
-        logging.info(f'加载周信息：{res.get('msg', 'Unknown error')}')
+        logging.info(f"加载周信息：{res.get('msg', 'Unknown error')}")
         if res.get('code') == '200' and 'data' in res:
             return res['data']
         else:
