@@ -1,10 +1,12 @@
-import logging
+﻿import logging
 import os
+import random
+import re
 import subprocess
 import threading
 import time
 import ctypes
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from PySide6.QtCore import Qt, QUrl, QTimer
 from PySide6.QtGui import QDesktopServices
@@ -14,6 +16,7 @@ from PySide6.QtWidgets import QMainWindow, QWidget, QHBoxLayout, QFrame, QVBoxLa
 from app.config.common import QQ_GROUP, PROJECT_VERSION, CONFIG_FILE, MITM_PROXY, PROJECT_NAME, PROJECT_GITHUB
 from app.gui.components.log_viewer import QTextEditLogger
 from app.gui.components.toast import ToastManager
+from app.gui.dialogs.dialogs.auto_clock_config_dialog import AutoClockConfigDialog
 from app.gui.dialogs.dialogs.config_dialog import ConfigDialog
 from app.gui.dialogs.feedback_dialog import FeedbackDialog
 from app.gui.dialogs.image_manager_dialog import ImageManagerDialog
@@ -25,6 +28,7 @@ from app.mitm.service import MitmService
 from app.utils.commands import get_net_io, bash, get_network_type, get_local_ip, get_system_proxy, check_port_listening, \
     check_cert
 from app.utils.files import validate_config, read_config
+from app.utils.pushplus import notify_pushplus
 from app.workers.monitor_thread import MonitorThread
 from app.workers.sign_task import SignTaskThread, GetCodeAndSessionThread
 from app.workers.update_worker import UpdateCheckWorker
@@ -39,6 +43,15 @@ class ModernWindow(QMainWindow):
         self.is_running = False
         self.is_getting_code = False
         self.photo_image_path = None
+        self.current_run_source = "manual"
+        self.auto_clock_enabled = False
+        self.auto_clock_tasks = []
+        self.auto_clock_last_trigger = {}
+        self.auto_clock_next_trigger = {}
+        self.auto_clock_random_minutes = 0
+        self.auto_clock_timer = QTimer(self)
+        self.auto_clock_timer.setInterval(30 * 1000)
+        self.auto_clock_timer.timeout.connect(self._on_auto_clock_tick)
         self.btn_get_code_original_style = None  # 保存按钮原始样式
         self.weekly_journal_dialog = None  # 周记对话框实例
 
@@ -50,6 +63,7 @@ class ModernWindow(QMainWindow):
 
         self.setup_style()
         self.init_ui()
+        self._load_auto_clock_settings()
 
     def init_ui(self):
         main = QWidget()
@@ -144,12 +158,17 @@ class ModernWindow(QMainWindow):
             b.setObjectName("ToolBtn")
             b.clicked.connect(func)
             t_grid.addWidget(b, i // 4, i % 4)
+
+        btn_auto_clock = QPushButton("定时打卡配置")
+        btn_auto_clock.setObjectName("ToolBtn")
+        btn_auto_clock.clicked.connect(self.open_auto_clock_config)
+        t_grid.addWidget(btn_auto_clock, 2, 2, 1, 2)
         l_vbox.addLayout(t_grid)
 
         btn_journal = QPushButton("✨ AI 与 周记（测试）")
         btn_journal.setObjectName("ToolBtn")
         btn_journal.clicked.connect(self.open_weekly_journal)
-        t_grid.addWidget(btn_journal, 2, 0, 1, 2)
+        t_grid.addWidget(btn_journal, 3, 0, 1, 2)
 
         # ------------------------- Mode -------------------------
         label = QLabel("执行操作（拍照签到签退经纬度不准会导致外勤）")
@@ -528,7 +547,15 @@ class ModernWindow(QMainWindow):
             ToastManager.instance().show("config.json 文件不存在", "error")
             return
         ConfigDialog(CONFIG_FILE, self).exec()
+        self._load_auto_clock_settings()
         return None
+
+    def open_auto_clock_config(self):
+        if not os.path.exists(CONFIG_FILE):
+            ToastManager.instance().show("config.json 文件不存在", "error")
+            return
+        if AutoClockConfigDialog(CONFIG_FILE, self).exec() == QDialog.Accepted:
+            self._load_auto_clock_settings()
 
     def show_support(self):
         SponsorSubmitDialog(self).exec()  # SupportDialog(self).exec()
@@ -728,7 +755,7 @@ class ModernWindow(QMainWindow):
     def _update_session_display(self):
         """更新JSESSIONID显示"""
         from app.utils.files import load_session_cache
-        from datetime import datetime
+        from datetime import datetime, timedelta
 
         cache = load_session_cache()
         if cache and cache.get('sessionId'):
@@ -745,8 +772,254 @@ class ModernWindow(QMainWindow):
         else:
             self.lbls['session'].setText("🗝️ SESSION: <span style='color:#F4D03F'>未获取</span>")
 
+    def _mode_to_option(self, mode: str, image_path: str = None) -> dict:
+        mode_map = {
+            "in": {"action": "普通签到", "code": "2"},
+            "out": {"action": "普通签退", "code": "1"},
+            "photo_in": {"action": "拍照签到", "code": "2"},
+            "photo_out": {"action": "拍照签退", "code": "1"},
+        }
+        if mode not in mode_map:
+            raise RuntimeError(f"不支持的定时打卡模式: {mode}")
+
+        opt = dict(mode_map[mode])
+        if mode in ("photo_in", "photo_out"):
+            if not image_path:
+                raise RuntimeError(f"{mode} 需要 image_path")
+            opt["image_path"] = image_path
+        return opt
+
+
+    def _build_auto_clock_key(self, idx: int, task: dict) -> str:
+        return f"{idx}:{task['mode']}:{task['time']}"
+
+    def _compute_randomized_task_datetime(self, day: datetime, task_time: str) -> datetime:
+        hh, mm = task_time.split(":")
+        base_minutes = int(hh) * 60 + int(mm)
+        if self.auto_clock_random_minutes > 0:
+            offset = random.randint(-self.auto_clock_random_minutes, self.auto_clock_random_minutes)
+        else:
+            offset = 0
+
+        final_minutes = max(0, min(23 * 60 + 59, base_minutes + offset))
+        midnight = datetime(day.year, day.month, day.day)
+        return midnight + timedelta(minutes=final_minutes)
+
+    def _compute_next_trigger_for_task(self, now: datetime, task: dict) -> datetime:
+        today_run = self._compute_randomized_task_datetime(now, task["time"])
+        if today_run > now:
+            return today_run
+
+        tomorrow = now + timedelta(days=1)
+        return self._compute_randomized_task_datetime(tomorrow, task["time"])
+
+    def _reschedule_next_trigger_for_task(self, idx: int, task: dict, now: datetime):
+        key = self._build_auto_clock_key(idx, task)
+        tomorrow = now + timedelta(days=1)
+        self.auto_clock_next_trigger[key] = self._compute_randomized_task_datetime(tomorrow, task["time"])
+
+    def _log_next_auto_clock_times(self):
+        if not self.auto_clock_enabled:
+            return
+        for idx, task in enumerate(self.auto_clock_tasks):
+            key = self._build_auto_clock_key(idx, task)
+            dt = self.auto_clock_next_trigger.get(key)
+            if not dt:
+                continue
+            logging.info(
+                f"Auto-clock task[{idx + 1}] mode={task['mode']} base={task['time']} random=+/-{self.auto_clock_random_minutes}m next={dt.strftime('%Y-%m-%d %H:%M')}"
+            )
+
+    def _load_auto_clock_settings(self):
+        self.auto_clock_enabled = False
+        self.auto_clock_tasks = []
+        self.auto_clock_last_trigger = {}
+        self.auto_clock_next_trigger = {}
+        self.auto_clock_random_minutes = 0
+
+        try:
+            config = read_config(CONFIG_FILE)
+        except Exception as exc:
+            logging.warning(f"Failed to load auto-clock config: {exc}")
+            self.auto_clock_timer.stop()
+            return
+
+        settings = config.get("settings", {})
+        auto_clock = settings.get("auto_clock", {})
+        if not isinstance(auto_clock, dict):
+            self.auto_clock_timer.stop()
+            return
+
+        enabled = bool(auto_clock.get("enabled", False))
+        tasks = auto_clock.get("tasks", [])
+        poll_seconds = int(auto_clock.get("poll_seconds", 30) or 30)
+        random_minutes = int(auto_clock.get("random_minutes", 0) or 0)
+        random_minutes = max(0, min(120, random_minutes))
+
+        if not isinstance(tasks, list):
+            logging.warning("settings.auto_clock.tasks is not a list, ignored")
+            self.auto_clock_timer.stop()
+            return
+
+        normalized_tasks = []
+        for idx, task in enumerate(tasks):
+            if not isinstance(task, dict):
+                logging.warning(f"Auto-clock task #{idx + 1} is not an object, ignored")
+                continue
+
+            task_time = str(task.get("time", "")).strip()
+            mode = str(task.get("mode", "")).strip().lower()
+            image_path = task.get("image_path")
+            if image_path is not None:
+                image_path = str(image_path).strip()
+
+            if not re.match(r"^\d{2}:\d{2}$", task_time):
+                logging.warning(f"Auto-clock task #{idx + 1} has invalid time: {task_time}")
+                continue
+
+            hh, mm = task_time.split(":")
+            if int(hh) > 23 or int(mm) > 59:
+                logging.warning(f"Auto-clock task #{idx + 1} has invalid time: {task_time}")
+                continue
+
+            if mode not in ("in", "out", "photo_in", "photo_out"):
+                logging.warning(f"Auto-clock task #{idx + 1} has invalid mode: {mode}")
+                continue
+
+            normalized_tasks.append({
+                "time": task_time,
+                "mode": mode,
+                "image_path": image_path,
+            })
+
+        self.auto_clock_enabled = enabled and bool(normalized_tasks)
+        self.auto_clock_tasks = normalized_tasks
+        self.auto_clock_random_minutes = random_minutes
+        self.auto_clock_timer.setInterval(max(10, poll_seconds) * 1000)
+
+        if self.auto_clock_enabled:
+            now = datetime.now()
+            for idx, task in enumerate(self.auto_clock_tasks):
+                key = self._build_auto_clock_key(idx, task)
+                self.auto_clock_next_trigger[key] = self._compute_next_trigger_for_task(now, task)
+
+            self.auto_clock_timer.start()
+            logging.info(
+                f"Auto-clock enabled with {len(self.auto_clock_tasks)} tasks, random window +/-{self.auto_clock_random_minutes} minutes"
+            )
+            self._log_next_auto_clock_times()
+        else:
+            self.auto_clock_timer.stop()
+            logging.info("Auto-clock disabled")
+
+    def _can_start_sign_task(self) -> bool:
+
+        from app.utils.files import get_valid_session_cache
+
+        has_session = get_valid_session_cache() is not None
+        if not has_session:
+            ToastManager.instance().show("请先点击“获取code”获取有效 SESSIONID", "warning")
+            return False
+
+        try:
+            err_msg = validate_config(read_config(CONFIG_FILE))
+        except Exception as exc:
+            ToastManager.instance().show(f"读取配置失败: {exc}", "error")
+            return False
+
+        if err_msg:
+            logging.warning(f"配置校验失败: {err_msg}")
+            ToastManager.instance().show(err_msg, "warning")
+            return False
+
+        return True
+
+    def _start_sign_task(self, opt: dict, source: str = "manual") -> bool:
+        if self.is_running or self.is_getting_code:
+            logging.info("当前有任务执行中，跳过本次打卡触发")
+            return False
+
+        if not self._can_start_sign_task():
+            return False
+
+        self.current_run_source = source
+        self.is_running = True
+        self.btn_run.setText("停止执行")
+        self.btn_run.setStyleSheet("background: #C0392B;")
+        self.prog.show()
+        self.btn_get_code.setEnabled(False)
+        for btn in self.grp.buttons():
+            btn.setEnabled(False)
+
+        logging.info("")
+        logging.info(f"{'=' * 10} TASK {source.upper()} {datetime.now().strftime('%H:%M')} {'=' * 10}")
+        self.worker = SignTaskThread(CONFIG_FILE, opt)
+        self.worker.finished_signal.connect(self.on_done)
+        self.worker.start()
+        return True
+
+
+    def _on_auto_clock_tick(self):
+        if not self.auto_clock_enabled:
+            return
+        if self.is_running or self.is_getting_code:
+            return
+
+        now = datetime.now()
+
+        for idx, task in enumerate(self.auto_clock_tasks):
+            key = self._build_auto_clock_key(idx, task)
+            next_dt = self.auto_clock_next_trigger.get(key)
+            if next_dt is None:
+                next_dt = self._compute_next_trigger_for_task(now, task)
+                self.auto_clock_next_trigger[key] = next_dt
+
+            if now < next_dt:
+                continue
+
+            try:
+                opt = self._mode_to_option(task["mode"], task.get("image_path"))
+            except Exception as exc:
+                logging.warning(f"Auto-clock config error, skipped this task: {exc}")
+                self._reschedule_next_trigger_for_task(idx, task, now)
+                continue
+
+            if self._start_sign_task(opt, source="auto"):
+                self.auto_clock_last_trigger[key] = now.strftime("%Y-%m-%d")
+                ToastManager.instance().show(
+                    f"定时打卡触发: {task['mode']}（计划 {next_dt.strftime('%H:%M')}）",
+                    "info"
+                )
+                self._reschedule_next_trigger_for_task(idx, task, now)
+                self._log_next_auto_clock_times()
+                break
+
     def toggle(self):
+
         if not self.is_running:
+            checked_id = self.grp.checkedId()
+            photo_image = None
+            if checked_id in [2, 3]:
+                dialog = PhotoSignDialog(self)
+                if dialog.exec() != QDialog.Accepted:
+                    logging.info("用户取消了拍照签到操作")
+                    return
+                photo_image = dialog.selected_image
+
+            if checked_id == 0:
+                opt = self._mode_to_option("in")
+            elif checked_id == 1:
+                opt = self._mode_to_option("out")
+            elif checked_id == 2:
+                opt = self._mode_to_option("photo_in", photo_image)
+            elif checked_id == 3:
+                opt = self._mode_to_option("photo_out", photo_image)
+            else:
+                ToastManager.instance().show("请选择打卡模式", "warning")
+                return
+
+            self._start_sign_task(opt, source="manual")
+            return
             # 检查是否有有效的JSESSIONID，如果有就直接使用，不需要code
             from app.utils.files import get_valid_session_cache
 
@@ -816,8 +1089,9 @@ class ModernWindow(QMainWindow):
 
         # 更新session显示，确保清除过期session后状态栏能及时更新
         self._update_session_display()
+        self._notify_sign_result(success, msg)
 
-        if success:
+        if success and self.current_run_source == "manual":
             # 成功后弹出赞助提交框（检查是否设置了不再显示）
             try:
                 config = read_config(CONFIG_FILE)
@@ -830,10 +1104,43 @@ class ModernWindow(QMainWindow):
         else:
             if msg != "任务已停止":
                 ToastManager.instance().show(msg, "error")
+    def _notify_sign_result(self, success: bool, msg: str):
+        try:
+            config = read_config(CONFIG_FILE)
+            settings = config.get("settings", {})
+            pushplus = settings.get("pushplus", {})
+            token = str(pushplus.get("token", "") or "").strip()
+            if not token:
+                return
+        except Exception as exc:
+            logging.warning(f"读取 PushPlus 配置失败，已跳过推送: {exc}")
+            return
 
+        status = "成功" if success else "失败"
+        source = "定时任务" if self.current_run_source == "auto" else "手动"
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        title = f"打卡{status}"
+        content = f"{source}打卡结果：{status}\n时间：{now}\n消息：{msg}"
+
+        threading.Thread(
+            target=self._send_pushplus_in_thread,
+            args=(token, title, content),
+            daemon=True,
+        ).start()
+
+    @staticmethod
+    def _send_pushplus_in_thread(token: str, title: str, content: str):
+        try:
+            notify_pushplus(title=title, content=content, token=token)
+            logging.info("PushPlus 推送成功")
+        except Exception as exc:
+            logging.warning(f"PushPlus 推送失败: {exc}")
     def closeEvent(self, event):
         """Ensure background services exit when the window closes."""
         try:
+            if hasattr(self, "auto_clock_timer"):
+                self.auto_clock_timer.stop()
+
             # stop monitor thread first to avoid自动重启 mitm
             if hasattr(self, "monitor") and self.monitor.isRunning():
                 self.monitor.stop()
@@ -862,3 +1169,4 @@ class ModernWindow(QMainWindow):
 
             # 继续正常关闭窗口
             super().closeEvent(event)
+

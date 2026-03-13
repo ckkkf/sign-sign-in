@@ -5,12 +5,12 @@
             "latitude": ""
         },
         "device": {
-            "brand": "OnePlus",
-            "model": "PHP110",
-            "system": "Android 15",
-            "platform": "android"
+            "brand": "",
+            "model": "",
+            "system": "",
+            "platform": ""
         },
-        "userAgent": "Mozilla/5.0 (Linux; Android 15; PHP110 Build/BP2A.250605.015; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/142.0.7444.173 Mobile Safari/537.36 XWEB/1420229 MMWEBSDK/20240404 MMWEBID/9843 MicroMessenger/8.0.49.2600(0x28003133) WeChat/arm64 Weixin NetType/5G Language/zh_CN ABI/arm64 MiniProgramEnv/android"
+        "userAgent": ""
     },
     "model": {
         "baseUrl": "",
@@ -18,6 +18,15 @@
         "model": ""
     },
     "settings": {
-        "dont_show_sponsor": false
+        "dont_show_sponsor": false,
+        "auto_clock": {
+            "enabled": false,
+            "poll_seconds": 30,
+            "random_minutes": 0,
+            "tasks": []
+        },
+        "pushplus": {
+            "token": ""
+        }
     }
 }
