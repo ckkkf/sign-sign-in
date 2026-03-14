@@ -1,12 +1,11 @@
-name: Build and Release
+name: Release Build
 
 on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Release tag to create or update, e.g. v1.2.3
+        description: Existing or new release tag, e.g. v1.2.2
         required: true
-        default: v0.0.0
       release_name:
         description: Optional release title
         required: false
@@ -18,7 +17,7 @@ permissions:
   contents: write
 
 jobs:
-  build-windows:
+  build-release:
     runs-on: windows-latest
 
     steps:
@@ -37,25 +36,10 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pyinstaller
 
       - name: Build with Nuitka
         shell: cmd
         run: scripts\build-nuitka.bat
-
-      - name: Prepare release artifacts
-        shell: bash
-        run: |
-          mkdir -p release
-          cp out/main.exe release/sign-sign-in-windows.exe
-          cp README.md release/
-          cp LICENSE release/
-
-      - name: Upload build artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: sign-sign-in-windows
-          path: release/*
 
       - name: Resolve release metadata
         id: meta
@@ -74,11 +58,27 @@ jobs:
 
           release_name="${{ github.event.inputs.release_name }}"
           if [[ -z "$release_name" ]]; then
-            release_name="$tag"
+            release_name="Sign sign In 校园邦签到工具 ${tag}"
           fi
 
+          versioned_name="sign.sign.in.${tag}.exe"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "release_name=$release_name" >> "$GITHUB_OUTPUT"
+          echo "asset_name=$versioned_name" >> "$GITHUB_OUTPUT"
+
+      - name: Prepare release artifacts
+        shell: bash
+        run: |
+          mkdir -p release
+          cp out/main.exe "release/${{ steps.meta.outputs.asset_name }}"
+          cp README.md release/
+          cp LICENSE release/
+
+      - name: Upload release build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ steps.meta.outputs.tag }}-windows
+          path: release/*
 
       - name: Create or update GitHub release
         uses: softprops/action-gh-release@v2
@@ -87,6 +87,6 @@ jobs:
           name: ${{ steps.meta.outputs.release_name }}
           generate_release_notes: true
           files: |
-            release/sign-sign-in-windows.exe
+            release/${{ steps.meta.outputs.asset_name }}
             release/README.md
             release/LICENSE
