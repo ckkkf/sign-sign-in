@@ -9,9 +9,10 @@ import ctypes
 from datetime import datetime, timedelta
 
 from PySide6.QtCore import Qt, QUrl, QTimer
-from PySide6.QtGui import QDesktopServices
+from PySide6.QtGui import QDesktopServices, QAction, QIcon
 from PySide6.QtWidgets import QMainWindow, QWidget, QHBoxLayout, QFrame, QVBoxLayout, QLabel, QGridLayout, QPushButton, \
-    QButtonGroup, QRadioButton, QProgressBar, QSizePolicy, QMessageBox, QApplication, QTextEdit, QDialog, QFileDialog
+    QButtonGroup, QRadioButton, QProgressBar, QSizePolicy, QMessageBox, QApplication, QTextEdit, QDialog, QFileDialog, \
+    QMenu, QSystemTrayIcon, QStyle
 
 from app.config.common import QQ_GROUP, PROJECT_VERSION, CONFIG_FILE, MITM_PROXY, PROJECT_NAME, PROJECT_GITHUB
 from app.gui.components.log_viewer import QTextEditLogger
@@ -54,6 +55,10 @@ class ModernWindow(QMainWindow):
         self.auto_clock_timer.timeout.connect(self._on_auto_clock_tick)
         self.btn_get_code_original_style = None  # 保存按钮原始样式
         self.weekly_journal_dialog = None  # 周记对话框实例
+        self._force_exit = False
+        self._tray_tip_shown = False
+        self.tray_icon = None
+        self._last_action_from_tray = False
 
         # 自动守护：monitor 会调用 mitm.start()
         self.mitm = MitmService()
@@ -63,6 +68,7 @@ class ModernWindow(QMainWindow):
 
         self.setup_style()
         self.init_ui()
+        self._init_system_tray()
         self._load_auto_clock_settings()
 
     def init_ui(self):
@@ -298,6 +304,116 @@ class ModernWindow(QMainWindow):
         # 启动时自动检查更新（延迟2秒，避免阻塞启动）
         from PySide6.QtCore import QTimer
         QTimer.singleShot(2000, self.check_update_silent)
+
+    def _init_system_tray(self):
+        if not QSystemTrayIcon.isSystemTrayAvailable():
+            logging.warning("系统托盘不可用，后台常驻功能已禁用")
+            return
+
+        tray_icon = self.windowIcon()
+        if tray_icon.isNull():
+            tray_icon = self.style().standardIcon(QStyle.SP_ComputerIcon)
+
+        self.tray_icon = QSystemTrayIcon(tray_icon, self)
+        self.tray_icon.setToolTip(self.windowTitle())
+
+        menu = QMenu(self)
+
+        action_show = QAction("显示主界面", self)
+        action_show.triggered.connect(self.show_from_tray)
+        menu.addAction(action_show)
+
+        action_run = QAction("开始执行", self)
+        action_run.triggered.connect(self.run_from_tray)
+        menu.addAction(action_run)
+
+        action_get_code = QAction("获取 code", self)
+        action_get_code.triggered.connect(self.get_code_from_tray)
+        menu.addAction(action_get_code)
+
+        action_auto_clock = QAction("定时打卡配置", self)
+        action_auto_clock.triggered.connect(self.open_auto_clock_config)
+        menu.addAction(action_auto_clock)
+
+        menu.addSeparator()
+
+        action_exit = QAction("退出程序", self)
+        action_exit.triggered.connect(self.quit_from_tray)
+        menu.addAction(action_exit)
+
+        self.tray_icon.setContextMenu(menu)
+        self.tray_icon.activated.connect(self._handle_tray_activated)
+        self.tray_icon.messageClicked.connect(self.show_from_tray)
+        self.tray_icon.show()
+
+    def _handle_tray_activated(self, reason):
+        if reason in (QSystemTrayIcon.Trigger, QSystemTrayIcon.DoubleClick):
+            self.show_from_tray()
+
+    def show_from_tray(self):
+        self.show()
+        self.setWindowState((self.windowState() & ~Qt.WindowMinimized) | Qt.WindowActive)
+        self.raise_()
+        self.activateWindow()
+
+    def get_code_from_tray(self):
+        self._last_action_from_tray = True
+        QTimer.singleShot(0, self.get_code_and_session)
+
+    def run_from_tray(self):
+        self._last_action_from_tray = True
+        QTimer.singleShot(0, self.toggle)
+
+    def hide_to_tray(self):
+        self.hide()
+        if self.tray_icon and not self._tray_tip_shown:
+            self.tray_icon.showMessage(
+                PROJECT_NAME,
+                "程序已最小化到系统托盘，可右键托盘图标进行操作。",
+                QIcon(),
+                3000,
+            )
+            self._tray_tip_shown = True
+
+    def _show_tray_message(self, title: str, message: str, success=None):
+        if not self.tray_icon:
+            return
+
+        if success is True:
+            icon = QSystemTrayIcon.Information
+        elif success is False:
+            icon = QSystemTrayIcon.Critical
+        else:
+            icon = QSystemTrayIcon.Information
+
+        self.tray_icon.showMessage(title, message, icon, 4000)
+
+    def quit_from_tray(self):
+        self._force_exit = True
+        if self.tray_icon:
+            self.tray_icon.hide()
+        self.close()
+
+    def _cleanup_before_exit(self):
+        if hasattr(self, "auto_clock_timer"):
+            self.auto_clock_timer.stop()
+
+        # stop monitor thread first to avoid自动重启 mitm
+        if hasattr(self, "monitor") and self.monitor.isRunning():
+            self.monitor.stop()
+            self.monitor.wait(2000)
+
+        if hasattr(self, "worker") and getattr(self, "worker").isRunning():
+            self.worker.requestInterruption()
+            self.worker.wait(2000)
+
+        if hasattr(self, "code_worker") and getattr(self, "code_worker").isRunning():
+            self.code_worker.requestInterruption()
+            self.code_worker.wait(2000)
+
+        if hasattr(self, "update_worker") and getattr(self, "update_worker").isRunning():
+            self.update_worker.requestInterruption()
+            self.update_worker.wait(2000)
 
     def clear_log(self):
         reply = QMessageBox.question(
@@ -678,9 +794,15 @@ class ModernWindow(QMainWindow):
             errMsg = validate_config(read_config(CONFIG_FILE))
             if errMsg:
                 ToastManager.instance().show(errMsg, "warning")
+                if self._last_action_from_tray:
+                    self._show_tray_message("获取 code 失败", errMsg, False)
+                    self._last_action_from_tray = False
                 return
         except Exception as e:
             ToastManager.instance().show(f"读取配置失败: {e}", "error")
+            if self._last_action_from_tray:
+                self._show_tray_message("获取 code 失败", f"读取配置失败: {e}", False)
+                self._last_action_from_tray = False
             return
 
         self.is_getting_code = True
@@ -698,7 +820,9 @@ class ModernWindow(QMainWindow):
 
     def on_get_code_done(self, success, msg):
         """获取Code和JSESSIONID完成"""
-        if success:
+        notify_from_tray = self._last_action_from_tray
+        self._last_action_from_tray = False
+        if success and not notify_from_tray:
             self._bring_to_front_retry(tries=4, delay_ms=350)
         self.is_getting_code = False
         self.btn_get_code.setEnabled(True)
@@ -711,12 +835,18 @@ class ModernWindow(QMainWindow):
 
         if success:
             ToastManager.instance().show("获取成功！", "success")
+            if notify_from_tray:
+                self._show_tray_message("获取 code 成功", "JSESSIONID 已更新。", True)
             # 更新JSESSIONID显示
             self._update_session_display()
         else:
             if msg and msg != "任务已停止":
                 # 只有非手动停止的错误才弹窗
                 ToastManager.instance().show(msg, "error")
+                if notify_from_tray:
+                    self._show_tray_message("获取 code 失败", msg, False)
+            elif notify_from_tray:
+                self._show_tray_message("获取 code 已停止", "后台获取已停止。", False)
         
         self.prog.hide()
         self.btn_run.setEnabled(True)
@@ -1000,9 +1130,16 @@ class ModernWindow(QMainWindow):
             checked_id = self.grp.checkedId()
             photo_image = None
             if checked_id in [2, 3]:
+                if self._last_action_from_tray and not self.isVisible():
+                    self._show_tray_message("开始执行失败", "拍照签到/签退需要先显示主窗口进行选择。", False)
+                    self._last_action_from_tray = False
+                    return
                 dialog = PhotoSignDialog(self)
                 if dialog.exec() != QDialog.Accepted:
                     logging.info("用户取消了拍照签到操作")
+                    if self._last_action_from_tray:
+                        self._show_tray_message("开始执行已取消", "未选择拍照图片，任务未启动。", False)
+                        self._last_action_from_tray = False
                     return
                 photo_image = dialog.selected_image
 
@@ -1016,9 +1153,15 @@ class ModernWindow(QMainWindow):
                 opt = self._mode_to_option("photo_out", photo_image)
             else:
                 ToastManager.instance().show("请选择打卡模式", "warning")
+                if self._last_action_from_tray:
+                    self._show_tray_message("开始执行失败", "请选择打卡模式。", False)
+                    self._last_action_from_tray = False
                 return
 
-            self._start_sign_task(opt, source="manual")
+            started = self._start_sign_task(opt, source="manual")
+            if self._last_action_from_tray and not started:
+                self._show_tray_message("开始执行失败", "任务未启动，请检查当前配置或运行状态。", False)
+                self._last_action_from_tray = False
             return
             # 检查是否有有效的JSESSIONID，如果有就直接使用，不需要code
             from app.utils.files import get_valid_session_cache
@@ -1076,6 +1219,8 @@ class ModernWindow(QMainWindow):
                 self.worker.requestInterruption()
 
     def on_done(self, success, msg):
+        notify_from_tray = self._last_action_from_tray
+        self._last_action_from_tray = False
         self.is_running = False
         self.btn_run.setEnabled(True)
         self.btn_run.setText("开始执行")
@@ -1090,17 +1235,21 @@ class ModernWindow(QMainWindow):
         # 更新session显示，确保清除过期session后状态栏能及时更新
         self._update_session_display()
         self._notify_sign_result(success, msg)
+        if notify_from_tray:
+            title = "打卡成功" if success else "打卡失败"
+            self._show_tray_message(title, msg or title, success)
 
         if success and self.current_run_source == "manual":
             # 成功后弹出赞助提交框（检查是否设置了不再显示）
-            try:
-                config = read_config(CONFIG_FILE)
-                settings = config.get("settings", {})
-                if not settings.get("dont_show_sponsor", False):
+            if not notify_from_tray:
+                try:
+                    config = read_config(CONFIG_FILE)
+                    settings = config.get("settings", {})
+                    if not settings.get("dont_show_sponsor", False):
+                        SponsorSubmitDialog(self).exec()
+                except Exception:
+                    # 如果读取配置失败，默认显示
                     SponsorSubmitDialog(self).exec()
-            except Exception:
-                # 如果读取配置失败，默认显示
-                SponsorSubmitDialog(self).exec()
         else:
             if msg != "任务已停止":
                 ToastManager.instance().show(msg, "error")
@@ -1136,27 +1285,14 @@ class ModernWindow(QMainWindow):
         except Exception as exc:
             logging.warning(f"PushPlus 推送失败: {exc}")
     def closeEvent(self, event):
-        """Ensure background services exit when the window closes."""
+        """关闭窗口时默认隐藏到托盘；真正退出时再清理后台服务。"""
+        if not self._force_exit and self.tray_icon and self.tray_icon.isVisible():
+            event.ignore()
+            self.hide_to_tray()
+            return
+
         try:
-            if hasattr(self, "auto_clock_timer"):
-                self.auto_clock_timer.stop()
-
-            # stop monitor thread first to avoid自动重启 mitm
-            if hasattr(self, "monitor") and self.monitor.isRunning():
-                self.monitor.stop()
-                self.monitor.wait(2000)
-
-            if hasattr(self, "worker") and getattr(self, "worker").isRunning():
-                self.worker.requestInterruption()
-                self.worker.wait(2000)
-
-            if hasattr(self, "code_worker") and getattr(self, "code_worker").isRunning():
-                self.code_worker.requestInterruption()
-                self.code_worker.wait(2000)
-
-            if hasattr(self, "update_worker") and getattr(self, "update_worker").isRunning():
-                self.update_worker.requestInterruption()
-                self.update_worker.wait(2000)
+            self._cleanup_before_exit()
         finally:
             # 关闭窗口时停止 mitmdump，防止后台残留
             # self.mitm.stop_mitm()
