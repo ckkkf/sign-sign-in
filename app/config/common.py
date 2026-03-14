@@ -79,6 +79,10 @@ IMAGE_DIR = os.path.join(RES_DIR, "img")
 JOURNAL_DIR = os.path.join(RES_DIR, "journals")
 JOURNAL_HISTORY_FILE = os.path.join(JOURNAL_DIR, "history.json")
 
+# 日志目录
+LOG_DIR = os.path.join(RES_DIR, "logs")
+PACKET_LOG_FILE = os.path.join(LOG_DIR, "mitm_packet.log")
+
 # 会话缓存文件
 SESSION_CACHE_FILE = os.path.join(RES_DIR, "config", "session_cache.json")
 

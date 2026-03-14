@@ -14,7 +14,8 @@ from PySide6.QtWidgets import QMainWindow, QWidget, QHBoxLayout, QFrame, QVBoxLa
     QButtonGroup, QRadioButton, QProgressBar, QSizePolicy, QMessageBox, QApplication, QTextEdit, QDialog, QFileDialog, \
     QMenu, QSystemTrayIcon, QStyle
 
-from app.config.common import QQ_GROUP, PROJECT_VERSION, CONFIG_FILE, MITM_PROXY, PROJECT_NAME, PROJECT_GITHUB
+from app.config.common import QQ_GROUP, PROJECT_VERSION, CONFIG_FILE, MITM_PROXY, PROJECT_NAME, PROJECT_GITHUB, \
+    PACKET_LOG_FILE
 from app.gui.components.log_viewer import QTextEditLogger
 from app.gui.components.toast import ToastManager
 from app.gui.dialogs.dialogs.auto_clock_config_dialog import AutoClockConfigDialog
@@ -59,6 +60,11 @@ class ModernWindow(QMainWindow):
         self._tray_tip_shown = False
         self.tray_icon = None
         self._last_action_from_tray = False
+        self._packet_log_pos = 0
+        self.packet_log_view = None
+        self.packet_log_timer = QTimer(self)
+        self.packet_log_timer.setInterval(1200)
+        self.packet_log_timer.timeout.connect(self._refresh_packet_log)
 
         # 自动守护：monitor 会调用 mitm.start()
         self.mitm = MitmService()
@@ -291,12 +297,34 @@ class ModernWindow(QMainWindow):
         self.log.setObjectName("LogView")
         r_vbox.addWidget(self.log)
 
+        packet_head = QWidget()
+        packet_head.setStyleSheet("background:#252525;")
+        packet_hh = QHBoxLayout(packet_head)
+        packet_hh.setContentsMargins(10, 4, 10, 4)
+        packet_hh.addWidget(QLabel(" >_ PACKET SNAPSHOT", objectName="TermHeader"))
+        packet_hh.addStretch()
+
+        btn_clear_packet = QPushButton("🗑 清空抓包")
+        btn_clear_packet.setObjectName("LogActionBtn")
+        btn_clear_packet.setCursor(Qt.PointingHandCursor)
+        btn_clear_packet.clicked.connect(self.clear_packet_log)
+        btn_clear_packet.setToolTip("清空当前抓包摘要显示和缓存文件")
+        packet_hh.addWidget(btn_clear_packet)
+        r_vbox.addWidget(packet_head)
+
+        self.packet_log_view = QTextEdit()
+        self.packet_log_view.setReadOnly(True)
+        self.packet_log_view.setObjectName("PacketLogView")
+        self.packet_log_view.setMaximumHeight(140)
+        r_vbox.addWidget(self.packet_log_view)
+
         hbox.addWidget(left, 35)
         hbox.addWidget(right, 65)
 
         self.log_h = QTextEditLogger(self.log)
         self.log_h.setFormatter(logging.Formatter('%(asctime)s - %(message)s', "%H:%M:%S"))
         logging.getLogger().addHandler(self.log_h)
+        self._init_packet_log()
 
         # 初始化JSESSIONID显示
         self._update_session_display()
@@ -304,6 +332,60 @@ class ModernWindow(QMainWindow):
         # 启动时自动检查更新（延迟2秒，避免阻塞启动）
         from PySide6.QtCore import QTimer
         QTimer.singleShot(2000, self.check_update_silent)
+
+    def _init_packet_log(self):
+        os.makedirs(os.path.dirname(PACKET_LOG_FILE), exist_ok=True)
+        if not os.path.exists(PACKET_LOG_FILE):
+            with open(PACKET_LOG_FILE, "w", encoding="utf-8"):
+                pass
+        self.clear_packet_log()
+        self.packet_log_timer.start()
+
+    def _refresh_packet_log(self):
+        if self.packet_log_view is None:
+            return
+        if not os.path.exists(PACKET_LOG_FILE):
+            return
+
+        try:
+            file_size = os.path.getsize(PACKET_LOG_FILE)
+            if file_size < self._packet_log_pos:
+                self._packet_log_pos = 0
+                self.packet_log_view.clear()
+
+            if file_size == self._packet_log_pos:
+                return
+
+            with open(PACKET_LOG_FILE, "r", encoding="utf-8") as f:
+                f.seek(self._packet_log_pos)
+                new_content = f.read()
+                self._packet_log_pos = f.tell()
+        except OSError:
+            return
+
+        if not new_content.strip():
+            return
+
+        sb = self.packet_log_view.verticalScrollBar()
+        at_bottom = sb.value() >= (sb.maximum() - 10)
+        for line in new_content.splitlines():
+            self.packet_log_view.append(
+                f'<span style="color:#7FDBFF; font-family:Consolas; font-size:9.5pt;">{line}</span>'
+            )
+
+        if at_bottom:
+            sb.setValue(sb.maximum())
+
+    def clear_packet_log(self):
+        if self.packet_log_view is not None:
+            self.packet_log_view.clear()
+        self._packet_log_pos = 0
+        try:
+            os.makedirs(os.path.dirname(PACKET_LOG_FILE), exist_ok=True)
+            with open(PACKET_LOG_FILE, "w", encoding="utf-8"):
+                pass
+        except OSError as exc:
+            logging.warning(f"清空抓包日志失败: {exc}")
 
     def _init_system_tray(self):
         if not QSystemTrayIcon.isSystemTrayAvailable():
@@ -555,6 +637,14 @@ class ModernWindow(QMainWindow):
                 font-family: Consolas;
                 font-size: 9.5pt;
                 padding: 12px;
+            }
+            #PacketLogView {
+                background: #06070C;
+                border: none;
+                color: #7FDBFF;
+                font-family: Consolas;
+                font-size: 9.5pt;
+                padding: 10px 12px;
             }
             #LogActionBtn {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
