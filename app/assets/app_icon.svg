@@ -1,22 +1,48 @@
-<svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
+﻿<svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <linearGradient id="bg" x1="32" y1="24" x2="224" y2="232" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#1E90FF"/>
-      <stop offset="1" stop-color="#14B8A6"/>
+    <linearGradient id="bg" x1="30" y1="18" x2="228" y2="236" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0F4C81"/>
+      <stop offset="0.45" stop-color="#1775A6"/>
+      <stop offset="1" stop-color="#27C3A8"/>
     </linearGradient>
-    <linearGradient id="card" x1="74" y1="64" x2="182" y2="192" gradientUnits="userSpaceOnUse">
+    <radialGradient id="glow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(74 60) rotate(38.4) scale(186.06)">
+      <stop stop-color="#9EE8FF" stop-opacity="0.72"/>
+      <stop offset="1" stop-color="#9EE8FF" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="panel" x1="76" y1="62" x2="182" y2="198" gradientUnits="userSpaceOnUse">
       <stop stop-color="#FFFFFF"/>
-      <stop offset="1" stop-color="#DDF5FF"/>
+      <stop offset="1" stop-color="#D8F4FF"/>
+    </linearGradient>
+    <linearGradient id="panelTop" x1="78" y1="64" x2="178" y2="112" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F5FBFF"/>
+      <stop offset="1" stop-color="#C7EFFF"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="136" y1="128" x2="196" y2="194" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#17B7B0"/>
+      <stop offset="1" stop-color="#0C8A76"/>
+    </linearGradient>
+    <linearGradient id="badge" x1="172" y1="48" x2="210" y2="86" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFD38A"/>
+      <stop offset="1" stop-color="#F59E0B"/>
     </linearGradient>
   </defs>
   <rect x="20" y="20" width="216" height="216" rx="56" fill="url(#bg)"/>
-  <path d="M72 88C72 74.7452 82.7452 64 96 64H160C173.255 64 184 74.7452 184 88V168C184 181.255 173.255 192 160 192H96C82.7452 192 72 181.255 72 168V88Z" fill="url(#card)"/>
-  <path d="M96 50C96 45.5817 99.5817 42 104 42C108.418 42 112 45.5817 112 50V70C112 74.4183 108.418 78 104 78C99.5817 78 96 74.4183 96 70V50Z" fill="#0F766E"/>
-  <path d="M144 50C144 45.5817 147.582 42 152 42C156.418 42 160 45.5817 160 50V70C160 74.4183 156.418 78 152 78C147.582 78 144 74.4183 144 70V50Z" fill="#0F766E"/>
-  <rect x="88" y="92" width="80" height="12" rx="6" fill="#7DD3FC"/>
-  <rect x="88" y="116" width="50" height="12" rx="6" fill="#BAE6FD"/>
-  <rect x="88" y="140" width="36" height="12" rx="6" fill="#BAE6FD"/>
-  <path d="M172.607 137.322C176.389 141.104 176.389 147.236 172.607 151.018L134.018 189.607C130.236 193.389 124.104 193.389 120.322 189.607L101.393 170.678C97.6113 166.896 97.6113 160.764 101.393 156.982C105.175 153.201 111.307 153.201 115.089 156.982L127.17 169.064L158.911 137.322C162.693 133.541 168.825 133.541 172.607 137.322Z" fill="#0F766E"/>
-  <circle cx="192" cy="72" r="20" fill="#F59E0B"/>
-  <path d="M192 60V72L200 80" stroke="#FFF7ED" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="20" y="20" width="216" height="216" rx="56" fill="url(#glow)"/>
+  <path d="M34 180C58 155.333 88.6667 143 126 143C163.333 143 196.667 155.333 226 180V206C226 222.569 212.569 236 196 236H60C43.4315 236 30 222.569 30 206V184C31.3333 182.667 32.6667 181.333 34 180Z" fill="#0B395B" fill-opacity="0.18"/>
+  <path d="M72 88C72 73.6406 83.6406 62 98 62H158C172.359 62 184 73.6406 184 88V168C184 182.359 172.359 194 158 194H98C83.6406 194 72 182.359 72 168V88Z" fill="url(#panel)"/>
+  <path d="M72 88C72 73.6406 83.6406 62 98 62H158C172.359 62 184 73.6406 184 88V106H72V88Z" fill="url(#panelTop)"/>
+  <path d="M97 48C97 43.0294 101.029 39 106 39C110.971 39 115 43.0294 115 48V72C115 76.9706 110.971 81 106 81C101.029 81 97 76.9706 97 72V48Z" fill="#0E6E6E"/>
+  <path d="M141 48C141 43.0294 145.029 39 150 39C154.971 39 159 43.0294 159 48V72C159 76.9706 154.971 81 150 81C145.029 81 141 76.9706 141 72V48Z" fill="#0E6E6E"/>
+  <circle cx="105" cy="86" r="4" fill="#71D8FF"/>
+  <circle cx="151" cy="86" r="4" fill="#71D8FF"/>
+  <rect x="88" y="119" width="52" height="12" rx="6" fill="#7CD6F8"/>
+  <rect x="88" y="142" width="40" height="10" rx="5" fill="#B8EAFB"/>
+  <rect x="88" y="160" width="32" height="10" rx="5" fill="#D8F5FF"/>
+  <circle cx="164" cy="160" r="34" fill="url(#accent)"/>
+  <circle cx="164" cy="160" r="27" fill="#E9FFFD" fill-opacity="0.22"/>
+  <path d="M151.5 159.5L161 169L178 151" stroke="white" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="191" cy="67" r="19" fill="url(#badge)"/>
+  <path d="M191 57V67L198 74" stroke="#FFF8EA" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="64" cy="70" r="10" fill="#DDF8FF" fill-opacity="0.28"/>
+  <circle cx="201" cy="185" r="7" fill="#D9FFF3" fill-opacity="0.24"/>
 </svg>

@@ -168,7 +168,8 @@ class ConfigDialog(QDialog):
         # 经纬度
         self.add_row(form, "经度", "lng", loc.get('longitude', ''))
         self.add_row(form, "纬度", "lat", loc.get('latitude', ''))
-        self.add_tip(form, "提示：经纬度可用高德拾取器获取，建议保留 6 位小数。")
+        self.add_row(form, "抖动半径(米)", "locationJitterMeters", input_conf.get('locationJitterMeters', ''))
+        self.add_tip(form, "提示：经纬度可用高德拾取器获取，建议保留 6 位小数。抖动半径留空时默认 100 米，填写 0 表示不启用抖动。")
 
         # 区块底部空白
         form.addItem(QSpacerItem(0, 15))
@@ -295,6 +296,11 @@ class ConfigDialog(QDialog):
             }
             inp['userAgent'] = build_user_agent(device)
             inp['location'] = {'longitude': self.inputs['lng'].text(), 'latitude': self.inputs['lat'].text()}
+            jitter_radius = self.inputs['locationJitterMeters'].text().strip()
+            if jitter_radius:
+                inp['locationJitterMeters'] = jitter_radius
+            else:
+                inp.pop('locationJitterMeters', None)
             inp['device'] = device
 
             ua_err = validate_user_agent_matches_device(device, inp['userAgent'])
@@ -339,6 +345,8 @@ class ConfigDialog(QDialog):
             key = "lng"
         elif "纬度" in msg or "latitude" in msg:
             key = "lat"
+        elif "抖动" in msg or "locationJitterMeters" in msg:
+            key = "locationJitterMeters"
         elif "品牌" in msg or "brand" in msg:
             key = "brand"
         elif "型号" in msg or "model" in msg:

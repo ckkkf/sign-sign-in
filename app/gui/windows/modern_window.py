@@ -57,6 +57,7 @@ class ModernWindow(QMainWindow):
         self.btn_get_code_original_style = None  # 保存按钮原始样式
         self.weekly_journal_dialog = None  # 周记对话框实例
         self._force_exit = False
+        self._is_exiting = False
         self._tray_tip_shown = False
         self.tray_icon = None
         self._last_action_from_tray = False
@@ -176,7 +177,7 @@ class ModernWindow(QMainWindow):
         btn_journal.clicked.connect(self.open_weekly_journal)
         t_grid.addWidget(btn_journal, 2, 0, 1, 2)
 
-        btn_auto_clock = QPushButton("定时打卡配置")
+        btn_auto_clock = QPushButton("⏱️定时打卡配置（测试）")
         btn_auto_clock.setObjectName("ToolBtn")
         btn_auto_clock.clicked.connect(self.open_auto_clock_config)
         t_grid.addWidget(btn_auto_clock, 2, 2, 1, 2)
@@ -471,31 +472,57 @@ class ModernWindow(QMainWindow):
         self.tray_icon.showMessage(title, message, icon, 4000)
 
     def quit_from_tray(self):
-        self._force_exit = True
-        if self.tray_icon:
-            self.tray_icon.hide()
-        self.close()
+        self._begin_exit()
 
     def _cleanup_before_exit(self):
         if hasattr(self, "auto_clock_timer"):
             self.auto_clock_timer.stop()
 
-        # stop monitor thread first to avoid自动重启 mitm
+        # 退出时优先快速回收线程，避免窗口关闭卡顿
         if hasattr(self, "monitor") and self.monitor.isRunning():
             self.monitor.stop()
-            self.monitor.wait(2000)
+            self._stop_thread_fast(self.monitor)
 
         if hasattr(self, "worker") and getattr(self, "worker").isRunning():
             self.worker.requestInterruption()
-            self.worker.wait(2000)
+            self._stop_thread_fast(self.worker)
 
         if hasattr(self, "code_worker") and getattr(self, "code_worker").isRunning():
             self.code_worker.requestInterruption()
-            self.code_worker.wait(2000)
+            self._stop_thread_fast(self.code_worker)
 
         if hasattr(self, "update_worker") and getattr(self, "update_worker").isRunning():
             self.update_worker.requestInterruption()
-            self.update_worker.wait(2000)
+            self._stop_thread_fast(self.update_worker)
+
+    @staticmethod
+    def _stop_thread_fast(thread, soft_timeout_ms: int = 350, hard_timeout_ms: int = 250):
+        if not thread or not thread.isRunning():
+            return
+        if thread.wait(soft_timeout_ms):
+            return
+        logging.warning(f"线程退出超时，尝试强制结束: {thread.__class__.__name__}")
+        thread.terminate()
+        thread.wait(hard_timeout_ms)
+
+    def _begin_exit(self):
+        if self._is_exiting:
+            return
+        self._is_exiting = True
+        self._force_exit = True
+        if self.tray_icon:
+            self.tray_icon.hide()
+        self.hide()
+        threading.Thread(target=self._shutdown_after_ui_closed, daemon=True).start()
+
+    def _shutdown_after_ui_closed(self):
+        try:
+            self._cleanup_before_exit()
+            self.mitm.stop_mitm()
+        finally:
+            app = QApplication.instance()
+            if app:
+                app.quit()
 
     def clear_log(self):
         reply = QMessageBox.question(
@@ -1375,24 +1402,161 @@ class ModernWindow(QMainWindow):
         except Exception as exc:
             logging.warning(f"PushPlus 推送失败: {exc}")
     def closeEvent(self, event):
-        """关闭窗口时默认隐藏到托盘；真正退出时再清理后台服务。"""
+        """关闭窗口时提示用户选择退出或最小化到托盘。"""
+        if self._is_exiting:
+            super().closeEvent(event)
+            return
         if not self._force_exit and self.tray_icon and self.tray_icon.isVisible():
+            choice = self._show_close_choice_dialog()
+            if choice == "tray":
+                event.ignore()
+                self.hide_to_tray()
+                return
+            if choice != "exit":
+                event.ignore()
+                return
             event.ignore()
-            self.hide_to_tray()
+            self._begin_exit()
             return
 
-        try:
-            self._cleanup_before_exit()
-        finally:
-            # 关闭窗口时停止 mitmdump，防止后台残留
-            # self.mitm.stop_mitm()
-            # super().closeEvent(event)
-            # 异步关闭 mitmdump
-            threading.Thread(
-                target=self.mitm.stop_mitm,
-                daemon=True
-            ).start()
+        if self._force_exit:
+            event.ignore()
+            self._begin_exit()
+            return
 
-            # 继续正常关闭窗口
-            super().closeEvent(event)
+        super().closeEvent(event)
+
+    def _show_close_choice_dialog(self) -> str | None:
+        dialog = QDialog(self)
+        dialog.setWindowTitle("关闭软件")
+        dialog.setModal(True)
+        dialog.setFixedSize(448, 178)
+        dialog.setStyleSheet("""
+            QDialog {
+                background: #0E1220;
+                border: 1px solid #242B43;
+                border-radius: 16px;
+            }
+            QLabel#CloseTitle {
+                color: #F3F6FF;
+                font-size: 14pt;
+                font-weight: 700;
+            }
+            QLabel#CloseDesc {
+                color: #9099BC;
+                font-size: 9.5pt;
+            }
+            QFrame#CloseCard {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                    stop:0 rgba(34,41,68,0.96), stop:1 rgba(18,24,42,0.96));
+                border: 1px solid #2C3553;
+                border-radius: 14px;
+            }
+            QLabel#CloseHint {
+                color: #C8D1F5;
+                font-size: 9.5pt;
+                font-weight: 600;
+            }
+            QLabel#CloseSubHint {
+                color: #7E88AE;
+                font-size: 8.8pt;
+            }
+            QPushButton {
+                min-height: 32px;
+                max-height: 32px;
+                border-radius: 9px;
+                padding: 0 12px;
+                font-weight: 700;
+                font-size: 9pt;
+            }
+            QPushButton#CloseTrayBtn {
+                color: #F6FAFF;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #406CFF, stop:1 #5A8BFF);
+                border: 1px solid #6A8FFF;
+            }
+            QPushButton#CloseTrayBtn:hover {
+                border-color: #96B3FF;
+            }
+            QPushButton#CloseExitBtn {
+                color: #FFD8D8;
+                background: rgba(120, 31, 44, 0.35);
+                border: 1px solid rgba(255, 112, 112, 0.35);
+            }
+            QPushButton#CloseExitBtn:hover {
+                border-color: rgba(255, 138, 138, 0.65);
+                color: #FFF1F1;
+            }
+            QPushButton#CloseCancelBtn {
+                color: #B6BFDE;
+                background: #151A2B;
+                border: 1px solid #29304A;
+            }
+            QPushButton#CloseCancelBtn:hover {
+                border-color: #4C587F;
+                color: #EFF3FF;
+            }
+        """)
+
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(20, 16, 20, 16)
+        layout.setSpacing(8)
+
+        title = QLabel("关闭软件")
+        title.setObjectName("CloseTitle")
+        desc = QLabel("退出会停止后台服务；最小化后程序仍会驻留在系统托盘。")
+        desc.setObjectName("CloseDesc")
+        desc.setWordWrap(True)
+        layout.addWidget(title)
+        layout.addWidget(desc)
+
+        card = QFrame()
+        card.setObjectName("CloseCard")
+        card_layout = QVBoxLayout(card)
+        card_layout.setContentsMargins(14, 10, 14, 10)
+        card_layout.setSpacing(2)
+
+        hint = QLabel("推荐：最小化到托盘")
+        hint.setObjectName("CloseHint")
+        sub_hint = QLabel("适合继续接收提醒、保留会话和后台服务。")
+        sub_hint.setObjectName("CloseSubHint")
+        sub_hint.setWordWrap(True)
+        card_layout.addWidget(hint)
+        card_layout.addWidget(sub_hint)
+        layout.addWidget(card)
+
+        btn_row = QHBoxLayout()
+        btn_row.setContentsMargins(0, 8, 0, 0)
+        btn_row.setSpacing(10)
+        btn_row.addStretch()
+
+        cancel_btn = QPushButton("取消")
+        cancel_btn.setObjectName("CloseCancelBtn")
+        tray_btn = QPushButton("最小化到托盘")
+        tray_btn.setObjectName("CloseTrayBtn")
+        exit_btn = QPushButton("退出软件")
+        exit_btn.setObjectName("CloseExitBtn")
+
+        result = {"choice": None}
+
+        def choose(value: str):
+            result["choice"] = value
+            dialog.accept()
+
+        cancel_btn.clicked.connect(dialog.reject)
+        tray_btn.clicked.connect(lambda: choose("tray"))
+        exit_btn.clicked.connect(lambda: choose("exit"))
+
+        cancel_btn.setMinimumWidth(76)
+        exit_btn.setMinimumWidth(88)
+        tray_btn.setMinimumWidth(112)
+
+        btn_row.addWidget(cancel_btn)
+        btn_row.addWidget(exit_btn)
+        btn_row.addWidget(tray_btn)
+        layout.addLayout(btn_row)
+
+        tray_btn.setDefault(True)
+        dialog.exec()
+        return result["choice"]
 

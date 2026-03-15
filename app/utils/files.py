@@ -100,6 +100,15 @@ def validate_config(data: dict):
     if not (-90 <= lat <= 90):
         return "纬度超出范围：应在 -90 到 90 之间。"
 
+    jitter_radius = input_data.get("locationJitterMeters")
+    if jitter_radius not in (None, ""):
+        try:
+            jitter_radius = float(str(jitter_radius).strip())
+        except ValueError:
+            return "位置抖动半径格式错误：只能填写数字，单位为米。"
+        if not (0 <= jitter_radius <= 500):
+            return "位置抖动半径超出范围：应在 0 到 500 米之间。"
+
     # device
     dev = input_data.get("device")
     if not isinstance(dev, dict):

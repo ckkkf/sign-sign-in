@@ -142,15 +142,17 @@ class SignTaskThread(QThread):
         except (TypeError, ValueError):
             return
 
-        # 允许在配置中覆盖抖动半径（米），默认 80 米
-        radius = input_cfg.get("locationJitterMeters", 80)
+        # 默认启用 100 米抖动，配置为 0 时禁用
+        radius = input_cfg.get("locationJitterMeters", 100)
         try:
             radius = float(radius)
         except (TypeError, ValueError):
-            radius = 80.0
+            logging.warning("📍 位置抖动配置无效，已回退为默认 100 米")
+            radius = 100.0
         radius = max(0.0, min(radius, 500.0))
 
         if radius <= 0:
+            logging.info("📍 位置抖动已禁用，使用原始坐标提交签到")
             return
 
         new_lat, new_lon = self._jitter_location(lat, lon, radius)
