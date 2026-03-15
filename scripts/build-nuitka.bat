@@ -1,4 +1,5 @@
 nuitka ^
+--assume-yes-for-downloads ^
 --mingw64 ^
 --standalone ^
 --onefile ^

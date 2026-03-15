@@ -1,0 +1,49 @@
+name: Preview Build
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-preview:
+    if: github.event_name != 'push' || !startsWith(github.ref, 'refs/tags/')
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Build with Nuitka
+        shell: cmd
+        run: scripts\build-nuitka.bat
+
+      - name: Prepare preview artifact
+        shell: bash
+        run: |
+          mkdir -p preview
+          short_sha="${GITHUB_SHA::7}"
+          cp out/main.exe "preview/sign-sign-in-preview-${short_sha}.exe"
+
+      - name: Upload preview artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: preview-windows-${{ github.sha }}
+          path: preview/*
