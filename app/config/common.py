@@ -50,7 +50,7 @@ API_URL = "https://langoo.cn"
 # 代理地址
 MITM_PROXY = "127.0.0.1:13140"
 
-# code 本地接收服务
+# code 本地接收服务（保留兼容）
 CODE_RECEIVER_HOST = "127.0.0.1"
 CODE_RECEIVER_PORT = 13141
 
@@ -88,6 +88,9 @@ SESSION_CACHE_FILE = os.path.join(RES_DIR, "config", "session_cache.json")
 
 # mitm addons
 ADDONS_DIR = os.path.join(MITM_DIR, "addons")
+
+# code 文件传递路径（mitm addon 写入，主程序轮询读取）
+CODE_FILE = os.path.join(RES_DIR, "config", "mitm_code.json")
 
 # system prompt
 SYSTEM_PROMPT = """

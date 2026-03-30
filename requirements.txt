@@ -1,8 +1,0 @@
-PySide6>=6.6,<7
-requests>=2.31,<3
-psutil>=5.9,<8
-qrcode>=7.4,<9
-mitmproxy>=10,<12
-nuitka>=2.6,<3
-zstandard>=0.22,<1
-ordered-set>=4.1,<5

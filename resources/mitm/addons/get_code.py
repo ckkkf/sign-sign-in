@@ -1,12 +1,19 @@
 import json
 import os
-import urllib.request
 from datetime import datetime
 from urllib.parse import urlsplit
 
 from mitmproxy import http
 
-CODE_RECEIVER_URL = "http://127.0.0.1:13141/code"
+CODE_FILE = os.path.normpath(
+    os.path.join(
+        os.path.dirname(__file__),
+        "..",
+        "..",
+        "config",
+        "mitm_code.json",
+    )
+)
 PACKET_LOG_FILE = os.path.normpath(
     os.path.join(
         os.path.dirname(__file__),
@@ -144,17 +151,15 @@ class GetCode:
         code_preview = mask_value(code)
         append_packet_log(f"[MITM] 拦截 {flow.request.method} {flow.request.pretty_url} | code={code_preview}")
 
-        body = json.dumps({"code": code}).encode("utf-8")
-        req = urllib.request.Request(
-            CODE_RECEIVER_URL,
-            data=body,
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        with urllib.request.urlopen(req, timeout=2):
-            pass
-        append_packet_log(f"[MITM] code 已回传到 {CODE_RECEIVER_URL}")
-        print(f"[addon] ⚔️成功拦截code并回传到 {CODE_RECEIVER_URL}")
+        try:
+            os.makedirs(os.path.dirname(CODE_FILE), exist_ok=True)
+            with open(CODE_FILE, "w", encoding="utf-8") as f:
+                json.dump({"code": code}, f, ensure_ascii=False)
+            append_packet_log(f"[MITM] code 已写入文件 {CODE_FILE}")
+            print(f"[addon] ⚔️成功拦截code并写入文件 {CODE_FILE}")
+        except Exception as exc:
+            append_packet_log(f"[MITM] code 写入文件失败: {exc}")
+            print(f"[addon] ❌ code 写入文件失败: {exc}")
 
         flow.kill()
 

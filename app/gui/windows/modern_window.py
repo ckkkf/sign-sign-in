@@ -56,6 +56,7 @@ class ModernWindow(QMainWindow):
         self.auto_clock_timer.timeout.connect(self._on_auto_clock_tick)
         self.btn_get_code_original_style = None  # 保存按钮原始样式
         self.weekly_journal_dialog = None  # 周记对话框实例
+        self._pending_auto_clock_opt = None  # 定时打卡等待获取code后重试的任务
         self._force_exit = False
         self._is_exiting = False
         self._tray_tip_shown = False
@@ -182,6 +183,17 @@ class ModernWindow(QMainWindow):
         btn_auto_clock.clicked.connect(self.open_auto_clock_config)
         t_grid.addWidget(btn_auto_clock, 2, 2, 1, 2)
         l_vbox.addLayout(t_grid)
+
+        # ------------------------- Reminder -------------------------
+        reminder = QLabel("⚠️ 提示：不要管小程序中的定位，签到定位是在脚本里完成的")
+        reminder.setStyleSheet(
+            "color: #F4D03F; font-size: 9pt; font-weight: bold; "
+            "background: rgba(244, 208, 63, 0.08); "
+            "border: 1px solid rgba(244, 208, 63, 0.25); "
+            "border-radius: 8px; padding: 6px 10px;"
+        )
+        reminder.setWordWrap(True)
+        l_vbox.addWidget(reminder)
 
         # ------------------------- Mode -------------------------
         label = QLabel("执行操作（拍照签到签退经纬度不准会导致外勤）")
@@ -1231,6 +1243,16 @@ class ModernWindow(QMainWindow):
                 self._reschedule_next_trigger_for_task(idx, task, now)
                 continue
 
+            # 检查session是否有效，无效则自动获取code
+            from app.utils.files import get_valid_session_cache
+            if get_valid_session_cache() is None:
+                logging.info("⏱️ 定时打卡: session已过期，自动触发获取code流程...")
+                self._pending_auto_clock_opt = opt
+                self._auto_get_code_and_session()
+                self._reschedule_next_trigger_for_task(idx, task, now)
+                self._log_next_auto_clock_times()
+                break
+
             if self._start_sign_task(opt, source="auto"):
                 self.auto_clock_last_trigger[key] = now.strftime("%Y-%m-%d")
                 ToastManager.instance().show(
@@ -1240,6 +1262,59 @@ class ModernWindow(QMainWindow):
                 self._reschedule_next_trigger_for_task(idx, task, now)
                 self._log_next_auto_clock_times()
                 break
+
+    def _auto_get_code_and_session(self):
+        """定时打卡场景下自动获取code和session"""
+        if self.is_getting_code:
+            return
+
+        try:
+            errMsg = validate_config(read_config(CONFIG_FILE))
+            if errMsg:
+                logging.warning(f"定时打卡自动获取code失败，配置校验不通过: {errMsg}")
+                self._pending_auto_clock_opt = None
+                return
+        except Exception as e:
+            logging.error(f"定时打卡自动获取code失败，读取配置异常: {e}")
+            self._pending_auto_clock_opt = None
+            return
+
+        self.is_getting_code = True
+        self.btn_get_code.setText("停止获取")
+        self.btn_get_code.setStyleSheet(
+            "background: #C0392B; color: white; border-radius: 20px; padding: 10px; font-size: 12pt; font-weight: bold; border: none;")
+        self.prog.show()
+        self.btn_run.setEnabled(False)
+        for btn in self.grp.buttons():
+            btn.setEnabled(False)
+
+        self.code_worker = GetCodeAndSessionThread(CONFIG_FILE)
+        self.code_worker.finished_signal.connect(self._on_auto_get_code_done)
+        self.code_worker.start()
+
+    def _on_auto_get_code_done(self, success, msg):
+        """定时打卡自动获取code完成后的回调"""
+        self.is_getting_code = False
+        self.btn_get_code.setEnabled(True)
+        self.btn_get_code.setText("获取code")
+        self.btn_get_code.setStyleSheet("")
+        self.btn_get_code.setObjectName("BtnGetCode")
+        self.style().polish(self.btn_get_code)
+        self.prog.hide()
+        self.btn_run.setEnabled(True)
+        for btn in self.grp.buttons():
+            btn.setEnabled(True)
+        self._update_session_display()
+
+        pending_opt = self._pending_auto_clock_opt
+        self._pending_auto_clock_opt = None
+
+        if success and pending_opt:
+            logging.info("⏱️ 定时打卡: code获取成功，继续执行打卡任务...")
+            self._start_sign_task(pending_opt, source="auto")
+        elif not success:
+            logging.warning(f"⏱️ 定时打卡: 自动获取code失败: {msg}")
+            self._show_tray_message("定时打卡", f"自动获取code失败: {msg}", False)
 
     def toggle(self):
 
