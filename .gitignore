@@ -33,6 +33,7 @@ dist/
 release/
 resources/config/session_cache.json
 resources/img/
+resources/log
 resources/config/code.json
 resources/journals/
 backend/
@@ -40,3 +41,4 @@ admin/
 others/
 /main.exe
 md/
+.agent

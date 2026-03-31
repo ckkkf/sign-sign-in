@@ -1,4 +1,4 @@
-﻿import json
+import json
 import os
 from datetime import datetime
 
@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
     QFileDialog,
+    QFrame,
     QGridLayout,
     QHBoxLayout,
     QLabel,
@@ -37,8 +38,8 @@ class AutoClockConfigDialog(QDialog):
     def __init__(self, config_path: str, parent=None):
         super().__init__(parent)
         self.config_path = config_path
-        self.setWindowTitle("定时打卡配置")
-        self.resize(760, 500)
+        self.setWindowTitle("定时打卡配置 - 现代化试图")
+        self.resize(760, 640)
 
         self.original_data = read_config(config_path)
         self.current_data = json.loads(json.dumps(self.original_data))
@@ -54,72 +55,224 @@ class AutoClockConfigDialog(QDialog):
     def _setup_style(self):
         self.setStyleSheet(
             """
+            * {
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+            }
             QDialog {
-                background: #0F111A;
-                color: #E6E9FF;
+                background-color: #141827;
+                color: #E2E8F0;
+                font-size: 9pt;
             }
-            QLabel {
-                color: #9AA4CF;
+            /* 卡片背景 */
+            #Card {
+                background-color: #1E253C;
+                border-radius: 8px;
+                border: 1px solid #2D3748;
+            }
+            /* 标题样式 */
+            #HeaderTitle {
+                font-size: 14pt;
+                color: #FFFFFF;
                 font-weight: 600;
+                letter-spacing: -0.3px;
             }
+            #SubTitle {
+                font-size: 9pt;
+                color: #94A3B8;
+                margin-bottom: 4px;
+            }
+            #SectionTitle {
+                color: #FFFFFF;
+                font-weight: 600;
+                font-size: 10pt;
+                padding-bottom: 2px;
+            }
+            /* 普通文本标签 */
+            QLabel {
+                color: #CBD5E1;
+                font-size: 9pt;
+            }
+            /* 复选框增强 */
             QCheckBox {
-                color: #E6E9FF;
+                color: #E2E8F0;
+                font-weight: 500;
+                font-size: 9pt;
                 spacing: 8px;
             }
-            QSpinBox, QLineEdit, QTimeEdit, QComboBox {
-                background: #1C2033;
-                border: 1px solid #2F3654;
-                color: #F5F6FF;
-                padding: 6px 8px;
-                border-radius: 8px;
+            QCheckBox::indicator {
+                width: 16px;
+                height: 16px;
+                border-radius: 4px;
+                border: 1px solid #3B4252;
+                background: #141827;
             }
+            QCheckBox::indicator:hover {
+                border-color: #6366F1;
+            }
+            QCheckBox::indicator:checked {
+                background: #6366F1;
+                border: 1px solid #6366F1;
+            }
+            
+            /* 输入框、多选框、数字框 */
+            QSpinBox, QLineEdit, QTimeEdit, QComboBox {
+                background: #1A2035;
+                border: 1px solid #2D3748;
+                color: #E2E8F0;
+                padding: 5px 10px;
+                border-radius: 6px;
+                font-family: Consolas, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei";
+                font-size: 9pt;
+            }
+            QSpinBox:focus, QLineEdit:focus, QTimeEdit:focus, QComboBox:focus {
+                border: 1px solid #6366F1;
+                background: #1E253C;
+            }
+            QSpinBox::up-button, QSpinBox::down-button, QTimeEdit::up-button, QTimeEdit::down-button {
+                width: 16px;
+                background: transparent;
+            }
+            QComboBox::drop-down {
+                border: none;
+                width: 24px;
+            }
+            QComboBox::down-arrow {
+                width: 10px;
+                height: 10px;
+            }
+            QComboBox QAbstractItemView {
+                background: #1E253C;
+                border: 1px solid #2D3748;
+                color: #E2E8F0;
+                selection-background-color: #312E81;
+                selection-color: #FFFFFF;
+                border-radius: 6px;
+                outline: none;
+                padding: 4px;
+            }
+
+            /* 表格增强 */
             QTableWidget {
-                background: #151828;
-                border: 1px solid #232841;
-                color: #E6E9FF;
-                gridline-color: #2A304A;
+                background: #1A2035;
+                border: 1px solid #2D3748;
+                color: #E2E8F0;
+                gridline-color: #2D3748;
+                border-radius: 6px;
+                outline: none;
+                font-size: 9pt;
+            }
+            QTableWidget::item {
+                padding: 6px;
+                border-bottom: 1px solid #2D3748;
+            }
+            QTableWidget::item:selected {
+                background: #312E81;
+                color: #FFFFFF;
             }
             QHeaderView::section {
-                background: #1B2033;
-                color: #C8D0FF;
-                padding: 6px;
+                background: #1E253C;
+                color: #94A3B8;
+                font-weight: 500;
+                padding: 8px 10px;
                 border: none;
-                border-right: 1px solid #2A304A;
+                border-bottom: 1px solid #2D3748;
+                border-right: 1px solid #2D3748;
+                font-size: 8.5pt;
             }
+            QHeaderView::section:last {
+                border-right: none;
+            }
+
+            /* 按钮统一样式 */
             QPushButton {
-                background: #1F2336;
-                color: #D5D9FF;
-                padding: 8px 14px;
-                border: 1px solid #2F3452;
-                border-radius: 10px;
-                font-weight: 600;
+                background: #1E253C;
+                color: #E2E8F0;
+                border: 1px solid #2D3748;
+                padding: 6px 14px;
+                border-radius: 6px;
+                font-weight: 500;
+                font-size: 9pt;
             }
             QPushButton:hover {
-                border-color: #7C89FF;
-                color: white;
+                background: #2D3748;
+                border-color: #4A5568;
+                color: #FFFFFF;
             }
+            QPushButton:pressed {
+                background: #1A2035;
+            }
+            
+            /* 特殊按钮状态 */
             QPushButton#Primary {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 #4E8BFF, stop:1 #7A5BFF);
-                color: white;
-                border: none;
+                background: #6366F1;
+                color: #FFFFFF;
+                border: 1px solid #6366F1;
+                font-weight: 600;
+                border-radius: 6px;
+                padding: 6px 20px;
+            }
+            QPushButton#Primary:hover {
+                background: #4F46E5;
+                border-color: #4F46E5;
+            }
+            QPushButton#Primary:pressed {
+                background: #4338CA;
+            }
+            QPushButton#Danger {
+                background: transparent;
+                color: #F87171;
+                border: 1px solid #7F1D1D;
+            }
+            QPushButton#Danger:hover {
+                background: #4A1C1C;
+                border-color: #DC2626;
+                color: #FECACA;
+            }
+            QPushButton#AddBtn {
+                background: transparent;
+                color: #10B981;
+                border: 1px solid #064E3B;
+            }
+            QPushButton#AddBtn:hover {
+                background: #023628;
+                border-color: #059669;
+                color: #A7F3D0;
             }
             """
         )
 
     def _setup_ui(self):
         root = QVBoxLayout(self)
-        root.setContentsMargins(14, 14, 14, 14)
-        root.setSpacing(10)
+        root.setContentsMargins(20, 20, 20, 20)
+        root.setSpacing(16)
 
-        header = QLabel("配置每天自动触发的打卡任务（同一任务每天只执行一次）")
-        root.addWidget(header)
+        # Header area
+        header_layout = QVBoxLayout()
+        header_layout.setSpacing(4)
+        title = QLabel("定时打卡配置")
+        title.setObjectName("HeaderTitle")
+        subtitle = QLabel("每天只需固定时刻设置，无需手动操作即可签到。")
+        subtitle.setObjectName("SubTitle")
+        header_layout.addWidget(title)
+        header_layout.addWidget(subtitle)
+        root.addLayout(header_layout)
+
+        # Settings Card
+        settings_card = QFrame()
+        settings_card.setObjectName("Card")
+        settings_layout = QVBoxLayout(settings_card)
+        settings_layout.setContentsMargins(16, 16, 16, 16)
+        settings_layout.setSpacing(12)
+        
+        lbl_settings = QLabel("基本配置")
+        lbl_settings.setObjectName("SectionTitle")
+        settings_layout.addWidget(lbl_settings)
 
         top = QGridLayout()
-        top.setHorizontalSpacing(12)
+        top.setHorizontalSpacing(10)
         top.setVerticalSpacing(8)
 
-        self.enabled_cb = QCheckBox("启用定时打卡")
+        self.enabled_cb = QCheckBox("启用定时打卡功能")
         self.poll_spin = QSpinBox()
         self.poll_spin.setRange(10, 300)
         self.poll_spin.setSuffix(" 秒")
@@ -129,51 +282,95 @@ class AutoClockConfigDialog(QDialog):
         self.random_spin.setSuffix(" 分钟")
         self.random_spin.setValue(0)
 
-        self.pushplus_token_edit = QLineEdit()
-        self.pushplus_token_edit.setPlaceholderText("输入 PushPlus token（可为空）")
-
-        top.addWidget(self.enabled_cb, 0, 0, 1, 2)
-        top.addWidget(QLabel("轮询间隔"), 1, 0)
+        # Row 0
+        top.addWidget(self.enabled_cb, 0, 0, 1, 4)
+        
+        # Row 1
+        top.addWidget(QLabel("轮询间隔(秒):"), 1, 0)
         top.addWidget(self.poll_spin, 1, 1)
-        top.addWidget(QLabel("随机时间(±)"), 2, 0)
-        top.addWidget(self.random_spin, 2, 1)
-        top.addWidget(QLabel("PushPlus Token"), 3, 0)
-        top.addWidget(self.pushplus_token_edit, 3, 1)
-        root.addLayout(top)
+        top.addWidget(QLabel("随机延迟(分钟):"), 1, 2)
+        top.addWidget(self.random_spin, 1, 3)
+
+        settings_layout.addLayout(top)
+        root.addWidget(settings_card)
+
+        # Push Notification Card
+        push_card = QFrame()
+        push_card.setObjectName("Card")
+        push_layout = QVBoxLayout(push_card)
+        push_layout.setContentsMargins(16, 16, 16, 16)
+        push_layout.setSpacing(12)
+
+        lbl_push = QLabel("通知配置")
+        lbl_push.setObjectName("SectionTitle")
+        push_layout.addWidget(lbl_push)
+
+        push_grid = QGridLayout()
+        push_grid.setHorizontalSpacing(10)
+        push_grid.setVerticalSpacing(8)
+
+        self.pushplus_token_edit = QLineEdit()
+        self.pushplus_token_edit.setPlaceholderText("PushPlus Token (用于结果推送，可为空)")
+        
+        push_grid.addWidget(QLabel("推送 Token:"), 0, 0)
+        push_grid.addWidget(self.pushplus_token_edit, 0, 1, 1, 1)
+        
+        self.btn_test_push = QPushButton("测试推送")
+        self.btn_test_push.setFixedWidth(100)
+        self.btn_test_push.clicked.connect(self._test_pushplus)
+        push_grid.addWidget(self.btn_test_push, 0, 2)
+        
+        push_layout.addLayout(push_grid)
+        root.addWidget(push_card)
+
+        # Task Table Card
+        task_card = QFrame()
+        task_card.setObjectName("Card")
+        task_layout = QVBoxLayout(task_card)
+        task_layout.setContentsMargins(16, 16, 16, 16)
+        task_layout.setSpacing(12)
+
+        task_header = QHBoxLayout()
+        lbl_tasks = QLabel("打卡任务列表")
+        lbl_tasks.setObjectName("SectionTitle")
+        task_header.addWidget(lbl_tasks)
+        task_header.addStretch()
+
+        btn_add = QPushButton("新增任务")
+        btn_add.setObjectName("AddBtn")
+        btn_add.clicked.connect(lambda: self._add_task_row())
+        
+        btn_remove = QPushButton("删除所选")
+        btn_remove.setObjectName("Danger")
+        btn_remove.clicked.connect(self._remove_selected_rows)
+
+        btn_pick = QPushButton("选择图片")
+        btn_pick.clicked.connect(self._choose_image_for_selected_row)
+        btn_pick.setToolTip("为所选拍照模式任务选择图片")
+
+        task_header.addWidget(btn_add)
+        task_header.addWidget(btn_remove)
+        task_header.addWidget(btn_pick)
+        task_layout.addLayout(task_header)
 
         self.table = QTableWidget(0, 3, self)
-        self.table.setHorizontalHeaderLabels(["时间", "模式", "拍照模式图片路径（可留空）"])
+        self.table.setHorizontalHeaderLabels(["触发时间", "打卡模式", "图片路径(拍照模式必填)"])
         self.table.verticalHeader().setVisible(False)
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
         self.table.setAlternatingRowColors(False)
         self.table.horizontalHeader().setStretchLastSection(True)
-        self.table.setColumnWidth(0, 120)
+        self.table.verticalHeader().setDefaultSectionSize(36)
+        self.table.setColumnWidth(0, 140)
         self.table.setColumnWidth(1, 140)
-        root.addWidget(self.table)
+        self.table.setShowGrid(False)
+        self.table.setFocusPolicy(self.table.focusPolicy()) # To remove focus rect completely we can do CSS outline:none
+        task_layout.addWidget(self.table)
+        
+        root.addWidget(task_card)
 
-        row_actions = QHBoxLayout()
-
-        btn_add = QPushButton("新增任务")
-        btn_add.clicked.connect(self._add_task_row)
-        row_actions.addWidget(btn_add)
-
-        btn_remove = QPushButton("删除所选")
-        btn_remove.clicked.connect(self._remove_selected_rows)
-        row_actions.addWidget(btn_remove)
-
-        btn_pick = QPushButton("为所选任务选择图片")
-        btn_pick.clicked.connect(self._choose_image_for_selected_row)
-        row_actions.addWidget(btn_pick)
-
-        self.btn_test_push = QPushButton("测试推送")
-        self.btn_test_push.clicked.connect(self._test_pushplus)
-        row_actions.addWidget(self.btn_test_push)
-
-        row_actions.addStretch()
-        root.addLayout(row_actions)
-
+        # Bottom Buttons
         bottom = QHBoxLayout()
-        btn_open = QPushButton("打开 config.json")
+        btn_open = QPushButton("查看 config.json")
         btn_open.clicked.connect(self._open_config_file)
         bottom.addWidget(btn_open)
         bottom.addStretch()
@@ -182,7 +379,7 @@ class AutoClockConfigDialog(QDialog):
         btn_cancel.clicked.connect(self.reject)
         bottom.addWidget(btn_cancel)
 
-        btn_save = QPushButton("保存")
+        btn_save = QPushButton("保存配置")
         btn_save.setObjectName("Primary")
         btn_save.clicked.connect(self._save)
         bottom.addWidget(btn_save)
@@ -207,6 +404,7 @@ class AutoClockConfigDialog(QDialog):
 
         if self.table.rowCount() == 0:
             self._add_task_row({"time": "08:55", "mode": "in", "image_path": ""})
+            self._add_task_row({"time": "18:05", "mode": "out", "image_path": ""})
 
     def _create_mode_combo(self, mode_value: str):
         combo = QComboBox()
