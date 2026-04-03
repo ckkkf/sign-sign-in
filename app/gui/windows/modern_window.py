@@ -112,14 +112,20 @@ class ModernWindow(QMainWindow):
         left.setObjectName("LeftPanel")
         l_vbox = QVBoxLayout(left)
         l_vbox.setContentsMargins(15, 12, 15, 16)
-        l_vbox.setSpacing(4)
+        l_vbox.setSpacing(2)
+
+        title_row = QHBoxLayout()
+        title_row.setSpacing(2)
 
         title = QLabel(PROJECT_NAME)
         title.setObjectName("AppTitle")
-        l_vbox.addWidget(title)
-        sub = QLabel("—— 自动化实习签到系统")
+        title_row.addWidget(title, 0, Qt.AlignLeft | Qt.AlignBottom)
+
+        sub = QLabel("自动化实习签到系统")
         sub.setObjectName("AppSubTitle")
-        l_vbox.addWidget(sub)
+        title_row.addWidget(sub, 0, Qt.AlignLeft | Qt.AlignBottom)
+        title_row.addStretch()
+        l_vbox.addLayout(title_row)
 
         # QQ Group (click-to-copy)
         qq_bar = QFrame()
@@ -625,8 +631,10 @@ class ModernWindow(QMainWindow):
                 color: #F2F4FF;
             }
             #AppSubTitle {
-                font-size: 10pt;
+                font-size: 10.5pt;
                 color: #7D86A7;
+                font-weight: 600;
+                padding-bottom: 3px;
             }
             #QQGroupBar {
                 background: #101420;
