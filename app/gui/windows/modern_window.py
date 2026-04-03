@@ -82,7 +82,28 @@ class ModernWindow(QMainWindow):
     def init_ui(self):
         main = QWidget()
         self.setCentralWidget(main)
-        hbox = QHBoxLayout(main)
+        root = QVBoxLayout(main)
+        root.setSpacing(0)
+        root.setContentsMargins(0, 0, 0, 0)
+
+        free_bar = QFrame()
+        free_bar.setObjectName("FreeBanner")
+        free_layout = QHBoxLayout(free_bar)
+        free_layout.setContentsMargins(14, 8, 14, 8)
+        free_layout.setSpacing(10)
+
+        free_badge = QLabel("免费")
+        free_badge.setObjectName("FreeBannerBadge")
+        free_layout.addWidget(free_badge, 0, Qt.AlignVCenter)
+
+        free_text = QLabel("本软件完全免费，若您是付费获得，请及时退款并警惕倒卖。本项目仅支持个人学习，请勿用与商业活动。")
+        free_text.setObjectName("FreeBannerText")
+        free_text.setWordWrap(True)
+        free_layout.addWidget(free_text, 1)
+
+        root.addWidget(free_bar)
+
+        hbox = QHBoxLayout()
         hbox.setSpacing(0)
         hbox.setContentsMargins(0, 0, 0, 0)
 
@@ -90,8 +111,8 @@ class ModernWindow(QMainWindow):
         left = QFrame()
         left.setObjectName("LeftPanel")
         l_vbox = QVBoxLayout(left)
-        l_vbox.setContentsMargins(15, 20, 15, 20)
-        l_vbox.setSpacing(5)
+        l_vbox.setContentsMargins(15, 12, 15, 16)
+        l_vbox.setSpacing(4)
 
         title = QLabel(PROJECT_NAME)
         title.setObjectName("AppTitle")
@@ -353,6 +374,7 @@ class ModernWindow(QMainWindow):
 
         hbox.addWidget(left, 35)
         hbox.addWidget(right, 65)
+        root.addLayout(hbox, 1)
 
         self.log_h = QTextEditLogger(self.log)
         self.log_h.setFormatter(logging.Formatter('%(asctime)s - %(message)s', "%H:%M:%S"))
@@ -571,6 +593,23 @@ class ModernWindow(QMainWindow):
     def setup_style(self):
         self.setStyleSheet("""
             QMainWindow { background: #0F111A; }
+            #FreeBanner {
+                background: rgba(192, 57, 43, 0.10);
+                border-bottom: 1px solid rgba(255, 138, 138, 0.24);
+            }
+            #FreeBannerBadge {
+                color: #2A130F;
+                background: #FFB347;
+                border-radius: 6px;
+                padding: 2px 8px;
+                font-size: 8.5pt;
+                font-weight: 800;
+            }
+            #FreeBannerText {
+                color: #FFD9D9;
+                font-size: 9.2pt;
+                font-weight: 700;
+            }
             #LeftPanel {
                 background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
                     stop:0 #151928, stop:1 #0E111C);
@@ -647,14 +686,14 @@ class ModernWindow(QMainWindow):
             #SectionLabel {
                 color: #6C7395;
                 font-weight: bold;
-                margin-top: 8px;
+                margin-top: 3px;
                 letter-spacing: 1px;
             }
             #ToolBtn {
                 background: #191B2A;
                 color: #D0D5FF;
                 border: 1px solid #22263A;
-                padding: 6px;
+                padding: 5px;
                 border-radius: 10px;
                 font-weight: 600;
             }
