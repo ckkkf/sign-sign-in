@@ -101,18 +101,38 @@ class ModernWindow(QMainWindow):
         l_vbox.addWidget(sub)
 
         # QQ Group (click-to-copy)
-        qq_lbl = QLabel(f"QQ交流群: {QQ_GROUP} (点我复制)")
-        qq_lbl.setStyleSheet("""
-            color: #5865F2; 
-            font-weight: bold; 
-            font-size: 10pt; 
-        """)
-        qq_lbl.setCursor(Qt.PointingHandCursor)  # 小手指
-        qq_lbl.setTextFormat(Qt.RichText)
-        qq_lbl.setTextInteractionFlags(Qt.TextBrowserInteraction)
-        qq_lbl.mousePressEvent = lambda e: self.copy_log()
+        qq_bar = QFrame()
+        qq_bar.setObjectName("QQGroupBar")
+        qq_bar.setCursor(Qt.PointingHandCursor)
+        qq_bar.setToolTip("点击复制 QQ 群号")
 
-        l_vbox.addWidget(qq_lbl)
+        qq_layout = QHBoxLayout(qq_bar)
+        qq_layout.setContentsMargins(10, 7, 10, 7)
+        qq_layout.setSpacing(8)
+
+        qq_badge = QLabel("QQ")
+        qq_badge.setObjectName("QQGroupBadge")
+        qq_label = QLabel("交流群")
+        qq_label.setObjectName("QQGroupLabel")
+        qq_divider = QLabel("/")
+        qq_divider.setObjectName("QQGroupDivider")
+        qq_number = QLabel(QQ_GROUP)
+        qq_number.setObjectName("QQGroupNumber")
+        qq_hint = QLabel("点击复制")
+        qq_hint.setObjectName("QQCopyHint")
+
+        for widget in (qq_badge, qq_label, qq_divider, qq_number, qq_hint):
+            widget.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+
+        qq_layout.addWidget(qq_badge, 0, Qt.AlignVCenter)
+        qq_layout.addWidget(qq_label, 0, Qt.AlignVCenter)
+        qq_layout.addWidget(qq_divider, 0, Qt.AlignVCenter)
+        qq_layout.addWidget(qq_number, 0, Qt.AlignVCenter)
+        qq_layout.addStretch()
+        qq_layout.addWidget(qq_hint, 0, Qt.AlignVCenter)
+
+        qq_bar.mousePressEvent = lambda e: self.copy_qq_group()
+        l_vbox.addWidget(qq_bar)
 
         # ------------------------- Status Box -------------------------
         # 区域标签
@@ -569,6 +589,50 @@ class ModernWindow(QMainWindow):
                 font-size: 10pt;
                 color: #7D86A7;
             }
+            #QQGroupBar {
+                background: #101420;
+                border: 1px solid #1F2538;
+                border-radius: 9px;
+            }
+            #QQGroupBar:hover {
+                background: #121726;
+                border-color: #334062;
+            }
+            #QQGroupBadge {
+                color: #0D111A;
+                background: #7A89FF;
+                border-radius: 5px;
+                padding: 2px 6px;
+                font-size: 8pt;
+                font-weight: 800;
+            }
+            #QQGroupLabel {
+                color: #8089AF;
+                font-size: 9pt;
+                font-weight: 600;
+            }
+            #QQGroupDivider {
+                color: #404968;
+                font-family: Consolas;
+                font-size: 9pt;
+            }
+            #QQGroupNumber {
+                color: #EEF2FF;
+                font-family: Consolas;
+                font-size: 10.8pt;
+                font-weight: 700;
+                letter-spacing: 0.5px;
+            }
+            #QQCopyHint {
+                color: #7FDBFF;
+                font-family: Consolas;
+                font-size: 8pt;
+                font-weight: 600;
+                letter-spacing: 0.8px;
+            }
+            #QQGroupBar:hover QLabel#QQCopyHint {
+                color: #B8EEFF;
+            }
             #MonitorBox {
                 background: #151826;
                 border-radius: 12px;
@@ -817,6 +881,10 @@ class ModernWindow(QMainWindow):
         QApplication.clipboard().setText(self.log.toPlainText())
         # QMessageBox.information(self, "OK", "日志已复制到剪贴板！")
         ToastManager.instance().show("已复制到剪贴板", "success")
+
+    def copy_qq_group(self):
+        QApplication.clipboard().setText(QQ_GROUP)
+        ToastManager.instance().show(f"QQ群号 {QQ_GROUP} 已复制", "success")
 
     def open_image_manager(self):
         ImageManagerDialog(self).exec()
@@ -1426,7 +1494,7 @@ class ModernWindow(QMainWindow):
 
         # 更新session显示，确保清除过期session后状态栏能及时更新
         self._update_session_display()
-        self._notify_sign_result(success, msg)
+        self._notify_sign_result(success, msg, notify_from_tray)
         if notify_from_tray:
             title = "打卡成功" if success else "打卡失败"
             self._show_tray_message(title, msg or title, success)
@@ -1445,16 +1513,33 @@ class ModernWindow(QMainWindow):
         else:
             if msg != "任务已停止":
                 ToastManager.instance().show(msg, "error")
-    def _notify_sign_result(self, success: bool, msg: str):
+    def _notify_sign_result(self, success: bool, msg: str, notify_from_tray: bool = False):
         try:
             config = read_config(CONFIG_FILE)
             settings = config.get("settings", {})
-            pushplus = settings.get("pushplus", {})
-            token = str(pushplus.get("token", "") or "").strip()
-            if not token:
+            notifications_enabled = bool(settings.get("notifications_enabled", False))
+            if not notifications_enabled:
                 return
+            notifications = settings.get("notifications", [])
+            pushplus_token = ""
+            use_tray = False
+
+            if isinstance(notifications, list):
+                for channel in notifications:
+                    if not isinstance(channel, dict):
+                        continue
+                    channel_type = str(channel.get("type", "") or "").strip().lower()
+                    if channel_type == "tray":
+                        use_tray = True
+                    elif channel_type == "pushplus" and not pushplus_token:
+                        pushplus_token = str(channel.get("token", "") or "").strip()
+
+            if not pushplus_token:
+                pushplus = settings.get("pushplus", {})
+                if isinstance(pushplus, dict):
+                    pushplus_token = str(pushplus.get("token", "") or "").strip()
         except Exception as exc:
-            logging.warning(f"读取 PushPlus 配置失败，已跳过推送: {exc}")
+            logging.warning(f"读取通知配置失败，已跳过推送: {exc}")
             return
 
         status = "成功" if success else "失败"
@@ -1463,19 +1548,24 @@ class ModernWindow(QMainWindow):
         title = f"打卡{status}"
         content = f"{source}打卡结果：{status}\n时间：{now}\n消息：{msg}"
 
-        threading.Thread(
-            target=self._send_pushplus_in_thread,
-            args=(token, title, content),
-            daemon=True,
-        ).start()
+        if use_tray and not notify_from_tray:
+            self._show_tray_message(title, msg or title, success)
+
+        if pushplus_token:
+            threading.Thread(
+                target=self._send_pushplus_in_thread,
+                args=([pushplus_token], title, content),
+                daemon=True,
+            ).start()
 
     @staticmethod
-    def _send_pushplus_in_thread(token: str, title: str, content: str):
-        try:
-            notify_pushplus(title=title, content=content, token=token)
-            logging.info("PushPlus 推送成功")
-        except Exception as exc:
-            logging.warning(f"PushPlus 推送失败: {exc}")
+    def _send_pushplus_in_thread(tokens: list[str], title: str, content: str):
+        for token in tokens:
+            try:
+                notify_pushplus(title=title, content=content, token=token)
+                logging.info("PushPlus 推送成功")
+            except Exception as exc:
+                logging.warning(f"PushPlus 推送失败: {exc}")
     def closeEvent(self, event):
         """关闭窗口时提示用户选择退出或最小化到托盘。"""
         if self._is_exiting:

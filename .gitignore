@@ -34,6 +34,7 @@ release/
 resources/config/session_cache.json
 resources/img/
 resources/log
+resources/log/*.log
 resources/config/code.json
 resources/journals/
 backend/
@@ -42,3 +43,6 @@ others/
 /main.exe
 md/
 .agent
+.codex
+.github
+*.png
