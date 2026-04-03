@@ -163,15 +163,15 @@ class ModernWindow(QMainWindow):
 
         # ------------------------- Status Box -------------------------
         # 区域标签
-        label = QLabel("状态域")
-        label.setObjectName("SectionLabel")
-        l_vbox.addWidget(label)
+        # label = QLabel("状态域")
+        # label.setObjectName("SectionLabel")
+        # l_vbox.addWidget(label)
 
         mon_box = QFrame()
         mon_box.setObjectName("MonitorBox")
         mon_grid = QGridLayout(mon_box)
-        mon_grid.setContentsMargins(10, 10, 10, 10)
-        mon_grid.setSpacing(5)
+        mon_grid.setContentsMargins(9, 9, 9, 9)
+        mon_grid.setSpacing(4)
         # Set Equal Column Width
         mon_grid.setColumnStretch(0, 1)
         mon_grid.setColumnStretch(1, 1)
@@ -182,6 +182,7 @@ class ModernWindow(QMainWindow):
             l = QLabel("-")
             l.setObjectName("StatusLabel")
             l.setTextFormat(Qt.RichText)
+            l.setMinimumHeight(22)
             self.lbls[k] = l
 
         mon_grid.addWidget(self.lbls['time'], 0, 0)
@@ -198,12 +199,13 @@ class ModernWindow(QMainWindow):
 
         # ------------------------- Tools -------------------------
         # 区域标签
-        label = QLabel("工具箱")
-        label.setObjectName("SectionLabel")
-        l_vbox.addWidget(label)
+        # label = QLabel("工具箱")
+        # label.setObjectName("SectionLabel")
+        # l_vbox.addWidget(label)
 
         t_grid = QGridLayout()
-        t_grid.setSpacing(8)
+        t_grid.setContentsMargins(0, 0, 0, 0)
+        t_grid.setSpacing(5)
         tools = [
             ("🔗 系统代理", lambda: subprocess.Popen('rundll32.exe shell32.dll,Control_RunDLL inetcpl.cpl,,4', shell=True, creationflags=subprocess.CREATE_NO_WINDOW)),
             ("🔒 证书管理", lambda: subprocess.Popen('certmgr.msc', shell=True, creationflags=subprocess.CREATE_NO_WINDOW)),
@@ -232,14 +234,15 @@ class ModernWindow(QMainWindow):
         l_vbox.addLayout(t_grid)
 
         # ------------------------- Reminder -------------------------
-        reminder = QLabel("⚠️ 提示：不要管小程序中的定位，签到定位是在脚本里完成的")
+        reminder = QLabel("⚠️ 提示：小程序会自动关闭，签到请在本软件完成")
         reminder.setStyleSheet(
-            "color: #F4D03F; font-size: 9pt; font-weight: bold; "
+            "color: #F4D03F; font-size: 8.8pt; font-weight: bold; "
             "background: rgba(244, 208, 63, 0.08); "
             "border: 1px solid rgba(244, 208, 63, 0.25); "
             "border-radius: 8px; padding: 6px 10px;"
         )
         reminder.setWordWrap(True)
+        l_vbox.addSpacing(6)
         l_vbox.addWidget(reminder)
 
         # ------------------------- Mode -------------------------
@@ -264,7 +267,7 @@ class ModernWindow(QMainWindow):
 
         # 第一行：签到 + 签退
         mode_row1 = QHBoxLayout()
-        mode_row1.setSpacing(10)
+        mode_row1.setSpacing(9)
         mode_row1.addWidget(rb_in)
         mode_row1.addWidget(rb_out)
         mode_row1.addWidget(rb_img_in)
@@ -288,7 +291,7 @@ class ModernWindow(QMainWindow):
         # 保存原始样式（置空，使用 setup_style 中的 ID 样式）
         self.btn_get_code_original_style = ""
         btn_row1.addWidget(self.btn_get_code)
-        btn_row1.setContentsMargins(0, 10, 0, 10)  # 左 上 右 下
+        btn_row1.setContentsMargins(0, 9, 0, 9)  # 左 上 右 下
         btn_row1.setSpacing(5)
 
         l_vbox.addLayout(btn_row1)
@@ -300,6 +303,8 @@ class ModernWindow(QMainWindow):
         btn_row1.addWidget(self.btn_run)
 
         btn_row2 = QHBoxLayout()
+        btn_row2.setContentsMargins(0, 0, 0, 0)
+        btn_row2.setSpacing(8)
 
         btn_don = QPushButton("支持作者")
         btn_don.setObjectName("BtnDonate")
@@ -650,7 +655,7 @@ class ModernWindow(QMainWindow):
                 background: #7A89FF;
                 border-radius: 5px;
                 padding: 2px 6px;
-                font-size: 8pt;
+                font-size: 7pt;
                 font-weight: 800;
             }
             #QQGroupLabel {
@@ -689,11 +694,13 @@ class ModernWindow(QMainWindow):
             #StatusLabel {
                 color: #D7DBFF;
                 font-family: Consolas;
-                font-size: 9.5pt;
+                font-size: 9pt;
+                padding: 0 0 2px 0;
             }
             #SectionLabel {
                 color: #6C7395;
                 font-weight: bold;
+                font-size: 8.8pt;
                 margin-top: 3px;
                 letter-spacing: 1px;
             }
@@ -704,6 +711,7 @@ class ModernWindow(QMainWindow):
                 padding: 5px;
                 border-radius: 10px;
                 font-weight: 600;
+                font-size: 9pt;
             }
             #ToolBtn:hover {
                 border-color: #4F6BFF;
@@ -711,7 +719,7 @@ class ModernWindow(QMainWindow):
             }
             QRadioButton {
                 color: #9EA4C4;
-                font-size: 10pt;
+                font-size: 9.6pt;
             }
             QRadioButton:checked {
                 color: #F4F6FF;
@@ -733,9 +741,9 @@ class ModernWindow(QMainWindow):
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
                     stop:0 #28A745, stop:1 #20C997);
                 color: white;
-                border-radius: 20px;
-                padding: 10px;
-                font-size: 12pt;
+                border-radius: 19px;
+                padding: 9px;
+                font-size: 11.3pt;
                 font-weight: bold;
                 border: 2px solid transparent;
             }
@@ -746,9 +754,9 @@ class ModernWindow(QMainWindow):
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
                     stop:0 #3D7CFF, stop:1 #7A4DFF);
                 color: white;
-                border-radius: 20px;
-                padding: 10px;
-                font-size: 12pt;
+                border-radius: 19px;
+                padding: 9px;
+                font-size: 11.3pt;
                 font-weight: bold;
                 border: 2px solid transparent;
             }
@@ -759,9 +767,10 @@ class ModernWindow(QMainWindow):
                 background: transparent;
                 color: #7E86A8;
                 border: 1px solid #2F3450;
-                border-radius: 18px;
-                padding: 6px 14px;
+                border-radius: 15px;
+                padding: 6px 11px;
                 font-weight: bold;
+                font-size: 9pt;
             }
             #BtnDonate:hover, #BtnGit:hover {
                 border-color: #5865F2;
@@ -1129,20 +1138,22 @@ class ModernWindow(QMainWindow):
     def _update_session_display(self):
         """更新JSESSIONID显示"""
         from app.utils.files import load_session_cache
-        from datetime import datetime, timedelta
+        from datetime import datetime
 
         cache = load_session_cache()
         if cache and cache.get('sessionId'):
             session_id = cache['sessionId']
             timestamp = cache.get('timestamp', 0)
+            masked_id = f"...{session_id[-4:]}" if len(session_id) >= 4 else session_id
             if timestamp:
                 dt = datetime.fromtimestamp(timestamp)
-                time_str = dt.strftime("%Y-%m-%d %H:%M:%S")
-                display_id = session_id[:10] + "..." if len(session_id) > 10 else session_id
+                time_str = dt.strftime("%Y-%m-%d %H:%M")
                 self.lbls['session'].setText(
-                    f"🗝️ SESSION: <span style='color:#58D68D'>{display_id}...</span><span style='color:#58D68D'>({time_str})</span>")
+                    f"🗝️ SESSION: <span style='color:#58D68D'>{masked_id}</span> "
+                    f"<span style='color:#58D68D'>({time_str})</span>"
+                )
             else:
-                self.lbls['session'].setText(f"🗝️ SESSION: <span style='color:#58D68D'>{session_id[:10]}...</span>")
+                self.lbls['session'].setText(f"🗝️ SESSION: <span style='color:#58D68D'>{masked_id}</span>")
         else:
             self.lbls['session'].setText("🗝️ SESSION: <span style='color:#F4D03F'>未获取</span>")
 
