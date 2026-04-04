@@ -28,6 +28,10 @@
         },
         "pushplus": {
             "token": ""
+        },
+        "jielong": {
+            "authorization": "",
+            "thread_id": ""
         }
     }
 }

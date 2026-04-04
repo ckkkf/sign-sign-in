@@ -22,6 +22,7 @@ from app.gui.dialogs.dialogs.auto_clock_config_dialog import AutoClockConfigDial
 from app.gui.dialogs.dialogs.config_dialog import ConfigDialog
 from app.gui.dialogs.feedback_dialog import FeedbackDialog
 from app.gui.dialogs.image_manager_dialog import ImageManagerDialog
+from app.gui.dialogs.jielong_dialog import JieLongDialog
 from app.gui.dialogs.photo_sign_dialog import PhotoSignDialog
 from app.gui.dialogs.sponsor_dialog import SponsorSubmitDialog
 from app.gui.dialogs.update_dialog import UpdateDialog
@@ -56,6 +57,7 @@ class ModernWindow(QMainWindow):
         self.auto_clock_timer.timeout.connect(self._on_auto_clock_tick)
         self.btn_get_code_original_style = None  # 保存按钮原始样式
         self.weekly_journal_dialog = None  # 周记对话框实例
+        self.jielong_dialog = None
         self._pending_auto_clock_opt = None  # 定时打卡等待获取code后重试的任务
         self._force_exit = False
         self._is_exiting = False
@@ -119,7 +121,7 @@ class ModernWindow(QMainWindow):
         left_rail.setFixedWidth(46)
         rail_layout = QVBoxLayout(left_rail)
         rail_layout.setContentsMargins(0, 0, 0, 0)
-        rail_layout.setSpacing(6)
+        rail_layout.setSpacing(14)
 
         rail_layout.addSpacing(78)
 
@@ -144,6 +146,13 @@ class ModernWindow(QMainWindow):
         platform_group_layout.addWidget(self.btn_platform_add, 0, Qt.AlignHCenter)
 
         rail_layout.addWidget(platform_group, 0, Qt.AlignTop | Qt.AlignHCenter)
+
+        self.btn_nav_jielong = QPushButton("接\n龙")
+        self.btn_nav_jielong.setObjectName("RailFeatureBtn")
+        self.btn_nav_jielong.setToolTip("打开接龙表单")
+        self.btn_nav_jielong.clicked.connect(self.open_jielong_dialog)
+        rail_layout.addWidget(self.btn_nav_jielong, 0, Qt.AlignTop | Qt.AlignHCenter)
+
         rail_layout.addStretch()
         left_layout.addWidget(left_rail, 0)
 
@@ -725,6 +734,25 @@ class ModernWindow(QMainWindow):
                 color: #F7F9FF;
                 background: rgba(86, 104, 255, 0.10);
             }
+            QPushButton#RailFeatureBtn {
+                min-width: 34px;
+                max-width: 34px;
+                min-height: 48px;
+                max-height: 48px;
+                background: rgba(18, 25, 40, 0.98);
+                color: #CFE6FF;
+                border: 1px solid rgba(59, 78, 122, 0.95);
+                border-radius: 11px;
+                padding: 0;
+                font-size: 8.6pt;
+                font-weight: 800;
+                text-align: center;
+            }
+            QPushButton#RailFeatureBtn:hover {
+                border-color: #63A3FF;
+                color: #FFFFFF;
+                background: rgba(69, 142, 255, 0.12);
+            }
             #QQGroupBar {
                 background: #101420;
                 border: 1px solid #1F2538;
@@ -1028,6 +1056,13 @@ class ModernWindow(QMainWindow):
 
     def _show_platform_placeholder(self):
         ToastManager.instance().show("当前平台：校友邦，后续会在这里切换其他小程序", "info")
+
+    def open_jielong_dialog(self):
+        if self.jielong_dialog is None:
+            self.jielong_dialog = JieLongDialog(self)
+        self.jielong_dialog.show()
+        self.jielong_dialog.raise_()
+        self.jielong_dialog.activateWindow()
 
     def open_image_manager(self):
         ImageManagerDialog(self).exec()

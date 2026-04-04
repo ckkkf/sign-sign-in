@@ -44,5 +44,8 @@ others/
 md/
 .agent
 .codex
-.github
 *.png
+tests
+.omx
+.github
+/resources/logs
