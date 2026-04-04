@@ -110,9 +110,48 @@ class ModernWindow(QMainWindow):
         # ------------------------- Left Panel -------------------------
         left = QFrame()
         left.setObjectName("LeftPanel")
-        l_vbox = QVBoxLayout(left)
-        l_vbox.setContentsMargins(15, 12, 15, 16)
+        left_layout = QHBoxLayout(left)
+        left_layout.setContentsMargins(0, 1, 15, 8)
+        left_layout.setSpacing(10)
+
+        left_rail = QFrame()
+        left_rail.setObjectName("LeftRail")
+        left_rail.setFixedWidth(46)
+        rail_layout = QVBoxLayout(left_rail)
+        rail_layout.setContentsMargins(0, 0, 0, 0)
+        rail_layout.setSpacing(6)
+
+        rail_layout.addSpacing(78)
+
+        platform_group = QFrame()
+        platform_group.setObjectName("RailPlatformGroup")
+        platform_group_layout = QVBoxLayout(platform_group)
+        platform_group_layout.setContentsMargins(0, 0, 0, 0)
+        platform_group_layout.setSpacing(10)
+
+        self.btn_platform_xyb = QPushButton("校")
+        self.btn_platform_xyb.setObjectName("RailPlatformCurrentBtn")
+        self.btn_platform_xyb.setToolTip("当前平台：校友邦")
+        self.btn_platform_xyb.clicked.connect(
+            lambda: ToastManager.instance().show("当前平台：校友邦", "info")
+        )
+        platform_group_layout.addWidget(self.btn_platform_xyb, 0, Qt.AlignHCenter)
+
+        self.btn_platform_add = QPushButton("+")
+        self.btn_platform_add.setObjectName("RailPlatformAddBtn")
+        self.btn_platform_add.setToolTip("添加或切换其他平台")
+        self.btn_platform_add.clicked.connect(self._show_platform_placeholder)
+        platform_group_layout.addWidget(self.btn_platform_add, 0, Qt.AlignHCenter)
+
+        rail_layout.addWidget(platform_group, 0, Qt.AlignTop | Qt.AlignHCenter)
+        rail_layout.addStretch()
+        left_layout.addWidget(left_rail, 0)
+
+        left_body = QWidget()
+        l_vbox = QVBoxLayout(left_body)
+        l_vbox.setContentsMargins(0, 0, 0, 0)
         l_vbox.setSpacing(2)
+        left_layout.addWidget(left_body, 1)
 
         title_row = QHBoxLayout()
         title_row.setSpacing(2)
@@ -163,9 +202,9 @@ class ModernWindow(QMainWindow):
 
         # ------------------------- Status Box -------------------------
         # 区域标签
-        # label = QLabel("状态域")
-        # label.setObjectName("SectionLabel")
-        # l_vbox.addWidget(label)
+        label = QLabel("状态域")
+        label.setObjectName("SectionLabel")
+        l_vbox.addWidget(label)
 
         mon_box = QFrame()
         mon_box.setObjectName("MonitorBox")
@@ -199,9 +238,9 @@ class ModernWindow(QMainWindow):
 
         # ------------------------- Tools -------------------------
         # 区域标签
-        # label = QLabel("工具箱")
-        # label.setObjectName("SectionLabel")
-        # l_vbox.addWidget(label)
+        label = QLabel("工具箱")
+        label.setObjectName("SectionLabel")
+        l_vbox.addWidget(label)
 
         t_grid = QGridLayout()
         t_grid.setContentsMargins(0, 0, 0, 0)
@@ -641,6 +680,51 @@ class ModernWindow(QMainWindow):
                 font-weight: 600;
                 padding-bottom: 3px;
             }
+            #LeftRail {
+                background: transparent;
+                border-right: 1px solid rgba(36, 42, 63, 0.95);
+            }
+            #RailPlatformGroup {
+                background: transparent;
+            }
+            QPushButton#RailPlatformCurrentBtn {
+                min-width: 34px;
+                max-width: 34px;
+                min-height: 34px;
+                max-height: 34px;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                    stop:0 rgba(90, 112, 255, 0.98), stop:1 rgba(54, 82, 196, 0.98));
+                color: #F6F8FF;
+                border: 1px solid rgba(130, 146, 255, 0.46);
+                border-radius: 10px;
+                padding: 0;
+                font-size: 10pt;
+                font-weight: 800;
+            }
+            QPushButton#RailPlatformCurrentBtn:hover {
+                border-color: #A4B1FF;
+                color: #FFFFFF;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                    stop:0 rgba(104, 125, 255, 1.0), stop:1 rgba(66, 94, 210, 1.0));
+            }
+            QPushButton#RailPlatformAddBtn {
+                min-width: 34px;
+                max-width: 34px;
+                min-height: 34px;
+                max-height: 34px;
+                background: rgba(15, 20, 33, 0.98);
+                color: #9AA7D6;
+                border: 1px dashed rgba(72, 83, 122, 0.95);
+                border-radius: 10px;
+                padding: 0;
+                font-size: 12pt;
+                font-weight: 700;
+            }
+            QPushButton#RailPlatformAddBtn:hover {
+                border-color: #7D8EFF;
+                color: #F7F9FF;
+                background: rgba(86, 104, 255, 0.10);
+            }
             #QQGroupBar {
                 background: #101420;
                 border: 1px solid #1F2538;
@@ -941,6 +1025,9 @@ class ModernWindow(QMainWindow):
     def copy_qq_group(self):
         QApplication.clipboard().setText(QQ_GROUP)
         ToastManager.instance().show(f"QQ群号 {QQ_GROUP} 已复制", "success")
+
+    def _show_platform_placeholder(self):
+        ToastManager.instance().show("当前平台：校友邦，后续会在这里切换其他小程序", "info")
 
     def open_image_manager(self):
         ImageManagerDialog(self).exec()
