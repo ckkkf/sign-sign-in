@@ -118,37 +118,27 @@ class ModernWindow(QMainWindow):
 
         left_rail = QFrame()
         left_rail.setObjectName("LeftRail")
-        left_rail.setFixedWidth(46)
+        left_rail.setFixedWidth(56)
         rail_layout = QVBoxLayout(left_rail)
         rail_layout.setContentsMargins(0, 0, 0, 0)
-        rail_layout.setSpacing(14)
+        rail_layout.setSpacing(10)
 
         rail_layout.addSpacing(78)
 
-        platform_group = QFrame()
-        platform_group.setObjectName("RailPlatformGroup")
-        platform_group_layout = QVBoxLayout(platform_group)
-        platform_group_layout.setContentsMargins(0, 0, 0, 0)
-        platform_group_layout.setSpacing(10)
-
         self.btn_platform_xyb = QPushButton("校")
-        self.btn_platform_xyb.setObjectName("RailPlatformCurrentBtn")
+        self.btn_platform_xyb.setObjectName("RailNavCurrentBtn")
+        self.btn_platform_xyb.setCursor(Qt.PointingHandCursor)
+        self.btn_platform_xyb.setFixedSize(40, 40)
         self.btn_platform_xyb.setToolTip("当前平台：校友邦")
         self.btn_platform_xyb.clicked.connect(
             lambda: ToastManager.instance().show("当前平台：校友邦", "info")
         )
-        platform_group_layout.addWidget(self.btn_platform_xyb, 0, Qt.AlignHCenter)
+        rail_layout.addWidget(self.btn_platform_xyb, 0, Qt.AlignTop | Qt.AlignHCenter)
 
-        self.btn_platform_add = QPushButton("+")
-        self.btn_platform_add.setObjectName("RailPlatformAddBtn")
-        self.btn_platform_add.setToolTip("添加或切换其他平台")
-        self.btn_platform_add.clicked.connect(self._show_platform_placeholder)
-        platform_group_layout.addWidget(self.btn_platform_add, 0, Qt.AlignHCenter)
-
-        rail_layout.addWidget(platform_group, 0, Qt.AlignTop | Qt.AlignHCenter)
-
-        self.btn_nav_jielong = QPushButton("接\n龙")
-        self.btn_nav_jielong.setObjectName("RailFeatureBtn")
+        self.btn_nav_jielong = QPushButton("接龙")
+        self.btn_nav_jielong.setObjectName("RailNavShortcutBtn")
+        self.btn_nav_jielong.setCursor(Qt.PointingHandCursor)
+        self.btn_nav_jielong.setFixedSize(40, 40)
         self.btn_nav_jielong.setToolTip("打开接龙表单")
         self.btn_nav_jielong.clicked.connect(self.open_jielong_dialog)
         rail_layout.addWidget(self.btn_nav_jielong, 0, Qt.AlignTop | Qt.AlignHCenter)
@@ -693,62 +683,36 @@ class ModernWindow(QMainWindow):
                 background: transparent;
                 border-right: 1px solid rgba(36, 42, 63, 0.95);
             }
-            #RailPlatformGroup {
-                background: transparent;
+            QPushButton#RailNavCurrentBtn,
+            QPushButton#RailNavShortcutBtn {
+                min-width: 40px;
+                max-width: 40px;
+                min-height: 40px;
+                max-height: 40px;
+                border-radius: 12px;
+                padding: 0;
+                font-size: 9pt;
+                font-weight: 800;
+                text-align: center;
             }
-            QPushButton#RailPlatformCurrentBtn {
-                min-width: 34px;
-                max-width: 34px;
-                min-height: 34px;
-                max-height: 34px;
+            QPushButton#RailNavCurrentBtn {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
                     stop:0 rgba(90, 112, 255, 0.98), stop:1 rgba(54, 82, 196, 0.98));
                 color: #F6F8FF;
                 border: 1px solid rgba(130, 146, 255, 0.46);
-                border-radius: 10px;
-                padding: 0;
-                font-size: 10pt;
-                font-weight: 800;
             }
-            QPushButton#RailPlatformCurrentBtn:hover {
+            QPushButton#RailNavCurrentBtn:hover {
                 border-color: #A4B1FF;
                 color: #FFFFFF;
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
                     stop:0 rgba(104, 125, 255, 1.0), stop:1 rgba(66, 94, 210, 1.0));
             }
-            QPushButton#RailPlatformAddBtn {
-                min-width: 34px;
-                max-width: 34px;
-                min-height: 34px;
-                max-height: 34px;
+            QPushButton#RailNavShortcutBtn {
                 background: rgba(15, 20, 33, 0.98);
-                color: #9AA7D6;
-                border: 1px dashed rgba(72, 83, 122, 0.95);
-                border-radius: 10px;
-                padding: 0;
-                font-size: 12pt;
-                font-weight: 700;
-            }
-            QPushButton#RailPlatformAddBtn:hover {
-                border-color: #7D8EFF;
-                color: #F7F9FF;
-                background: rgba(86, 104, 255, 0.10);
-            }
-            QPushButton#RailFeatureBtn {
-                min-width: 34px;
-                max-width: 34px;
-                min-height: 48px;
-                max-height: 48px;
-                background: rgba(18, 25, 40, 0.98);
                 color: #CFE6FF;
                 border: 1px solid rgba(59, 78, 122, 0.95);
-                border-radius: 11px;
-                padding: 0;
-                font-size: 8.6pt;
-                font-weight: 800;
-                text-align: center;
             }
-            QPushButton#RailFeatureBtn:hover {
+            QPushButton#RailNavShortcutBtn:hover {
                 border-color: #63A3FF;
                 color: #FFFFFF;
                 background: rgba(69, 142, 255, 0.12);
