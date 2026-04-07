@@ -1,8 +1,13 @@
-from PySide6.QtCore import QThread, Qt, Signal
+import os
+from copy import deepcopy
+import time
+
+from PySide6.QtGui import QPixmap
+from PySide6.QtCore import QThread, Qt, Signal, QTimer
 from PySide6.QtWidgets import (
-    QComboBox,
     QDialog,
     QFrame,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -15,25 +20,32 @@ from PySide6.QtWidgets import (
 )
 
 from app.apis.jielong import (
+    build_local_media_files,
     build_submit_payload,
+    create_qr_login,
+    download_qrcode_image,
+    exchange_qr_login_token,
+    get_thread_id_by_url,
     load_form_bundle,
     parse_control_options,
+    poll_qr_login,
     submit_record,
 )
 from app.config.common import CONFIG_FILE
+from app.gui.components.no_wheel_combo import NoWheelComboBox
 from app.gui.components.toast import ToastManager
+from app.gui.dialogs.image_manager_dialog import ImageManagerDialog
+from app.gui.dialogs.photo_sign_dialog import PhotoSignDialog
 from app.utils.files import read_config, save_json_file
 
 
 TITLE = "接龙"
 FORM_TITLE = "接龙表单"
-FORM_SUBTITLE = "填写 Token 和 threadId"
 LOAD_BUTTON = "拉取表单"
 LOADING_BUTTON = "拉取中..."
 SUBMIT_BUTTON = "提交打卡"
 SUBMITTING_BUTTON = "提交中..."
-READY_TEXT = "准备就绪"
-SUMMARY_TITLE = "表单概览"
+IDLE_TEXT = "待拉取"
 FIELDS_TITLE = "接龙字段"
 FIELDS_PLACEHOLDER = "点击“拉取表单”后在这里填写内容。"
 EMPTY_FIELDS = "接口已返回，但没有可渲染字段。"
@@ -42,15 +54,43 @@ OTHER_PLACEHOLDER = "请补充说明"
 LOCATION_PLACEHOLDER = "位置说明（坐标取自配置）"
 LOCATION_HINT_TEMPLATE = "提交使用坐标：{longitude}, {latitude}"
 LOCATION_HINT_EMPTY = "未检测到经纬度，请先到设置页补齐。"
-MEDIA_UNSUPPORTED = "当前版本暂不支持图片上传；若该字段非必填，可留空继续提交。"
-LOAD_SUCCESS = "接龙表单加载成功"
-LOAD_FAILED = "接龙表单加载失败"
-LOAD_WORKING = "正在拉取接龙表单..."
-SUBMIT_SUCCESS = "接龙记录提交成功"
-SUBMIT_FAILED = "接龙记录提交失败"
-SUBMIT_WORKING = "正在提交接龙记录..."
-TOKEN_REQUIRED = "请先填写 Bearer Token"
-THREAD_REQUIRED = "请先填写 threadId"
+MEDIA_UNSUPPORTED = "图片将复用首页图片库，并在提交时自动上传。"
+MEDIA_PICK = "选择图片"
+MEDIA_MANAGE = "图片管理"
+MEDIA_CLEAR = "清空"
+MEDIA_EMPTY = "未选择图片"
+MEDIA_SELECTED = "已选择：{name}"
+LOAD_DONE_TEXT = "拉取完毕"
+LOAD_FAILED = "拉取失败"
+LOAD_WORKING = "正在拉取"
+SUBMIT_SUCCESS = "提交成功"
+SUBMIT_FAILED = "提交失败"
+SUBMIT_WORKING = "正在提交"
+SUBMIT_CONFIRM_TITLE = "确认提交"
+SUBMIT_CONFIRM_TEXT = "确认按当前内容提交打卡吗？"
+TOKEN_REQUIRED = "请先扫码登录获取 Token"
+THREAD_REQUIRED = "请先解析接龙分享链接或填写 threadId"
+SHARE_URL_REQUIRED = "请先粘贴接龙分享链接"
+PARSE_BUTTON = "解析"
+SHARE_URL_PLACEHOLDER = "粘贴接龙分享链接，例如 https://jielong.com/s/..."
+LOGIN_IDLE_TEXT = "未获取 Token"
+LOGIN_READY_TEXT = "选择登录方式"
+LOGIN_TOKEN_EXCHANGE = "\u6362\u53d6 Token \u4e2d"
+LOGIN_QR_BUTTON = "扫码登录"
+LOGIN_QR_BUTTON_LOADING = "扫码中..."
+LOGIN_QR_PREPARING = "生成二维码中"
+LOGIN_QR_READY_TEMPLATE = "等待扫码（{seconds:g}s）"
+LOGIN_QR_HINT = "点击“扫码登录”后会弹出完整二维码；扫码成功后会按默认 1 秒轮询并换取 Token。"
+LOGIN_QR_PLACEHOLDER = "二维码将在这里显示"
+LOGIN_QR_SCANNED = "扫码成功"
+LOGIN_QR_DIALOG_TITLE = "接龙扫码登录"
+LOGIN_QR_POLL_INTERVAL_SECONDS = 1.0
+LOGIN_SUCCESS = "登录成功"
+LOGIN_FAILED = "登录失败"
+LOGIN_STOPPED = "已停止登录"
+LOGIN_CERT_REQUIRED = "未检测到 mitm 证书，请先通过首页抓包功能安装证书后再试"
+LOGIN_PROXY_ERROR = "代理服务未就绪，请稍后重试"
+LOGIN_TIMEOUT = "等待登录回调超时"
 LOAD_FIRST = "请先拉取接龙表单"
 REQUIRED_BADGE = "必填"
 TYPE_LOCATION = "位置"
@@ -65,7 +105,6 @@ SUMMARY_DATE = "时间"
 SUMMARY_STATUS = "状态"
 SUMMARY_COUNT = "已接龙"
 COUNT_TEMPLATE = "{users} 人 / {count} 次"
-BOTTOM_TITLE = "提交"
 
 
 class JieLongLoadThread(QThread):
@@ -102,12 +141,122 @@ class JieLongSubmitThread(QThread):
             self.error_signal.emit(str(exc))
 
 
-class JieLongDialog(QDialog):
+class JieLongQrLoginThread(QThread):
+    success_signal = Signal(dict)
+    error_signal = Signal(str)
+    status_signal = Signal(str)
+    qr_ready_signal = Signal(dict)
+
+    def __init__(self, authorization: str = "", poll_interval_seconds: float = LOGIN_QR_POLL_INTERVAL_SECONDS):
+        super().__init__()
+        self.authorization = str(authorization or "").strip()
+        self.poll_interval_seconds = max(LOGIN_QR_POLL_INTERVAL_SECONDS, float(poll_interval_seconds or LOGIN_QR_POLL_INTERVAL_SECONDS))
+
+    def check_stop(self):
+        if self.isInterruptionRequested():
+            raise RuntimeError(LOGIN_STOPPED)
+
+    def _emit_status(self, text: str, last_text: str) -> str:
+        if text != last_text:
+            self.status_signal.emit(text)
+        return text
+
+    def run(self):
+        try:
+            self.check_stop()
+            last_status = ""
+            last_status = self._emit_status(LOGIN_QR_PREPARING, last_status)
+            qr_payload = create_qr_login()
+            image_bytes = download_qrcode_image(qr_payload["qrcode_url"])
+            self.qr_ready_signal.emit(
+                {
+                    "uuid": qr_payload["uuid"],
+                    "qrcode_url": qr_payload["qrcode_url"],
+                    "image_bytes": image_bytes,
+                }
+            )
+            last_status = self._emit_status(
+                LOGIN_QR_READY_TEMPLATE.format(seconds=self.poll_interval_seconds),
+                last_status,
+            )
+
+            deadline = time.time() + 180
+            while time.time() < deadline:
+                self.check_stop()
+                result = poll_qr_login(qr_payload["uuid"])
+                status = result.get("status")
+                message = str(result.get("message") or LOGIN_TIMEOUT)
+
+                if status == "confirmed":
+                    last_status = self._emit_status(LOGIN_TOKEN_EXCHANGE, last_status)
+                    login_result = exchange_qr_login_token(
+                        code=str(result.get("code") or ""),
+                    )
+                    self.success_signal.emit(login_result)
+                    return
+
+                if status == "scanned":
+                    last_status = self._emit_status(LOGIN_QR_SCANNED, last_status)
+                elif status == "waiting":
+                    last_status = self._emit_status(
+                        LOGIN_QR_READY_TEMPLATE.format(seconds=self.poll_interval_seconds),
+                        last_status,
+                    )
+                elif status in {"expired", "error"}:
+                    raise RuntimeError(message)
+
+                self.msleep(int(self.poll_interval_seconds * 1000))
+
+            raise RuntimeError(LOGIN_TIMEOUT)
+        except Exception as exc:
+            self.error_signal.emit(str(exc))
+
+
+class JieLongQrPopupDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.setWindowTitle(LOGIN_QR_DIALOG_TITLE)
+        self.setModal(False)
+        self.resize(392, 468)
+        self.setMinimumSize(372, 448)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(10)
+
+        self.hint_label = QLabel(LOGIN_QR_HINT)
+        self.hint_label.setObjectName("SectionHint")
+        self.hint_label.setWordWrap(True)
+        layout.addWidget(self.hint_label)
+
+        self.preview_label = QLabel(LOGIN_QR_PLACEHOLDER)
+        self.preview_label.setObjectName("MediaPreview")
+        self.preview_label.setAlignment(Qt.AlignCenter)
+        self.preview_label.setWordWrap(True)
+        self.preview_label.setMinimumSize(320, 320)
+        layout.addWidget(self.preview_label, 1)
+
+    def reset_preview(self, text: str = LOGIN_QR_PLACEHOLDER):
+        self.preview_label.setPixmap(QPixmap())
+        self.preview_label.setText(text)
+        self.preview_label.setAlignment(Qt.AlignCenter)
+
+    def set_preview_pixmap(self, pixmap: QPixmap):
+        self.preview_label.setPixmap(
+            pixmap.scaled(240, 240, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        )
+        self.preview_label.setText("")
+        self.preview_label.setAlignment(Qt.AlignCenter)
+
+
+class JieLongDialog(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("JieLongPage")
         self.setWindowTitle(TITLE)
-        self.resize(920, 700)
         self.setAttribute(Qt.WA_DeleteOnClose, False)
+        self._login_thread = None
+        self._login_mode = ""
         self._load_thread = None
         self._submit_thread = None
         self._current_bundle = None
@@ -116,15 +265,19 @@ class JieLongDialog(QDialog):
         self._field_widgets = {}
         self._field_relations = {}
         self._conditional_targets = set()
+        self._restoring_form_draft = False
+        self._last_auto_parsed_share_url = ""
         self._setup_style()
         self._setup_ui()
         self._load_saved_settings()
         self._sync_action_state()
+        self._set_status(IDLE_TEXT)
+        self._set_login_status(LOGIN_READY_TEXT)
 
     def _setup_style(self):
         self.setStyleSheet(
             """
-            QDialog {
+            QWidget#JieLongPage {
                 background: #0B1020;
                 color: #ECF1FF;
             }
@@ -138,55 +291,88 @@ class JieLongDialog(QDialog):
             #TopCard, #SummaryCard, #FieldCard, #PlaceholderCard, #BottomCard {
                 background: #111827;
                 border: 1px solid #1E2A46;
-                border-radius: 18px;
+                border-radius: 16px;
             }
             #TopTitle {
                 color: #F8FAFF;
-                font-size: 17pt;
+                font-size: 12.8pt;
                 font-weight: 800;
-            }
-            #TopSubTitle {
-                color: #99A7D0;
-                font-size: 9.5pt;
-                font-weight: 600;
             }
             #SectionTitle {
                 color: #EAF0FF;
-                font-size: 10.8pt;
+                font-size: 8.2pt;
                 font-weight: 700;
             }
             #SectionHint {
                 color: #7C8BB8;
-                font-size: 8.7pt;
+                font-size: 8.1pt;
                 font-weight: 600;
             }
             #MetaLabel {
                 color: #7F90BF;
-                font-size: 8.4pt;
+                font-size: 7.9pt;
                 font-weight: 600;
             }
             #MetaValue {
                 color: #F3F6FF;
-                font-size: 10pt;
+                font-size: 9.1pt;
                 font-weight: 700;
             }
-            #StatusLabel {
-                color: #8FA2D8;
-                font-size: 8.7pt;
+            #SummaryMetaLabel {
+                color: #7F90BF;
+                font-size: 6.3pt;
                 font-weight: 600;
+            }
+            #SummaryMetaValue {
+                color: #E9EEFF;
+                font-size: 6.9pt;
+                font-weight: 700;
+            }
+            #StatusChip {
+                color: #D7DCEA;
+                background: rgba(103, 112, 136, 0.16);
+                border: 1px solid rgba(126, 136, 162, 0.24);
+                border-radius: 10px;
+                padding: 3px 10px;
+                font-size: 7.4pt;
+                font-weight: 700;
+            }
+            QLabel#StatusChip[tone="ready"] {
+                color: #D7DCEA;
+                background: rgba(103, 112, 136, 0.16);
+                border-color: rgba(126, 136, 162, 0.24);
+            }
+            QLabel#StatusChip[tone="working"] {
+                color: #DDF2FF;
+                background: rgba(62, 146, 255, 0.18);
+                border-color: rgba(89, 168, 255, 0.34);
+            }
+            QLabel#StatusChip[tone="success"] {
+                color: #DFF8E8;
+                background: rgba(40, 167, 99, 0.18);
+                border-color: rgba(72, 194, 124, 0.34);
+            }
+            QLabel#StatusChip[tone="error"] {
+                color: #FFE0E0;
+                background: rgba(224, 72, 72, 0.18);
+                border-color: rgba(244, 104, 104, 0.34);
             }
             QLabel#InputLabel {
                 color: #B2C0E8;
-                font-size: 8.5pt;
+                font-size: 6.9pt;
                 font-weight: 700;
             }
             QLineEdit, QTextEdit, QComboBox {
                 background: #162033;
                 border: 1px solid #2A395B;
                 color: #F6F8FF;
-                border-radius: 12px;
-                padding: 11px 13px;
-                font-size: 9.2pt;
+                border-radius: 10px;
+                padding: 3px 8px;
+                font-size: 7pt;
+            }
+            QLineEdit, QComboBox {
+                min-height: 24px;
+                max-height: 24px;
             }
             QLineEdit:focus, QTextEdit:focus, QComboBox:focus {
                 border-color: #5A84FF;
@@ -209,9 +395,9 @@ class JieLongDialog(QDialog):
                 background: #18233A;
                 color: #E0E7FF;
                 border: 1px solid #304467;
-                border-radius: 12px;
-                padding: 10px 18px;
-                font-size: 9pt;
+                border-radius: 10px;
+                padding: 5px 8px;
+                font-size: 7.2pt;
                 font-weight: 700;
             }
             QPushButton:hover {
@@ -227,10 +413,38 @@ class JieLongDialog(QDialog):
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
                     stop:0 #4D86FF, stop:1 #7557FF);
                 border: none;
-                padding: 12px 22px;
+                padding: 6px 12px;
+            }
+            QPushButton#QrLoginBtn {
+                background: rgba(88, 109, 255, 0.18);
+                color: #EEF2FF;
+                border: 1px solid rgba(112, 132, 255, 0.42);
+                min-width: 84px;
+                min-height: 28px;
+                max-height: 28px;
+                padding: 0 10px;
+            }
+            QPushButton#QrLoginBtn:hover {
+                background: rgba(88, 109, 255, 0.28);
+                border-color: rgba(133, 151, 255, 0.58);
             }
             QPushButton#LoadBtn {
-                min-width: 132px;
+                background: rgba(88, 109, 255, 0.18);
+                color: #EEF2FF;
+                border: 1px solid rgba(112, 132, 255, 0.42);
+                min-width: 72px;
+                min-height: 24px;
+                max-height: 24px;
+                padding: 0 8px;
+            }
+            QPushButton#LoadBtn:hover {
+                background: rgba(88, 109, 255, 0.28);
+                border-color: rgba(133, 151, 255, 0.58);
+            }
+            QPushButton#LoadBtn:disabled {
+                background: rgba(54, 61, 88, 0.24);
+                color: #8D96B8;
+                border-color: rgba(84, 92, 126, 0.28);
             }
             QPushButton#PrimaryBtn:disabled {
                 background: #26314F;
@@ -242,7 +456,7 @@ class JieLongDialog(QDialog):
                 border: 1px solid rgba(106, 126, 255, 0.30);
                 border-radius: 9px;
                 padding: 1px 8px;
-                font-size: 7.4pt;
+                font-size: 6.6pt;
                 font-weight: 700;
             }
             #RequiredBadge {
@@ -251,32 +465,39 @@ class JieLongDialog(QDialog):
                 border: 1px solid rgba(233, 87, 63, 0.28);
                 border-radius: 9px;
                 padding: 1px 8px;
-                font-size: 7.2pt;
+                font-size: 6.5pt;
                 font-weight: 700;
             }
             #FieldName {
                 color: #F5F7FF;
-                font-size: 10.3pt;
+                font-size: 8.5pt;
                 font-weight: 800;
             }
             #FieldTip {
                 color: #8994BB;
-                font-size: 8.6pt;
+                font-size: 7.3pt;
                 font-weight: 600;
             }
             #HintText {
                 color: #91A2D0;
-                font-size: 8.4pt;
+                font-size: 7.2pt;
                 font-weight: 600;
+            }
+            #MediaPreview {
+                color: #97A5CC;
+                background: rgba(19, 28, 46, 0.72);
+                border: 1px dashed #31425F;
+                border-radius: 10px;
+                min-height: 88px;
             }
             #EmptyText {
                 color: #8D98BF;
-                font-size: 9.2pt;
+                font-size: 7.7pt;
                 font-weight: 600;
             }
             #BottomAccent {
                 color: #C9D4FF;
-                font-size: 9pt;
+                font-size: 7.5pt;
                 font-weight: 700;
             }
             """
@@ -284,104 +505,121 @@ class JieLongDialog(QDialog):
 
     def _setup_ui(self):
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(18, 18, 18, 18)
-        layout.setSpacing(12)
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(8)
 
         top_card = QFrame()
         top_card.setObjectName("TopCard")
         top_layout = QVBoxLayout(top_card)
-        top_layout.setContentsMargins(16, 16, 16, 16)
-        top_layout.setSpacing(10)
+        top_layout.setContentsMargins(8, 6, 8, 6)
+        top_layout.setSpacing(4)
 
         heading_row = QHBoxLayout()
-        heading_row.setSpacing(12)
+        heading_row.setSpacing(8)
 
         heading_box = QVBoxLayout()
-        heading_box.setSpacing(3)
+        heading_box.setSpacing(0)
         title = QLabel(FORM_TITLE)
         title.setObjectName("TopTitle")
         heading_box.addWidget(title)
-
-        subtitle = QLabel(FORM_SUBTITLE)
-        subtitle.setObjectName("TopSubTitle")
-        subtitle.setWordWrap(True)
-        heading_box.addWidget(subtitle)
         heading_row.addLayout(heading_box, 1)
         top_layout.addLayout(heading_row)
 
-        form_row = QHBoxLayout()
-        form_row.setSpacing(12)
-        form_row.setContentsMargins(0, 2, 0, 0)
+        login_heading = QHBoxLayout()
+        login_heading.setSpacing(6)
+        login_title = QLabel("Token 登录")
+        login_title.setObjectName("InputLabel")
+        login_heading.addWidget(login_title)
+        self.login_status_chip = QLabel(LOGIN_IDLE_TEXT)
+        self.login_status_chip.setObjectName("StatusChip")
+        login_heading.addWidget(self.login_status_chip, 0, Qt.AlignLeft | Qt.AlignVCenter)
+        login_heading.addStretch()
+        top_layout.addLayout(login_heading)
 
-        token_box = QVBoxLayout()
-        token_box.setSpacing(8)
-        token_label = QLabel("Bearer Token")
-        token_label.setObjectName("InputLabel")
-        token_box.addWidget(token_label)
+        self.login_hint_label = QLabel(LOGIN_QR_HINT)
+        self.login_hint_label.setObjectName("SectionHint")
+        self.login_hint_label.setWordWrap(True)
+        top_layout.addWidget(self.login_hint_label)
+
         self.token_input = QLineEdit()
         self.token_input.setPlaceholderText(TOKEN_REQUIRED)
         self.token_input.setClearButtonEnabled(True)
-        token_box.addWidget(self.token_input)
-        form_row.addLayout(token_box, 4)
+        self.token_input.setFixedHeight(24)
+        self.token_input.hide()
 
-        thread_box = QVBoxLayout()
-        thread_box.setSpacing(8)
+        share_label = QLabel("接龙分享链接")
+        share_label.setObjectName("InputLabel")
+        top_layout.addWidget(share_label)
+
+        share_row = QHBoxLayout()
+        share_row.setSpacing(6)
+        self.share_url_input = QLineEdit()
+        self.share_url_input.setPlaceholderText(SHARE_URL_PLACEHOLDER)
+        self.share_url_input.setClearButtonEnabled(True)
+        self.share_url_input.setFixedHeight(24)
+        self.share_url_input.textChanged.connect(self._on_share_url_changed)
+        share_row.addWidget(self.share_url_input, 1)
+        self.btn_parse_thread = QPushButton(PARSE_BUTTON)
+        self.btn_parse_thread.setObjectName("LoadBtn")
+        self.btn_parse_thread.setFixedSize(72, 24)
+        self.btn_parse_thread.clicked.connect(self._parse_share_url)
+        share_row.addWidget(self.btn_parse_thread)
+        top_layout.addLayout(share_row)
+
+        form_grid = QGridLayout()
+        form_grid.setContentsMargins(0, 0, 0, 0)
+        form_grid.setHorizontalSpacing(6)
+        form_grid.setVerticalSpacing(2)
+        form_grid.setColumnStretch(0, 4)
+        form_grid.setColumnStretch(1, 1)
+
         thread_label = QLabel("threadId")
         thread_label.setObjectName("InputLabel")
-        thread_box.addWidget(thread_label)
+        form_grid.addWidget(thread_label, 0, 0)
         self.thread_input = QLineEdit()
         self.thread_input.setPlaceholderText(THREAD_REQUIRED)
         self.thread_input.setClearButtonEnabled(True)
-        thread_box.addWidget(self.thread_input)
-        form_row.addLayout(thread_box, 2)
+        self.thread_input.setFixedHeight(24)
+        form_grid.addWidget(self.thread_input, 1, 0)
 
-        btn_box = QVBoxLayout()
-        btn_box.setSpacing(8)
-        btn_box.addStretch()
+        button_spacer = QWidget()
+        button_spacer.setFixedHeight(1)
+        form_grid.addWidget(button_spacer, 0, 1)
         self.btn_load = QPushButton(LOAD_BUTTON)
         self.btn_load.setObjectName("LoadBtn")
+        self.btn_load.setFixedSize(72, 24)
         self.btn_load.clicked.connect(self._start_load)
-        btn_box.addWidget(self.btn_load)
-        btn_box.addStretch()
-        form_row.addLayout(btn_box, 0)
+        form_grid.addWidget(self.btn_load, 1, 1, 1, 1, Qt.AlignBottom)
 
-        top_layout.addLayout(form_row)
-
-        self.status_label = QLabel(READY_TEXT)
-        self.status_label.setObjectName("StatusLabel")
-        top_layout.addWidget(self.status_label)
+        top_layout.addLayout(form_grid)
 
         layout.addWidget(top_card)
 
         self.summary_card = QFrame()
         self.summary_card.setObjectName("SummaryCard")
         summary_layout = QVBoxLayout(self.summary_card)
-        summary_layout.setContentsMargins(16, 14, 16, 14)
-        summary_layout.setSpacing(8)
-
-        summary_title = QLabel(SUMMARY_TITLE)
-        summary_title.setObjectName("SectionTitle")
-        summary_layout.addWidget(summary_title)
+        summary_layout.setContentsMargins(6, 4, 6, 4)
+        summary_layout.setSpacing(2)
 
         summary_grid = QHBoxLayout()
-        summary_grid.setSpacing(18)
+        summary_grid.setSpacing(6)
         self.summary_items = {}
-        for key, label_text in (
-            ("subject", SUMMARY_SUBJECT),
-            ("date", SUMMARY_DATE),
-            ("status", SUMMARY_STATUS),
-            ("count", SUMMARY_COUNT),
+        for key, label_text, stretch in (
+            ("subject", SUMMARY_SUBJECT, 2),
+            ("date", SUMMARY_DATE, 3),
+            ("status", SUMMARY_STATUS, 1),
+            ("count", SUMMARY_COUNT, 1),
         ):
             box = QVBoxLayout()
-            box.setSpacing(4)
+            box.setSpacing(2)
             label = QLabel(label_text)
-            label.setObjectName("MetaLabel")
+            label.setObjectName("SummaryMetaLabel")
             value = QLabel("-")
-            value.setObjectName("MetaValue")
-            value.setWordWrap(True)
+            value.setObjectName("SummaryMetaValue")
+            value.setWordWrap(key == "subject")
             box.addWidget(label)
             box.addWidget(value)
-            summary_grid.addLayout(box, 1)
+            summary_grid.addLayout(box, stretch)
             self.summary_items[key] = value
         summary_layout.addLayout(summary_grid)
         self.summary_card.hide()
@@ -396,13 +634,13 @@ class JieLongDialog(QDialog):
         content.setObjectName("ScrollContent")
         self.form_layout = QVBoxLayout(content)
         self.form_layout.setContentsMargins(0, 0, 0, 0)
-        self.form_layout.setSpacing(12)
+        self.form_layout.setSpacing(4)
 
         self.placeholder_card = QFrame()
         self.placeholder_card.setObjectName("PlaceholderCard")
         placeholder_layout = QVBoxLayout(self.placeholder_card)
-        placeholder_layout.setContentsMargins(20, 18, 20, 18)
-        placeholder_layout.setSpacing(8)
+        placeholder_layout.setContentsMargins(12, 10, 12, 10)
+        placeholder_layout.setSpacing(4)
         placeholder_title = QLabel(FIELDS_TITLE)
         placeholder_title.setObjectName("SectionTitle")
         placeholder_layout.addWidget(placeholder_title)
@@ -419,27 +657,31 @@ class JieLongDialog(QDialog):
         self.bottom_card = QFrame()
         self.bottom_card.setObjectName("BottomCard")
         bottom_layout = QHBoxLayout(self.bottom_card)
-        bottom_layout.setContentsMargins(16, 12, 16, 12)
-        bottom_layout.setSpacing(12)
+        bottom_layout.setContentsMargins(10, 8, 10, 8)
+        bottom_layout.setSpacing(6)
 
         bottom_info = QVBoxLayout()
-        bottom_info.setSpacing(2)
-        bottom_title = QLabel(BOTTOM_TITLE)
-        bottom_title.setObjectName("SectionTitle")
-        bottom_info.addWidget(bottom_title)
-
-        self.bottom_status_label = QLabel(READY_TEXT)
-        self.bottom_status_label.setObjectName("BottomAccent")
-        bottom_info.addWidget(self.bottom_status_label)
+        bottom_info.setSpacing(0)
+        self.status_chip = QLabel(IDLE_TEXT)
+        self.status_chip.setObjectName("StatusChip")
+        bottom_info.addWidget(self.status_chip, 0, Qt.AlignLeft | Qt.AlignVCenter)
         bottom_layout.addLayout(bottom_info, 1)
+
+        self.btn_qr_login = QPushButton(LOGIN_QR_BUTTON)
+        self.btn_qr_login.setObjectName("QrLoginBtn")
+        self.btn_qr_login.setFixedHeight(28)
+        self.btn_qr_login.setMinimumWidth(84)
+        self.btn_qr_login.clicked.connect(self._start_qr_login)
+        bottom_layout.addWidget(self.btn_qr_login, 0, Qt.AlignVCenter)
 
         self.btn_submit = QPushButton(SUBMIT_BUTTON)
         self.btn_submit.setObjectName("PrimaryBtn")
-        self.btn_submit.setMinimumWidth(170)
+        self.btn_submit.setMinimumWidth(112)
         self.btn_submit.clicked.connect(self._start_submit)
         bottom_layout.addWidget(self.btn_submit, 0, Qt.AlignRight | Qt.AlignVCenter)
 
         layout.addWidget(self.bottom_card)
+        self.qr_popup = JieLongQrPopupDialog(self)
 
     def _load_config(self) -> dict:
         try:
@@ -447,45 +689,235 @@ class JieLongDialog(QDialog):
         except Exception:
             return {}
 
+    def _load_config_for_update(self) -> dict | None:
+        if not os.path.exists(CONFIG_FILE):
+            return {}
+        try:
+            return read_config(CONFIG_FILE)
+        except Exception:
+            ToastManager.instance().show("配置文件读取失败，已停止自动写入，避免覆盖原配置", "error")
+            return None
+
+    def _update_config_file(self, updater) -> bool:
+        config = self._load_config_for_update()
+        if config is None:
+            return False
+        updater(config)
+        save_json_file(CONFIG_FILE, config)
+        return True
+
     def _load_saved_settings(self):
         config = self._load_config()
         jielong = ((config.get("settings") or {}).get("jielong") or {})
         self.token_input.setText(str(jielong.get("authorization") or ""))
         self.thread_input.setText(str(jielong.get("thread_id") or ""))
+        self.share_url_input.setText(str(jielong.get("share_url") or ""))
 
-    def _save_settings(self):
+    def _save_settings(self, login_meta: dict | None = None):
+        def updater(config: dict):
+            settings = config.setdefault("settings", {})
+            jielong = settings.setdefault("jielong", {})
+            jielong["authorization"] = self.token_input.text().strip()
+            jielong["thread_id"] = self.thread_input.text().strip()
+            jielong["share_url"] = self.share_url_input.text().strip()
+            if login_meta:
+                for key in ("OpenId", "SId", "Expire", "TermsAgreed", "IsNew"):
+                    if key in login_meta:
+                        jielong[key[0].lower() + key[1:]] = login_meta.get(key)
+        self._update_config_file(updater)
+
+    def _current_form_draft_key(self) -> str:
+        thread_id = ""
+        if isinstance(self._current_bundle, dict):
+            thread = self._current_bundle.get("thread") or {}
+            edit_detail = self._current_bundle.get("edit_detail") or {}
+            thread_id = str(thread.get("ThreadId") or edit_detail.get("ThreadId") or "").strip()
+        if not thread_id:
+            thread_id = self.thread_input.text().strip()
+        return thread_id
+
+    def _load_form_draft_answers(self) -> dict:
         config = self._load_config() or {}
-        settings = config.setdefault("settings", {})
-        jielong = settings.setdefault("jielong", {})
-        jielong["authorization"] = self.token_input.text().strip()
-        jielong["thread_id"] = self.thread_input.text().strip()
-        save_json_file(CONFIG_FILE, config)
+        jielong = ((config.get("settings") or {}).get("jielong") or {})
+        drafts = jielong.get("form_drafts") or {}
+        thread_key = self._current_form_draft_key()
+        draft = drafts.get(thread_key) or {}
+        answers = draft.get("answers") or {}
+        return deepcopy(answers) if isinstance(answers, dict) else {}
 
-    def _load_location_config(self):
-        config = self._load_config()
-        return ((config.get("input") or {}).get("location") or {})
+    def _collect_field_answers(self, *, visible_only: bool) -> dict:
+        answers = {}
+        fields = (self._current_bundle or {}).get("fields") or []
+        for field in fields:
+            field_id = str(field.get("Id"))
+            info = self._field_widgets.get(field_id)
+            if not info:
+                continue
+            if visible_only and int(field.get("Id") or 0) != 0 and info["card"].isHidden():
+                continue
+
+            kind = info["kind"]
+            if kind == "select":
+                option = info["widget"].currentData()
+                answers[field_id] = {
+                    "option_text": str((option or {}).get("Text") or info["widget"].currentText() or "").strip(),
+                    "option_value": str((option or {}).get("Value") or "").strip(),
+                    "other_value": info["other_widget"].text().strip(),
+                }
+            elif kind == "textarea":
+                answers[field_id] = {"value": info["widget"].toPlainText().strip()}
+            elif kind == "location":
+                answers[field_id] = {
+                    "value": info["widget"].text().strip(),
+                    "longitude": info["longitude_widget"].text().strip(),
+                    "latitude": info["latitude_widget"].text().strip(),
+                }
+            elif kind == "text":
+                answers[field_id] = {"value": info["widget"].text().strip()}
+            elif kind == "media":
+                answers[field_id] = {"files": deepcopy(info.get("files") or [])}
+        return answers
+
+    def _save_form_draft(self):
+        if self._restoring_form_draft or not self._current_bundle:
+            return
+        thread_key = self._current_form_draft_key()
+        if not thread_key:
+            return
+        answers = self._collect_field_answers(visible_only=False)
+        def updater(config: dict):
+            settings = config.setdefault("settings", {})
+            jielong = settings.setdefault("jielong", {})
+            drafts = jielong.setdefault("form_drafts", {})
+            drafts[thread_key] = {"answers": answers}
+        self._update_config_file(updater)
+
+    def _bind_form_draft_persistence(self, info: dict):
+        kind = info.get("kind")
+        if kind == "select":
+            info["widget"].currentIndexChanged.connect(lambda *_: self._save_form_draft())
+            info["other_widget"].textChanged.connect(lambda *_: self._save_form_draft())
+            return
+        if kind == "textarea":
+            info["widget"].textChanged.connect(self._save_form_draft)
+            return
+        if kind == "location":
+            info["widget"].textChanged.connect(lambda *_: self._save_form_draft())
+            info["longitude_widget"].textChanged.connect(lambda *_: self._save_form_draft())
+            info["latitude_widget"].textChanged.connect(lambda *_: self._save_form_draft())
+            return
+        if kind == "text":
+            info["widget"].textChanged.connect(lambda *_: self._save_form_draft())
+
+    def _apply_form_draft_answers(self):
+        answers = self._load_form_draft_answers()
+        if not answers:
+            return
+        self._restoring_form_draft = True
+        try:
+            for field_id, info in self._field_widgets.items():
+                answer = answers.get(field_id) or {}
+                kind = info.get("kind")
+                if kind == "select":
+                    target_value = str(answer.get("option_value") or "").strip()
+                    target_text = str(answer.get("option_text") or "").strip()
+                    matched_index = 0
+                    for index in range(1, info["widget"].count()):
+                        option = info["widget"].itemData(index) or {}
+                        option_value = str(option.get("Value") or "").strip()
+                        option_text = str(option.get("Text") or info["widget"].itemText(index) or "").strip()
+                        if (target_value and option_value == target_value) or (target_text and option_text == target_text):
+                            matched_index = index
+                            break
+                    info["widget"].setCurrentIndex(matched_index)
+                    info["other_widget"].setText(str(answer.get("other_value") or ""))
+                elif kind == "textarea":
+                    info["widget"].setPlainText(str(answer.get("value") or ""))
+                elif kind == "location":
+                    info["widget"].setText(str(answer.get("value") or ""))
+                    info["longitude_widget"].setText(str(answer.get("longitude") or ""))
+                    info["latitude_widget"].setText(str(answer.get("latitude") or ""))
+                elif kind == "text":
+                    info["widget"].setText(str(answer.get("value") or ""))
+                elif kind == "media":
+                    info["files"] = deepcopy(answer.get("files") or [])
+                    self._refresh_media_widget(info)
+        finally:
+            self._restoring_form_draft = False
+        self._last_auto_parsed_share_url = ""
+        self._refresh_visibility()
 
     def _format_location_hint(self) -> str:
-        location = self._load_location_config()
-        longitude = str(location.get("longitude") or "").strip()
-        latitude = str(location.get("latitude") or "").strip()
-        if longitude and latitude:
-            return LOCATION_HINT_TEMPLATE.format(longitude=longitude, latitude=latitude)
         return LOCATION_HINT_EMPTY
 
     def _sync_action_state(self):
         busy = self._is_busy()
         has_bundle = bool(self._current_bundle)
-        self.token_input.setEnabled(not busy)
+        logging_in = self._is_logging_in()
+        login_blocked = self._is_loading() or self._is_submitting()
+        self.share_url_input.setEnabled(not busy)
         self.thread_input.setEnabled(not busy)
+        self.btn_parse_thread.setEnabled(not busy)
         self.btn_load.setEnabled(not busy)
         self.btn_submit.setEnabled(has_bundle and not busy)
+        self.btn_qr_login.setEnabled(not login_blocked)
         self.btn_load.setText(LOADING_BUTTON if self._is_loading() else LOAD_BUTTON)
         self.btn_submit.setText(SUBMITTING_BUTTON if self._is_submitting() else SUBMIT_BUTTON)
+        self.btn_qr_login.setText(
+            LOGIN_QR_BUTTON_LOADING if logging_in and self._login_mode == "qr" else LOGIN_QR_BUTTON
+        )
 
     def _set_status(self, text: str):
-        self.status_label.setText(text)
-        self.bottom_status_label.setText(text)
+        self._set_chip_text(self.status_chip, text)
+
+    def _set_login_status(self, text: str):
+        self._set_chip_text(self.login_status_chip, text)
+
+    def _set_chip_text(self, chip: QLabel, text: str):
+        chip.setText(text)
+        chip.setProperty("tone", self._status_tone_for_text(text))
+        self.style().unpolish(chip)
+        self.style().polish(chip)
+        chip.update()
+
+    @staticmethod
+    def _status_tone_for_text(text: str) -> str:
+        if text in {LOAD_FAILED, SUBMIT_FAILED, LOGIN_FAILED}:
+            return "error"
+        if text in {LOAD_DONE_TEXT, SUBMIT_SUCCESS, LOGIN_SUCCESS}:
+            return "success"
+        if text in {
+            LOAD_WORKING,
+            SUBMIT_WORKING,
+            LOGIN_TOKEN_EXCHANGE,
+            LOGIN_QR_PREPARING,
+            LOGIN_QR_SCANNED,
+        } or text.startswith("二维码已就绪"):
+            return "working"
+        return "ready"
+
+    @staticmethod
+    def _looks_like_invalid_token_error(message: str) -> bool:
+        text = str(message or "").strip()
+        lower = text.lower()
+        return (
+            "token" in lower
+            or "authorization" in lower
+            or "bearer" in lower
+            or "\u6388\u6743\u9a8c\u8bc1\u5931\u8d25" in text
+            or "\u8bf7\u5148\u767b\u5f55" in text
+            or "\u672a\u767b\u5f55" in text
+            or "\u767b\u5f55" in text
+        )
+
+    def _clear_token_if_invalid(self, message: str) -> None:
+        if not self._looks_like_invalid_token_error(message):
+            return
+        if not self.token_input.text().strip():
+            return
+        self.token_input.clear()
+        self._save_settings()
+        ToastManager.instance().show("\u68c0\u6d4b\u5230 Token \u5df2\u5931\u6548\uff0c\u5df2\u81ea\u52a8\u6e05\u7a7a\uff0c\u8bf7\u91cd\u65b0\u83b7\u53d6", "warning")
 
     def _is_loading(self) -> bool:
         return bool(self._load_thread and self._load_thread.isRunning())
@@ -493,8 +925,166 @@ class JieLongDialog(QDialog):
     def _is_submitting(self) -> bool:
         return bool(self._submit_thread and self._submit_thread.isRunning())
 
+    def _is_logging_in(self) -> bool:
+        return bool(self._login_thread and self._login_thread.isRunning())
+
     def _is_busy(self) -> bool:
-        return self._is_loading() or self._is_submitting()
+        return self._is_loading() or self._is_submitting() or self._is_logging_in()
+
+    def _on_share_url_changed(self, text: str):
+        share_url = str(text or "").strip()
+        if not share_url.startswith("http") or "/s/" not in share_url:
+            return
+        if share_url == self._last_auto_parsed_share_url:
+            return
+        self._last_auto_parsed_share_url = share_url
+        QTimer.singleShot(50, lambda: self._parse_share_url(show_toast=False))
+
+    def _parse_share_url(self, show_toast: bool = True):
+        share_url = self.share_url_input.text().strip()
+        if not share_url:
+            ToastManager.instance().show(SHARE_URL_REQUIRED, "warning")
+            return
+        try:
+            thread_id = get_thread_id_by_url(share_url)
+        except Exception as exc:
+            if show_toast:
+                ToastManager.instance().show(str(exc), "error")
+            return
+        self.thread_input.setText(thread_id)
+        self._save_settings()
+        if show_toast:
+            ToastManager.instance().show(f"已解析 threadId：{thread_id}", "success")
+
+    def _start_qr_login(self):
+        if self._is_loading() or self._is_submitting():
+            return
+        if self._is_logging_in() and self._login_mode == "qr":
+            self._present_qr_popup()
+            return
+        self._login_mode = "qr"
+        self._save_settings()
+        self._show_qr_popup(LOGIN_QR_PREPARING)
+        self._set_login_status(LOGIN_QR_PREPARING)
+        self._start_login_thread(
+            JieLongQrLoginThread(
+                authorization=self.token_input.text().strip(),
+                poll_interval_seconds=LOGIN_QR_POLL_INTERVAL_SECONDS,
+            )
+        )
+
+    def _start_login_thread(self, thread: QThread):
+        if self._login_thread and self._login_thread.isRunning():
+            self._login_thread.requestInterruption()
+            self._login_thread.wait(500)
+        self._login_thread = thread
+        self._login_thread.success_signal.connect(
+            lambda payload, source=thread: self._on_login_success(source, payload)
+        )
+        self._login_thread.error_signal.connect(
+            lambda message, source=thread: self._on_login_failed(source, message)
+        )
+        self._login_thread.status_signal.connect(
+            lambda text, source=thread: self._on_login_status(source, text)
+        )
+        if hasattr(self._login_thread, "qr_ready_signal"):
+            self._login_thread.qr_ready_signal.connect(
+                lambda payload, source=thread: self._on_qr_ready(source, payload)
+            )
+        self._login_thread.finished.connect(
+            lambda source=thread: self._on_login_thread_finished(source)
+        )
+        self._sync_action_state()
+        self._login_thread.start()
+
+    def _present_qr_popup(self):
+        self.qr_popup.show()
+        if os.environ.get("QT_QPA_PLATFORM") == "offscreen":
+            return
+        self.qr_popup.raise_()
+        self.qr_popup.activateWindow()
+
+    def _show_qr_popup(self, text: str = LOGIN_QR_PLACEHOLDER):
+        self.qr_popup.reset_preview(text)
+        self._present_qr_popup()
+
+    def _hide_qr_popup(self):
+        self.qr_popup.reset_preview()
+        self.qr_popup.hide()
+
+    def _stop_login(self, update_status: bool = True):
+        if not self._is_logging_in():
+            return False
+        self._login_thread.requestInterruption()
+        self._hide_qr_popup()
+        if update_status:
+            self._set_login_status(LOGIN_STOPPED)
+        self._sync_action_state()
+        return True
+
+    def _on_login_status(self, source_thread: QThread, text: str):
+        if source_thread is not self._login_thread:
+            return
+        self._set_login_status(text)
+
+    def _on_qr_ready(self, source_thread: QThread, payload: dict):
+        if source_thread is not self._login_thread or self._login_mode != "qr":
+            return
+        image_bytes = (payload or {}).get("image_bytes") or b""
+        pixmap = QPixmap()
+        if image_bytes and pixmap.loadFromData(image_bytes):
+            self.qr_popup.set_preview_pixmap(pixmap)
+            self._present_qr_popup()
+
+    @staticmethod
+    def _extract_login_token(payload: dict) -> str:
+        data = (payload or {}).get("Data") or {}
+        for candidate in (
+            data.get("Token"),
+            data.get("token"),
+            data.get("Authorization"),
+            data.get("authorization"),
+            (payload or {}).get("Token"),
+            (payload or {}).get("token"),
+        ):
+            token = str(candidate or "").strip()
+            if token:
+                return token
+        return ""
+
+    def _on_login_success(self, source_thread: QThread, payload: dict):
+        if source_thread is not self._login_thread:
+            return
+        data = (payload or {}).get("Data") or {}
+        token = self._extract_login_token(payload)
+        if token:
+            self.token_input.setText(token)
+        self._hide_qr_popup()
+        self._login_mode = ""
+        self._save_settings(login_meta=data)
+        self._set_login_status(LOGIN_SUCCESS)
+        self._sync_action_state()
+        ToastManager.instance().show("接龙登录成功，Token 已更新", "success")
+
+    def _on_login_failed(self, source_thread: QThread, message: str):
+        if source_thread is not self._login_thread:
+            return
+        text = str(message or LOGIN_FAILED).strip()
+        self._login_mode = ""
+        if text in {LOGIN_STOPPED, "已停止登录"}:
+            self._hide_qr_popup()
+            self._set_login_status(LOGIN_STOPPED)
+            self._sync_action_state()
+            ToastManager.instance().show("已停止接龙登录", "info")
+            return
+        self._set_login_status(LOGIN_FAILED)
+        self._sync_action_state()
+        ToastManager.instance().show(text, "error")
+
+    def _on_login_thread_finished(self, source_thread: QThread):
+        if source_thread is self._login_thread:
+            self._login_thread = None
+        self._sync_action_state()
 
     def _start_load(self):
         token = self.token_input.text().strip()
@@ -521,14 +1111,15 @@ class JieLongDialog(QDialog):
 
     def _on_loaded(self, payload: dict):
         self._current_bundle = payload
-        self._set_status(LOAD_SUCCESS)
+        self._set_status(LOAD_DONE_TEXT)
         self._render_summary(payload)
         self._render_fields(payload.get("fields") or [])
         self._sync_action_state()
-        ToastManager.instance().show(LOAD_SUCCESS, "success")
+        ToastManager.instance().show("接龙表单加载成功", "success")
 
     def _on_failed(self, message: str):
         self._current_bundle = None
+        self._clear_token_if_invalid(message)
         self._sync_action_state()
         self._set_status(LOAD_FAILED)
         ToastManager.instance().show(message, "error")
@@ -545,6 +1136,16 @@ class JieLongDialog(QDialog):
             return
 
         token = self.token_input.text().strip()
+        confirm = QMessageBox.question(
+            self,
+            SUBMIT_CONFIRM_TITLE,
+            SUBMIT_CONFIRM_TEXT,
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if confirm != QMessageBox.Yes:
+            self._set_status(LOAD_DONE_TEXT)
+            return
         self._submit_payload(token, payload)
 
     def _submit_payload(self, token: str, payload: dict):
@@ -568,6 +1169,7 @@ class JieLongDialog(QDialog):
         ToastManager.instance().show(description, "success")
 
     def _on_submit_failed(self, message: str):
+        self._clear_token_if_invalid(message)
         self._set_status(SUBMIT_FAILED)
         self._sync_action_state()
         if self._should_confirm_signature_mismatch(message):
@@ -601,7 +1203,7 @@ class JieLongDialog(QDialog):
         self._submit_payload(self._last_submit_token, payload)
 
     def _build_submit_payload(self) -> dict:
-        answers = {}
+        answers = self._collect_field_answers(visible_only=True)
         visible_fields = []
         fields = self._current_bundle.get("fields") or []
         for field in fields:
@@ -611,23 +1213,7 @@ class JieLongDialog(QDialog):
                 continue
             if int(field.get("Id") or 0) != 0 and info["card"].isHidden():
                 continue
-
             visible_fields.append(field)
-            kind = info["kind"]
-            if kind == "select":
-                option = info["widget"].currentData()
-                if option:
-                    answers[field_id] = {
-                        "option_text": str(option.get("Text") or info["widget"].currentText()),
-                        "option_value": str(option.get("Value") or info["widget"].currentText()),
-                        "other_value": info["other_widget"].text().strip() if option.get("IsOtherOption") else "",
-                    }
-            elif kind == "textarea":
-                answers[field_id] = {"value": info["widget"].toPlainText().strip()}
-            elif kind in {"text", "location"}:
-                answers[field_id] = {"value": info["widget"].text().strip()}
-            elif kind == "media":
-                answers[field_id] = {"files": info.get("files") or []}
 
         edit_detail = self._current_bundle.get("edit_detail") or {}
         signature = (answers.get("0") or {}).get("value") or str(
@@ -640,7 +1226,6 @@ class JieLongDialog(QDialog):
             answers,
             signature=signature,
             number=str(edit_detail.get("Number") or ""),
-            location=self._load_location_config(),
         )
 
     def _clear_form(self):
@@ -664,7 +1249,10 @@ class JieLongDialog(QDialog):
         thread = payload.get("thread") or {}
         check_in = payload.get("check_in") or {}
         status = (check_in.get("CheckInStatus") or {}).get("CheckInMsg") or thread.get("AttendButtonText") or "-"
-        date_range = f"{check_in.get('StartTime') or '-'} ~ {check_in.get('EndTime') or '-'}"
+        date_range = self._format_summary_date_range(
+            check_in.get("StartTime"),
+            check_in.get("EndTime"),
+        )
         count_value = COUNT_TEMPLATE.format(
             users=check_in.get("CheckInUserCount") or 0,
             count=check_in.get("CheckInCount") or 0,
@@ -676,6 +1264,67 @@ class JieLongDialog(QDialog):
         self.summary_items["count"].setText(count_value)
         self.summary_card.show()
 
+    @staticmethod
+    def _format_summary_date_range(start_time, end_time) -> str:
+        def _compact(value) -> str:
+            text = str(value or "").strip()
+            if not text or text == "-":
+                return "-"
+            parts = text.split()
+            if len(parts) >= 2 and len(parts[0]) == 10:
+                return f"{parts[0][5:]} {parts[1][:5]}"
+            return text
+
+        start = _compact(start_time)
+        end = _compact(end_time)
+        if start == "-" and end == "-":
+            return "-"
+        return f"{start} → {end}"
+
+    def _media_caption(self, info: dict) -> str:
+        files = info.get("files") or []
+        if not files:
+            return MEDIA_EMPTY
+        first = files[0]
+        name = str(first.get("Name") or first.get("FileName") or os.path.basename(str(first.get("LocalPath") or "")) or "图片")
+        return MEDIA_SELECTED.format(name=name)
+
+    def _refresh_media_widget(self, info: dict):
+        preview = info["preview"]
+        files = info.get("files") or []
+        local_path = ""
+        if files:
+            local_path = str(files[0].get("LocalPath") or "").strip()
+        preview.setText(self._media_caption(info))
+        preview.setPixmap(QPixmap())
+        if local_path and os.path.exists(local_path):
+            pixmap = QPixmap(local_path)
+            if not pixmap.isNull():
+                scaled = pixmap.scaled(220, 96, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                preview.setPixmap(scaled)
+                return
+        preview.setAlignment(Qt.AlignCenter)
+
+    def _select_media_image(self, info: dict):
+        dialog = PhotoSignDialog(self)
+        dialog.setWindowTitle("选择接龙图片")
+        if dialog.exec() != QDialog.Accepted or not dialog.selected_image:
+            return
+        info["files"] = build_local_media_files([dialog.selected_image])
+        self._refresh_media_widget(info)
+        self._save_form_draft()
+
+    def _open_media_manager(self, info: dict):
+        dialog = ImageManagerDialog(self)
+        dialog.exec()
+        self._refresh_media_widget(info)
+        self._save_form_draft()
+
+    def _clear_media_selection(self, info: dict):
+        info["files"] = []
+        self._refresh_media_widget(info)
+        self._save_form_draft()
+
     def _render_fields(self, fields: list):
         self._clear_form()
 
@@ -683,7 +1332,7 @@ class JieLongDialog(QDialog):
             self.placeholder_card = QFrame()
             self.placeholder_card.setObjectName("PlaceholderCard")
             placeholder_layout = QVBoxLayout(self.placeholder_card)
-            placeholder_layout.setContentsMargins(20, 18, 20, 18)
+            placeholder_layout.setContentsMargins(10, 8, 10, 8)
             empty_text = QLabel(EMPTY_FIELDS)
             empty_text.setObjectName("EmptyText")
             empty_text.setWordWrap(True)
@@ -703,11 +1352,11 @@ class JieLongDialog(QDialog):
             card = QFrame()
             card.setObjectName("FieldCard")
             card_layout = QVBoxLayout(card)
-            card_layout.setContentsMargins(14, 12, 14, 12)
-            card_layout.setSpacing(10)
+            card_layout.setContentsMargins(8, 6, 8, 6)
+            card_layout.setSpacing(4)
 
             head = QHBoxLayout()
-            head.setSpacing(8)
+            head.setSpacing(6)
 
             name = QLabel(str(field.get("Name") or UNKNOWN_FIELD))
             name.setObjectName("FieldName")
@@ -736,6 +1385,7 @@ class JieLongDialog(QDialog):
             card_layout.addWidget(widget_info["container"])
             widget_info["card"] = card
             widget_info["field"] = field
+            self._bind_form_draft_persistence(widget_info)
             self.form_layout.addWidget(card)
             self._field_widgets[str(field.get("Id"))] = widget_info
 
@@ -743,6 +1393,7 @@ class JieLongDialog(QDialog):
             if relation_id:
                 self._field_relations[relation_id] = widget_info
 
+        self._apply_form_draft_answers()
         self.form_layout.addStretch()
         self._refresh_visibility()
 
@@ -768,9 +1419,9 @@ class JieLongDialog(QDialog):
             container = QWidget()
             layout = QVBoxLayout(container)
             layout.setContentsMargins(0, 0, 0, 0)
-            layout.setSpacing(8)
+            layout.setSpacing(3)
 
-            combo = QComboBox()
+            combo = NoWheelComboBox()
             combo.addItem(CHOOSE_TEXT, None)
             for option in options:
                 combo.addItem(str(option.get("Text") or ""), option)
@@ -810,40 +1461,97 @@ class JieLongDialog(QDialog):
             container = QWidget()
             layout = QVBoxLayout(container)
             layout.setContentsMargins(0, 0, 0, 0)
-            layout.setSpacing(8)
+            layout.setSpacing(3)
 
-            unsupported = QLabel(MEDIA_UNSUPPORTED)
-            unsupported.setObjectName("HintText")
-            unsupported.setWordWrap(True)
-            layout.addWidget(unsupported)
-            return {
+            preview = QLabel(MEDIA_EMPTY)
+            preview.setObjectName("MediaPreview")
+            preview.setAlignment(Qt.AlignCenter)
+            preview.setWordWrap(True)
+            layout.addWidget(preview)
+
+            actions = QHBoxLayout()
+            actions.setContentsMargins(0, 0, 0, 0)
+            actions.setSpacing(4)
+            pick_btn = QPushButton(MEDIA_PICK)
+            manage_btn = QPushButton(MEDIA_MANAGE)
+            clear_btn = QPushButton(MEDIA_CLEAR)
+            actions.addWidget(pick_btn)
+            actions.addWidget(manage_btn)
+            actions.addWidget(clear_btn)
+            actions.addStretch()
+            layout.addLayout(actions)
+
+            hint = QLabel(MEDIA_UNSUPPORTED)
+            hint.setObjectName("HintText")
+            hint.setWordWrap(True)
+            layout.addWidget(hint)
+
+            info = {
                 "kind": "media",
                 "container": container,
-                "widget": unsupported,
-                "files": [],
+                "widget": preview,
+                "preview": preview,
+                "files": list(field.get("InitialFiles") or []),
             }
+            pick_btn.clicked.connect(lambda: self._select_media_image(info))
+            manage_btn.clicked.connect(lambda: self._open_media_manager(info))
+            clear_btn.clicked.connect(lambda: self._clear_media_selection(info))
+            self._refresh_media_widget(info)
+            return info
 
         if field.get("IsTextarea"):
             editor = QTextEdit()
             editor.setPlaceholderText(placeholder)
             editor.setPlainText(initial_value)
-            editor.setFixedHeight(max(78, min(int(field.get("Rows") or 3) * 24 + 18, 160)))
+            editor.setFixedHeight(max(48, min(int(field.get("Rows") or 3) * 16 + 8, 92)))
             return {"kind": "textarea", "container": editor, "widget": editor}
 
         if field_type == 16:
             container = QWidget()
             layout = QVBoxLayout(container)
             layout.setContentsMargins(0, 0, 0, 0)
-            layout.setSpacing(8)
+            layout.setSpacing(3)
+
+            edit_label = QLabel("地址说明（可编辑）")
+            edit_label.setObjectName("InputLabel")
+            layout.addWidget(edit_label)
+
             line_edit = QLineEdit()
             line_edit.setPlaceholderText(placeholder or LOCATION_PLACEHOLDER)
+            line_edit.setClearButtonEnabled(True)
+            line_edit.setToolTip("这里填写会作为提交请求里的 Texts")
             line_edit.setText(initial_value)
             layout.addWidget(line_edit)
+
+            coord_row = QHBoxLayout()
+            coord_row.setContentsMargins(0, 0, 0, 0)
+            coord_row.setSpacing(6)
+
+            longitude_input = QLineEdit()
+            longitude_input.setPlaceholderText("经度，例如 119.20336")
+            longitude_input.setClearButtonEnabled(True)
+            coord_row.addWidget(longitude_input)
+
+            latitude_input = QLineEdit()
+            latitude_input.setPlaceholderText("纬度，例如 36.73202")
+            latitude_input.setClearButtonEnabled(True)
+            coord_row.addWidget(latitude_input)
+
+            layout.addLayout(coord_row)
+
             hint = QLabel(self._format_location_hint())
             hint.setObjectName("HintText")
             hint.setWordWrap(True)
             layout.addWidget(hint)
-            return {"kind": "location", "container": container, "widget": line_edit, "hint": hint}
+            return {
+                "kind": "location",
+                "container": container,
+                "widget": line_edit,
+                "hint": hint,
+                "edit_label": edit_label,
+                "longitude_widget": longitude_input,
+                "latitude_widget": latitude_input,
+            }
 
         line_edit = QLineEdit()
         line_edit.setPlaceholderText(placeholder)
@@ -855,6 +1563,7 @@ class JieLongDialog(QDialog):
         is_other = bool(option and option.get("IsOtherOption"))
         info["other_widget"].setVisible(is_other)
         self._refresh_visibility()
+        self._save_form_draft()
 
     def _refresh_visibility(self):
         active_relations = set()
@@ -878,10 +1587,15 @@ class JieLongDialog(QDialog):
             info["card"].setVisible(should_show)
 
     def closeEvent(self, event):
+        if self._login_thread and self._login_thread.isRunning():
+            self._login_thread.requestInterruption()
+            self._login_thread.wait(1000)
         if self._load_thread and self._load_thread.isRunning():
             self._load_thread.requestInterruption()
             self._load_thread.wait(1000)
         if self._submit_thread and self._submit_thread.isRunning():
             self._submit_thread.requestInterruption()
             self._submit_thread.wait(1000)
+        self._hide_qr_popup()
+        self.qr_popup.close()
         event.accept()

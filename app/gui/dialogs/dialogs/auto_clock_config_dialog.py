@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from app.gui.components.no_wheel_combo import NoWheelComboBox
 from app.gui.components.toast import ToastManager
 from app.utils.files import read_config, save_json_file
 from app.workers.pushplus_worker import PushplusWorker
@@ -70,7 +71,7 @@ class NotificationChannelDialog(QDialog):
 
         type_label = QLabel("通知方式")
         type_label.setObjectName("FieldLabel")
-        self.type_combo = QComboBox()
+        self.type_combo = NoWheelComboBox()
         for label, value in self.channel_options:
             self.type_combo.addItem(label, value)
         grid.addWidget(type_label, 0, 0)
@@ -186,7 +187,7 @@ class TaskItemDialog(QDialog):
 
         mode_label = QLabel("打卡模式")
         mode_label.setObjectName("FieldLabel")
-        self.mode_combo = QComboBox()
+        self.mode_combo = NoWheelComboBox()
         for label, value in self.mode_options:
             self.mode_combo.addItem(label, value)
         grid.addWidget(mode_label, 1, 0)

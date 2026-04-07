@@ -12,7 +12,7 @@ from PySide6.QtCore import Qt, QUrl, QTimer
 from PySide6.QtGui import QDesktopServices, QAction, QIcon
 from PySide6.QtWidgets import QMainWindow, QWidget, QHBoxLayout, QFrame, QVBoxLayout, QLabel, QGridLayout, QPushButton, \
     QButtonGroup, QRadioButton, QProgressBar, QSizePolicy, QMessageBox, QApplication, QTextEdit, QDialog, QFileDialog, \
-    QMenu, QSystemTrayIcon, QStyle
+    QMenu, QSystemTrayIcon, QStyle, QStackedWidget
 
 from app.config.common import QQ_GROUP, PROJECT_VERSION, CONFIG_FILE, MITM_PROXY, PROJECT_NAME, PROJECT_GITHUB, \
     PACKET_LOG_FILE
@@ -57,7 +57,7 @@ class ModernWindow(QMainWindow):
         self.auto_clock_timer.timeout.connect(self._on_auto_clock_tick)
         self.btn_get_code_original_style = None  # 保存按钮原始样式
         self.weekly_journal_dialog = None  # 周记对话框实例
-        self.jielong_dialog = None
+        self.jielong_page = None
         self._pending_auto_clock_opt = None  # 定时打卡等待获取code后重试的任务
         self._force_exit = False
         self._is_exiting = False
@@ -118,7 +118,7 @@ class ModernWindow(QMainWindow):
 
         left_rail = QFrame()
         left_rail.setObjectName("LeftRail")
-        left_rail.setFixedWidth(56)
+        left_rail.setFixedWidth(52)
         rail_layout = QVBoxLayout(left_rail)
         rail_layout.setContentsMargins(0, 0, 0, 0)
         rail_layout.setSpacing(10)
@@ -128,29 +128,38 @@ class ModernWindow(QMainWindow):
         self.btn_platform_xyb = QPushButton("校")
         self.btn_platform_xyb.setObjectName("RailNavCurrentBtn")
         self.btn_platform_xyb.setCursor(Qt.PointingHandCursor)
-        self.btn_platform_xyb.setFixedSize(40, 40)
-        self.btn_platform_xyb.setToolTip("当前平台：校友邦")
-        self.btn_platform_xyb.clicked.connect(
-            lambda: ToastManager.instance().show("当前平台：校友邦", "info")
-        )
+        self.btn_platform_xyb.setFixedSize(36, 36)
+        self.btn_platform_xyb.setToolTip("切换到校友邦签到页")
+        self.btn_platform_xyb.setCheckable(True)
+        self.btn_platform_xyb.clicked.connect(self.show_home_page)
         rail_layout.addWidget(self.btn_platform_xyb, 0, Qt.AlignTop | Qt.AlignHCenter)
 
         self.btn_nav_jielong = QPushButton("接龙")
         self.btn_nav_jielong.setObjectName("RailNavShortcutBtn")
         self.btn_nav_jielong.setCursor(Qt.PointingHandCursor)
-        self.btn_nav_jielong.setFixedSize(40, 40)
-        self.btn_nav_jielong.setToolTip("打开接龙表单")
+        self.btn_nav_jielong.setFixedSize(36, 36)
+        self.btn_nav_jielong.setToolTip("切换到接龙页")
+        self.btn_nav_jielong.setCheckable(True)
         self.btn_nav_jielong.clicked.connect(self.open_jielong_dialog)
         rail_layout.addWidget(self.btn_nav_jielong, 0, Qt.AlignTop | Qt.AlignHCenter)
+
+        self.nav_group = QButtonGroup(self)
+        self.nav_group.setExclusive(True)
+        self.nav_group.addButton(self.btn_platform_xyb)
+        self.nav_group.addButton(self.btn_nav_jielong)
 
         rail_layout.addStretch()
         left_layout.addWidget(left_rail, 0)
 
-        left_body = QWidget()
-        l_vbox = QVBoxLayout(left_body)
+        self.left_stack = QStackedWidget()
+        self.left_stack.setObjectName("LeftPageStack")
+        left_layout.addWidget(self.left_stack, 1)
+
+        home_page = QWidget()
+        self.home_page = home_page
+        l_vbox = QVBoxLayout(home_page)
         l_vbox.setContentsMargins(0, 0, 0, 0)
         l_vbox.setSpacing(2)
-        left_layout.addWidget(left_body, 1)
 
         title_row = QHBoxLayout()
         title_row.setSpacing(2)
@@ -356,6 +365,12 @@ class ModernWindow(QMainWindow):
 
         l_vbox.addLayout(btn_row2)
 
+        self.jielong_page = JieLongDialog(self)
+
+        self.left_stack.addWidget(home_page)
+        self.left_stack.addWidget(self.jielong_page)
+        self.show_home_page()
+
         # ------------------------- Right Panel -------------------------
         right = QFrame()
         right.setObjectName("RightPanel")
@@ -363,8 +378,8 @@ class ModernWindow(QMainWindow):
         r_vbox.setContentsMargins(0, 0, 0, 0)
         r_vbox.setSpacing(0)
         right.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
-        right.setMinimumWidth(520)
-        right.setMaximumWidth(520)
+        right.setMinimumWidth(460)
+        right.setMaximumWidth(460)
 
         # ------------------------- Header -------------------------
         head = QWidget()
@@ -670,11 +685,11 @@ class ModernWindow(QMainWindow):
             }
             #AppTitle {
                 font-family: "Segoe UI Semibold";
-                font-size: 20pt;
+                font-size: 18pt;
                 color: #F2F4FF;
             }
             #AppSubTitle {
-                font-size: 10.5pt;
+                font-size: 9.5pt;
                 color: #7D86A7;
                 font-weight: 600;
                 padding-bottom: 3px;
@@ -683,39 +698,44 @@ class ModernWindow(QMainWindow):
                 background: transparent;
                 border-right: 1px solid rgba(36, 42, 63, 0.95);
             }
+            #LeftPageStack {
+                background: transparent;
+                border: none;
+            }
             QPushButton#RailNavCurrentBtn,
             QPushButton#RailNavShortcutBtn {
-                min-width: 40px;
-                max-width: 40px;
-                min-height: 40px;
-                max-height: 40px;
-                border-radius: 12px;
+                min-width: 36px;
+                max-width: 36px;
+                min-height: 36px;
+                max-height: 36px;
+                background: rgba(15, 20, 33, 0.98);
+                color: #CFE6FF;
+                border: 1px solid rgba(59, 78, 122, 0.95);
+                border-radius: 11px;
                 padding: 0;
-                font-size: 9pt;
+                font-size: 8.4pt;
                 font-weight: 800;
                 text-align: center;
             }
-            QPushButton#RailNavCurrentBtn {
+            QPushButton#RailNavCurrentBtn:hover,
+            QPushButton#RailNavShortcutBtn:hover {
+                border-color: #63A3FF;
+                color: #FFFFFF;
+                background: rgba(69, 142, 255, 0.12);
+            }
+            QPushButton#RailNavCurrentBtn:checked,
+            QPushButton#RailNavShortcutBtn:checked {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
                     stop:0 rgba(90, 112, 255, 0.98), stop:1 rgba(54, 82, 196, 0.98));
                 color: #F6F8FF;
                 border: 1px solid rgba(130, 146, 255, 0.46);
             }
-            QPushButton#RailNavCurrentBtn:hover {
+            QPushButton#RailNavCurrentBtn:checked:hover,
+            QPushButton#RailNavShortcutBtn:checked:hover {
                 border-color: #A4B1FF;
                 color: #FFFFFF;
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
                     stop:0 rgba(104, 125, 255, 1.0), stop:1 rgba(66, 94, 210, 1.0));
-            }
-            QPushButton#RailNavShortcutBtn {
-                background: rgba(15, 20, 33, 0.98);
-                color: #CFE6FF;
-                border: 1px solid rgba(59, 78, 122, 0.95);
-            }
-            QPushButton#RailNavShortcutBtn:hover {
-                border-color: #63A3FF;
-                color: #FFFFFF;
-                background: rgba(69, 142, 255, 0.12);
             }
             #QQGroupBar {
                 background: #101420;
@@ -1018,15 +1038,19 @@ class ModernWindow(QMainWindow):
         QApplication.clipboard().setText(QQ_GROUP)
         ToastManager.instance().show(f"QQ群号 {QQ_GROUP} 已复制", "success")
 
-    def _show_platform_placeholder(self):
-        ToastManager.instance().show("当前平台：校友邦，后续会在这里切换其他小程序", "info")
+    def _switch_left_page(self, page_name: str):
+        if page_name == "jielong" and self.jielong_page is not None:
+            self.left_stack.setCurrentWidget(self.jielong_page)
+            self.btn_nav_jielong.setChecked(True)
+            return
+        self.left_stack.setCurrentWidget(self.home_page)
+        self.btn_platform_xyb.setChecked(True)
+
+    def show_home_page(self):
+        self._switch_left_page("home")
 
     def open_jielong_dialog(self):
-        if self.jielong_dialog is None:
-            self.jielong_dialog = JieLongDialog(self)
-        self.jielong_dialog.show()
-        self.jielong_dialog.raise_()
-        self.jielong_dialog.activateWindow()
+        self._switch_left_page("jielong")
 
     def open_image_manager(self):
         ImageManagerDialog(self).exec()

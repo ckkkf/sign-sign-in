@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
 )
 
 from app.config.common import API_URL
+from app.gui.components.no_wheel_combo import NoWheelComboBox
 from app.gui.components.toast import ToastManager
 from app.workers.http_worker import HttpWorker
 
@@ -73,7 +74,7 @@ class FeedbackDialog(QDialog):
         subtitle.setWordWrap(True)
         layout.addWidget(subtitle)
 
-        self.cb_type = QComboBox()
+        self.cb_type = NoWheelComboBox()
         self.cb_type.addItems(["功能建议", "Bug 反馈", "使用咨询", "其他问题"])
         layout.addWidget(QLabel("反馈类型"))
         layout.addWidget(self.cb_type)

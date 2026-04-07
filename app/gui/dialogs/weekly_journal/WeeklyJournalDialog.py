@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (QDialog, QVBoxLayout, QTextEdit, QPushButton, QHB
 
 from app.apis.xybsyw import handle_invalid_session, get_plan, login, load_blog_date, load_blog_year, submit_blog
 from app.config.common import CONFIG_FILE, PROJECT_NAME, SYSTEM_PROMPT
+from app.gui.components.no_wheel_combo import NoWheelComboBox
 from app.gui.components.toast import ToastManager
 from app.gui.dialogs.journal_auth_dialog import JournalAuthDialog
 from app.gui.dialogs.weekly_journal.AIGenerationThread import AIGenerationThread
@@ -351,20 +352,20 @@ class WeeklyJournalDialog(QDialog):
         self.role_input.setVisible(False)
 
         # 隐藏的配置选项（兼容旧代码）
-        self.year_combo = QComboBox()
+        self.year_combo = NoWheelComboBox()
         self.year_combo.setVisible(False)
         self.year_combo.currentIndexChanged.connect(self._on_year_changed)
         self.year_combo.activated.connect(self._stop_auto_finding)
         
-        self.month_combo = QComboBox()
+        self.month_combo = NoWheelComboBox()
         self.month_combo.setPlaceholderText("选择月份")
         self.month_combo.currentIndexChanged.connect(self._on_month_changed)
         self.month_combo.activated.connect(self._stop_auto_finding)
 
-        self.week_combo = QComboBox()
+        self.week_combo = NoWheelComboBox()
         self.week_combo.setVisible(False)
 
-        self.permission_combo = QComboBox()
+        self.permission_combo = NoWheelComboBox()
         self.permission_combo.setVisible(False)
         self.permission_combo.addItem("仅老师可见", 2)
         self.permission_combo.addItem("仅老师和同学可见", 0)

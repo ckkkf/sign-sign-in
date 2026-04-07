@@ -25,6 +25,10 @@ PACKET_LOG_FILE = os.path.normpath(
 )
 
 
+XYB_SOURCE = "xyb_code"
+JIELONG_SOURCE = "jielong_token"
+
+
 def append_packet_log(message: str):
     os.makedirs(os.path.dirname(PACKET_LOG_FILE), exist_ok=True)
     now = datetime.now().strftime("%H:%M:%S")
@@ -50,7 +54,7 @@ def format_pairs(items):
     parts = []
     for key, value in items:
         key_text = str(key or "")
-        if key_text.lower() in {"code", "openid", "unionid", "sessionid", "encryptvalue"}:
+        if key_text.lower() in {"code", "openid", "unionid", "sessionid", "encryptvalue", "authorization"}:
             value_text = mask_value(value)
         else:
             value_text = compact_text(value, 40)
@@ -68,8 +72,10 @@ def is_interesting_flow(flow: http.HTTPFlow):
     url = (flow.request.pretty_url or "").lower()
     return (
         "getopenid.action" in url
+        or "/api/user/token" in url
         or host.endswith("xybsyw.com")
         or host.endswith("servicewechat.com")
+        or host.endswith("jielong.com")
     )
 
 
@@ -131,8 +137,72 @@ def log_response_details(flow: http.HTTPFlow):
         append_packet_log(f"[MITM][RES][BODY] {snippet}")
 
 
+def write_payload(payload: dict):
+    os.makedirs(os.path.dirname(CODE_FILE), exist_ok=True)
+    with open(CODE_FILE, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False)
+
+
 class GetCode:
-    TARGET = "getOpenId.action"
+    XYB_TARGET = "getOpenId.action"
+    JIELONG_TARGET = "/api/User/Token"
+
+    def _capture_xyb_code(self, flow: http.HTTPFlow):
+        code = flow.request.urlencoded_form.get("code")
+        if not code:
+            append_packet_log(f"[MITM] ?? {flow.request.method} {flow.request.pretty_url}?????? code")
+            return
+
+        code_preview = mask_value(code)
+        append_packet_log(f"[MITM] ?? {flow.request.method} {flow.request.pretty_url} | code={code_preview}")
+
+        try:
+            write_payload({"source": XYB_SOURCE, "code": code})
+            append_packet_log(f"[MITM] code ?????: {CODE_FILE}")
+            print(f"[addon] ??? ???? code ?????: {CODE_FILE}")
+        except Exception as exc:
+            append_packet_log(f"[MITM] code ??????: {exc}")
+            print(f"[addon] ? code ??????: {exc}")
+
+        flow.kill()
+
+    def _capture_jielong_token_code(self, flow: http.HTTPFlow):
+        try:
+            body = json.loads(flow.request.get_text(strict=False) or "{}")
+        except json.JSONDecodeError:
+            append_packet_log(f"[MITM] ?? User/Token ??????? JSON: {compact_text(flow.request.get_text(strict=False), 120)}")
+            return
+
+        code = str(body.get("code") or "").strip()
+        if not code:
+            append_packet_log(f"[MITM] ???? User/Token?????? code")
+            return
+
+        payload = {
+            "source": JIELONG_SOURCE,
+            "code": code,
+            "qCode": str(body.get("qCode") or ""),
+            "authorization": str(flow.request.headers.get("authorization") or ""),
+            "request_payload": str(flow.request.headers.get("x-api-request-payload") or ""),
+            "request_referer": str(flow.request.headers.get("x-api-request-referer") or ""),
+            "referer": str(flow.request.headers.get("referer") or ""),
+            "user_agent": str(flow.request.headers.get("user-agent") or ""),
+            "platform": str(flow.request.headers.get("platform") or ""),
+        }
+        append_packet_log(
+            "[MITM] ???? User/Token | "
+            f"code={mask_value(code)} | authorization={mask_value(payload['authorization'])}"
+        )
+
+        try:
+            write_payload(payload)
+            append_packet_log(f"[MITM] ???? payload ?????: {CODE_FILE}")
+            print(f"[addon] ? ???????? code ?????: {CODE_FILE}")
+        except Exception as exc:
+            append_packet_log(f"[MITM] ???? payload ??????: {exc}")
+            print(f"[addon] ? ???? payload ??????: {exc}")
+
+        flow.kill()
 
     def request(self, flow: http.HTTPFlow):
         if not is_interesting_flow(flow):
@@ -140,28 +210,13 @@ class GetCode:
 
         log_request_details(flow)
 
-        if self.TARGET not in flow.request.pretty_url:
+        if self.XYB_TARGET in flow.request.pretty_url:
+            self._capture_xyb_code(flow)
             return
 
-        code = flow.request.urlencoded_form.get("code")
-        if not code:
-            append_packet_log(f"[MITM] 命中 {flow.request.method} {flow.request.pretty_url}，但未提取到 code")
+        if flow.request.method.upper() == "POST" and self.JIELONG_TARGET in flow.request.pretty_url:
+            self._capture_jielong_token_code(flow)
             return
-
-        code_preview = mask_value(code)
-        append_packet_log(f"[MITM] 拦截 {flow.request.method} {flow.request.pretty_url} | code={code_preview}")
-
-        try:
-            os.makedirs(os.path.dirname(CODE_FILE), exist_ok=True)
-            with open(CODE_FILE, "w", encoding="utf-8") as f:
-                json.dump({"code": code}, f, ensure_ascii=False)
-            append_packet_log(f"[MITM] code 已写入文件 {CODE_FILE}")
-            print(f"[addon] ⚔️成功拦截code并写入文件 {CODE_FILE}")
-        except Exception as exc:
-            append_packet_log(f"[MITM] code 写入文件失败: {exc}")
-            print(f"[addon] ❌ code 写入文件失败: {exc}")
-
-        flow.kill()
 
     def response(self, flow: http.HTTPFlow):
         if not is_interesting_flow(flow):

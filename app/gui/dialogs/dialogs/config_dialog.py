@@ -7,6 +7,7 @@ from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import QDialog, QVBoxLayout, QScrollArea, QWidget, QFormLayout, QHBoxLayout, QLabel, QPushButton, \
     QSpacerItem, QMessageBox, QLineEdit, QComboBox
 
+from app.gui.components.no_wheel_combo import NoWheelComboBox
 from app.gui.components.toast import ToastManager
 from app.utils.files import (
     build_user_agent,
@@ -197,7 +198,7 @@ class ConfigDialog(QDialog):
         self.add_row(form, "系统版本", "system_version", system_ver)
         self.add_tip(form, "提示：系统版本只填数字，例如 15（程序会自动拼成 Android 15）。")
 
-        platform_combo = QComboBox()
+        platform_combo = NoWheelComboBox()
         platform_combo.addItems(["android", "ios"])
         platform = str(dev.get('platform', 'android')).strip().lower()
         idx = platform_combo.findText(platform)
