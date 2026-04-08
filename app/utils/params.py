@@ -1,4 +1,4 @@
-﻿import hashlib
+import hashlib
 import random
 import re
 import time

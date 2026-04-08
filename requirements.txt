@@ -1,0 +1,10 @@
+django_qrcode==0.3
+gmssl==3.2.2
+mitmproxy==12.2.1
+playwright==1.58.0
+psutil==7.2.2
+pyside6==6.11.0
+pyside6_addons==6.11.0
+pyside6_essentials==6.11.0
+Requests==2.33.1
+urllib3==2.6.3
