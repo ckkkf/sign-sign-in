@@ -10,6 +10,7 @@ from PySide6.QtCore import QThread, Signal
 
 from app.apis.xybsyw import login, get_plan, regeo, photo_sign_in_or_out, simple_sign_in_or_out
 from app.config.common import CERT_FILE, MITM_PROXY, XYB_APP_ID
+from app.mitm.cert_state import remember_current_cert_installed, summarize_cert_state
 from app.utils.commands import get_system_proxy, set_proxy, check_port_listening, reset_proxy, check_cert, bash
 from app.utils.code_channel import CodeChannel
 from app.utils.files import read_config, check_img
@@ -204,11 +205,12 @@ class SignTaskThread(QThread):
 
     def do_cert(self):
         ### 检查是否安装证书
-        if check_cert():
+        cert_ok, cert_detail = summarize_cert_state()
+        if cert_ok:
             logging.info("CA证书状态正常")
             return
 
-        logging.warning("⚠️ 证书未安装")
+        logging.warning(f"⚠️ 证书状态异常: {cert_detail}")
 
         ### 下载证书
         self.download_cert(self.cert_file, MITM_PROXY)
@@ -255,6 +257,7 @@ class SignTaskThread(QThread):
                 stdout = bash(f'certutil -user -addstore Root "{file_name}"')
                 # 再次检测
                 if stdout and '命令成功完成' in stdout and check_cert():
+                    remember_current_cert_installed()
                     logging.info("安装成功")
                     break
 
@@ -367,11 +370,12 @@ class GetCodeAndSessionThread(QThread):
         return channel.wait_code(timeout_seconds=120, stop_check=self.check_stop, heartbeat=heartbeat)
 
     def do_cert(self):
-        if check_cert():
+        cert_ok, cert_detail = summarize_cert_state()
+        if cert_ok:
             logging.info("CA证书状态正常")
             return
 
-        logging.warning("⚠️ 证书未安装")
+        logging.warning(f"⚠️ 证书状态异常: {cert_detail}")
         self.download_cert(self.cert_file, MITM_PROXY)
         self.install_cert(self.cert_file)
         logging.info("🔰🔰🔰 证书安装完成，请稍等，后台将自动重启 mitmdump 🔰🔰🔰")
@@ -399,6 +403,7 @@ class GetCodeAndSessionThread(QThread):
             while True:
                 stdout = bash(f'certutil -user -addstore Root "{file_name}"')
                 if stdout and '命令成功完成' in stdout and check_cert():
+                    remember_current_cert_installed()
                     logging.info("安装成功")
                     break
                 logging.warning("⚠️请点击[确定]以同意安装ssl证书，否则将无法使用本程序！")

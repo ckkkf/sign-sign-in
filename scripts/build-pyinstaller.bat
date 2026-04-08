@@ -3,6 +3,15 @@ setlocal
 
 cd /d "%~dp0.."
 
-pyinstaller --clean --noconfirm main.spec
+set "PYTHON=.venv\Scripts\python.exe"
+if not exist "%PYTHON%" set "PYTHON=python"
 
-endlocal
+"%PYTHON%" -X utf8 scripts\build_pyinstaller.py %*
+set "EXIT_CODE=%ERRORLEVEL%"
+
+if not "%EXIT_CODE%"=="0" (
+    echo.
+    echo [build] 构建失败，exit code=%EXIT_CODE%
+)
+
+endlocal & exit /b %EXIT_CODE%

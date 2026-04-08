@@ -11,13 +11,13 @@ on:
         required: false
   push:
     tags:
-      - 'v*'
+      - "v*"
 
 permissions:
   contents: write
 
 jobs:
-  build-release:
+  build-windows:
     runs-on: windows-latest
 
     steps:
@@ -27,8 +27,8 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
-          cache: 'pip'
+          python-version: "3.13"
+          cache: "pip"
           cache-dependency-path: requirements.txt
 
       - name: Install dependencies
@@ -36,10 +36,67 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+          pip install pyinstaller
 
-      - name: Build with Nuitka
+      - name: Build Windows artifact with PyInstaller
         shell: cmd
-        run: scripts\build-nuitka.bat
+        run: scripts\build-pyinstaller.bat --local-only
+
+      - name: Prepare Windows artifact
+        shell: bash
+        run: |
+          mkdir -p release
+          cp dist/pyinstaller/windows/SignSignIn-dev.exe release/sign-sign-in-windows.exe
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-windows
+          path: release/sign-sign-in-windows.exe
+
+  build-macos:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: "pip"
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build macOS artifact with PyInstaller
+        run: python -X utf8 scripts/build_pyinstaller.py --local-only
+
+      - name: Prepare macOS artifact
+        run: |
+          mkdir -p release
+          ditto -c -k --sequesterRsrc --keepParent dist/pyinstaller/macos release/sign-sign-in-macos.zip
+
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-macos
+          path: release/sign-sign-in-macos.zip
+
+  publish-release:
+    needs:
+      - build-windows
+      - build-macos
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Resolve release metadata
         id: meta
@@ -58,27 +115,29 @@ jobs:
 
           release_name="${{ github.event.inputs.release_name }}"
           if [[ -z "$release_name" ]]; then
-            release_name="Sign sign In 校园邦签到工具 ${tag}"
+            release_name="Sign sign In Release ${tag}"
           fi
 
-          versioned_name="sign.sign.in.${tag}.exe"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "release_name=$release_name" >> "$GITHUB_OUTPUT"
-          echo "asset_name=$versioned_name" >> "$GITHUB_OUTPUT"
 
-      - name: Prepare release artifacts
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: release-windows
+          path: release
+
+      - name: Download macOS artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: release-macos
+          path: release
+
+      - name: Prepare release attachments
         shell: bash
         run: |
-          mkdir -p release
-          cp out/main.exe "release/${{ steps.meta.outputs.asset_name }}"
           cp README.md release/
           cp LICENSE release/
-
-      - name: Upload release build artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-${{ steps.meta.outputs.tag }}-windows
-          path: release/*
 
       - name: Create or update GitHub release
         uses: softprops/action-gh-release@v2
@@ -87,6 +146,7 @@ jobs:
           name: ${{ steps.meta.outputs.release_name }}
           generate_release_notes: true
           files: |
-            release/${{ steps.meta.outputs.asset_name }}
+            release/sign-sign-in-windows.exe
+            release/sign-sign-in-macos.zip
             release/README.md
             release/LICENSE

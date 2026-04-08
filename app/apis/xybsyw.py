@@ -8,6 +8,23 @@ from app.utils.files import get_img_file, clear_session_cache
 from app.utils.params import get_header_token, get_device_code
 
 
+def _normalize_address_text(value):
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value.strip()
+    if isinstance(value, (list, tuple, set)):
+        parts = [_normalize_address_text(item) for item in value]
+        return " ".join(part for part in parts if part).strip()
+    if isinstance(value, dict):
+        for key in ("formatted_address", "address", "name", "value"):
+            text = _normalize_address_text(value.get(key))
+            if text:
+                return text
+        return str(value).strip()
+    return str(value).strip()
+
+
 def check_session_validity(response_json):
     """
     检查响应是否表示会话已失效
@@ -47,8 +64,13 @@ def regeo(userAgent, location):
         logging.debug(f"📡 收到响应:{response} {response.text}")
         res = response.json()
         if 'regeocode' in res:
-            logging.info(f"📍 解析位置: {res['regeocode']['formatted_address']}")
-            return res['regeocode']
+            regeocode = dict(res['regeocode'] or {})
+            formatted_address = _normalize_address_text(regeocode.get('formatted_address'))
+            if not formatted_address:
+                formatted_address = f"{location['longitude']},{location['latitude']}"
+            regeocode['formatted_address'] = formatted_address
+            logging.info(f"📍 解析位置: {formatted_address}")
+            return regeocode
         else:
             raise RuntimeError(f"位置解析失败: {res}")
     except Exception as e:

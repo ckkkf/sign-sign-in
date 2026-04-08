@@ -1,0 +1,49 @@
+name: PyInstaller Cross Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      git_ref:
+        description: Git ref to build
+        required: true
+        default: master
+
+permissions:
+  contents: read
+
+jobs:
+  build-macos:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.git_ref }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: 'pip'
+          cache-dependency-path: requirements.txt
+
+      - name: Install runtime deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build macOS artifact
+        run: python -X utf8 scripts/build_pyinstaller.py --local-only
+
+      - name: Zip macOS artifact
+        run: |
+          mkdir -p release
+          ditto -c -k --sequesterRsrc --keepParent dist/pyinstaller/macos release/sign-sign-in-macos-${{ inputs.git_ref }}.zip
+
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pyinstaller-macos-${{ inputs.git_ref }}
+          path: release/*.zip

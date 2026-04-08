@@ -27,9 +27,9 @@ from app.gui.dialogs.photo_sign_dialog import PhotoSignDialog
 from app.gui.dialogs.sponsor_dialog import SponsorSubmitDialog
 from app.gui.dialogs.update_dialog import UpdateDialog
 from app.gui.dialogs.weekly_journal.WeeklyJournalDialog import WeeklyJournalDialog
+from app.mitm.cert_state import summarize_cert_state
 from app.mitm.service import MitmService
-from app.utils.commands import get_net_io, bash, get_network_type, get_local_ip, get_system_proxy, check_port_listening, \
-    check_cert
+from app.utils.commands import get_net_io, bash, get_network_type, get_local_ip, get_system_proxy, check_port_listening
 from app.utils.files import validate_config, read_config
 from app.utils.pushplus import notify_pushplus
 from app.workers.monitor_thread import MonitorThread
@@ -963,10 +963,8 @@ class ModernWindow(QMainWindow):
         else:
             self.lbls['mitm'].setText("⚙️ Mitm: <span style='color:#F4D03F'>未启动</span>")
 
-        if check_cert():
-            self.lbls['cert'].setText("🔒 证书: <span style='color:#58D68D'>正常</span>")
-        else:
-            self.lbls['cert'].setText("⚠️ 证书: <span style='color:#F4D03F'>异常</span>")
+        cert_ok, cert_detail = summarize_cert_state()
+        self._render_cert_status(cert_ok, cert_detail)
 
     def update_status(self, data):
         self.lbls['time'].setText(f"🕔 当前时间: <span style='color:#FFF'>{datetime.now().strftime('%H:%M:%S')}</span>")
@@ -995,13 +993,17 @@ class ModernWindow(QMainWindow):
             else "⚙️ Mitm: <span style='color:#F4D03F'>未启动</span>"
         )
 
-        self.lbls['cert'].setText(
-            "🔒 证书: <span style='color:#58D68D'>正常</span>" if data['cert']
-            else "⚠️ 证书: <span style='color:#F4D03F'>异常</span>"
-        )
+        self._render_cert_status(data['cert'], data.get('cert_detail', ''))
 
         # 更新session显示，确保清除过期session后状态栏能及时更新
         self._update_session_display()
+
+    def _render_cert_status(self, cert_ok: bool, cert_detail: str = ""):
+        detail_text = f"（{cert_detail}）" if cert_detail else ""
+        if cert_ok:
+            self.lbls['cert'].setText(f"🔒 证书: <span style='color:#58D68D'>正常{detail_text}</span>")
+        else:
+            self.lbls['cert'].setText(f"⚠️ 证书: <span style='color:#F4D03F'>异常{detail_text}</span>")
 
     def open_config(self):
         if not os.path.exists(CONFIG_FILE):

@@ -150,7 +150,7 @@ class GetCode:
     def _capture_xyb_code(self, flow: http.HTTPFlow):
         code = flow.request.urlencoded_form.get("code")
         if not code:
-            append_packet_log(f"[MITM] ?? {flow.request.method} {flow.request.pretty_url}?????? code")
+            append_packet_log(f"[MITM] 未在 {flow.request.method} {flow.request.pretty_url} 中捕获到 code")
             return
 
         code_preview = mask_value(code)
@@ -158,11 +158,11 @@ class GetCode:
 
         try:
             write_payload({"source": XYB_SOURCE, "code": code})
-            append_packet_log(f"[MITM] code ?????: {CODE_FILE}")
-            print(f"[addon] ??? ???? code ?????: {CODE_FILE}")
+            append_packet_log(f"[MITM] code 已写入: {CODE_FILE}")
+            print(f"[addon] 已保存抓包 code 文件: {CODE_FILE}")
         except Exception as exc:
-            append_packet_log(f"[MITM] code ??????: {exc}")
-            print(f"[addon] ? code ??????: {exc}")
+            append_packet_log(f"[MITM] code 写入失败: {exc}")
+            print(f"[addon] code 写入失败: {exc}")
 
         flow.kill()
 
@@ -170,12 +170,12 @@ class GetCode:
         try:
             body = json.loads(flow.request.get_text(strict=False) or "{}")
         except json.JSONDecodeError:
-            append_packet_log(f"[MITM] ?? User/Token ??????? JSON: {compact_text(flow.request.get_text(strict=False), 120)}")
+            append_packet_log(f"[MITM] 解析 User/Token 请求体 JSON 失败: {compact_text(flow.request.get_text(strict=False), 120)}")
             return
 
         code = str(body.get("code") or "").strip()
         if not code:
-            append_packet_log(f"[MITM] ???? User/Token?????? code")
+            append_packet_log(f"[MITM] 捕获 User/Token 时未找到 code")
             return
 
         payload = {
@@ -190,17 +190,17 @@ class GetCode:
             "platform": str(flow.request.headers.get("platform") or ""),
         }
         append_packet_log(
-            "[MITM] ???? User/Token | "
+            "[MITM] 捕获 User/Token | "
             f"code={mask_value(code)} | authorization={mask_value(payload['authorization'])}"
         )
 
         try:
             write_payload(payload)
-            append_packet_log(f"[MITM] ???? payload ?????: {CODE_FILE}")
-            print(f"[addon] ? ???????? code ?????: {CODE_FILE}")
+            append_packet_log(f"[MITM] 请求 payload 已写入: {CODE_FILE}")
+            print(f"[addon] 已保存 User/Token payload 文件: {CODE_FILE}")
         except Exception as exc:
-            append_packet_log(f"[MITM] ???? payload ??????: {exc}")
-            print(f"[addon] ? ???? payload ??????: {exc}")
+            append_packet_log(f"[MITM] 请求 payload 写入失败: {exc}")
+            print(f"[addon] 请求 payload 写入失败: {exc}")
 
         flow.kill()
 

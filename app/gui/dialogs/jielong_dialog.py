@@ -559,7 +559,7 @@ class JieLongDialog(QWidget):
         self.token_input.setFixedHeight(24)
         self.token_input.hide()
 
-        share_label = QLabel("??????")
+        share_label = QLabel("分享链接")
         share_label.setObjectName("InputLabel")
         top_layout.addWidget(share_label)
 

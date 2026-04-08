@@ -4,9 +4,10 @@ import time
 from PySide6.QtCore import QThread, Signal
 
 from app.config.common import MITM_PROXY
+from app.mitm.cert_state import summarize_cert_state
 from app.utils.commands import (
     get_net_io, get_network_type, get_local_ip, get_system_proxy,
-    check_port_listening, check_cert
+    check_port_listening
 )
 
 
@@ -67,6 +68,8 @@ class MonitorThread(QThread):
             last_io = cur_io
             last_time = now
 
+            cert_ok, cert_detail = summarize_cert_state()
+
             data = {
                 "net": get_network_type(),
                 "speed_d": speed_d,
@@ -74,7 +77,8 @@ class MonitorThread(QThread):
                 "ip": get_local_ip(),
                 "proxy": get_system_proxy(),
                 "mitm": check_port_listening(host, port),
-                "cert": check_cert(),
+                "cert": cert_ok,
+                "cert_detail": cert_detail,
             }
 
             self.data_signal.emit(data)

@@ -1,4 +1,5 @@
 import hashlib
+import json
 import random
 import re
 import time
@@ -15,6 +16,19 @@ from app.config.common import (
     XYB_SM2_PUBLIC_KEY,
 )
 from app.utils.common import rand_str
+
+
+def _normalize_header_token_value(value):
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, (list, tuple, dict, set)):
+        try:
+            return json.dumps(value, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+        except TypeError:
+            return str(value)
+    return str(value)
 
 
 def get_device_code(openId, device):
@@ -54,9 +68,10 @@ def get_header_token(e):
 
     # 遍历u字典，构建d字符串
     for c in u:
+        value_text = _normalize_header_token_value(u[c])
         # 如果字段值不包含特殊字符且不在排除字段中
-        if c not in XYB_EXCLUDED_KEYS and not special_char_regex.search(u[c]):
-            d += u[c]
+        if c not in XYB_EXCLUDED_KEYS and not special_char_regex.search(value_text):
+            d += value_text
 
     # 拼接最终的字符串
     d = f"{d}{l}{g}"
