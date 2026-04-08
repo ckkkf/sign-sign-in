@@ -51,9 +51,10 @@ FIELDS_PLACEHOLDER = "点击“拉取表单”后在这里填写内容。"
 EMPTY_FIELDS = "接口已返回，但没有可渲染字段。"
 CHOOSE_TEXT = "请选择"
 OTHER_PLACEHOLDER = "请补充说明"
-LOCATION_PLACEHOLDER = "位置说明（坐标取自配置）"
-LOCATION_HINT_TEMPLATE = "提交使用坐标：{longitude}, {latitude}"
-LOCATION_HINT_EMPTY = "未检测到经纬度，请先到设置页补齐。"
+LOCATION_AREA_PLACEHOLDER = "填写市区"
+LOCATION_PLACE_PLACEHOLDER = "填写地点"
+LOCATION_HINT_TEXT = "请分别填写市区和地点，系统会自动用“•”拼接；下方经纬度需填写有效数字。"
+LOCATION_VALIDATION_ERROR = "请分别填写有效的市区、地点和经纬度。"
 MEDIA_UNSUPPORTED = "图片将复用首页图片库，并在提交时自动上传。"
 MEDIA_PICK = "选择图片"
 MEDIA_MANAGE = "图片管理"
@@ -68,13 +69,14 @@ SUBMIT_FAILED = "提交失败"
 SUBMIT_WORKING = "正在提交"
 SUBMIT_CONFIRM_TITLE = "确认提交"
 SUBMIT_CONFIRM_TEXT = "确认按当前内容提交打卡吗？"
-TOKEN_REQUIRED = "请先扫码登录获取 Token"
-THREAD_REQUIRED = "请先解析接龙分享链接或填写 threadId"
-SHARE_URL_REQUIRED = "请先粘贴接龙分享链接"
-PARSE_BUTTON = "解析"
-SHARE_URL_PLACEHOLDER = "粘贴接龙分享链接，例如 https://jielong.com/s/..."
+TOKEN_REQUIRED = "\u8bf7\u5148\u626b\u7801\u767b\u5f55\u83b7\u53d6 Token"
+THREAD_REQUIRED = "\u8bf7\u5148\u89e3\u6790\u63a5\u9f99\u5206\u4eab\u94fe\u63a5\u6216\u586b\u5199 threadId"
+SHARE_URL_REQUIRED = "\u8bf7\u5148\u7c98\u8d34\u63a5\u9f99\u5206\u4eab\u94fe\u63a5"
+PARSE_BUTTON = "??"
+SHARE_URL_PLACEHOLDER = "\u7c98\u8d34\u63a5\u9f99\u5206\u4eab\u94fe\u63a5\uff0c\u4f8b\u5982 https://jielong.com/s/..."
+PASTE_BUTTON = "\u89e3\u6790"
 LOGIN_IDLE_TEXT = "未获取 Token"
-LOGIN_READY_TEXT = "选择登录方式"
+LOGIN_READY_TEXT = ""
 LOGIN_TOKEN_EXCHANGE = "\u6362\u53d6 Token \u4e2d"
 LOGIN_QR_BUTTON = "扫码登录"
 LOGIN_QR_BUTTON_LOADING = "扫码中..."
@@ -266,7 +268,6 @@ class JieLongDialog(QWidget):
         self._field_relations = {}
         self._conditional_targets = set()
         self._restoring_form_draft = False
-        self._last_auto_parsed_share_url = ""
         self._setup_style()
         self._setup_ui()
         self._load_saved_settings()
@@ -377,6 +378,10 @@ class JieLongDialog(QWidget):
             QLineEdit:focus, QTextEdit:focus, QComboBox:focus {
                 border-color: #5A84FF;
             }
+            QLineEdit[invalid="true"], QLineEdit[invalid="true"]:focus {
+                border-color: #F87171;
+                background: rgba(127, 29, 29, 0.22);
+            }
             QComboBox::drop-down {
                 border: none;
                 width: 24px;
@@ -445,6 +450,20 @@ class JieLongDialog(QWidget):
                 background: rgba(54, 61, 88, 0.24);
                 color: #8D96B8;
                 border-color: rgba(84, 92, 126, 0.28);
+            }
+            QPushButton#PasteBtn {
+                background: rgba(88, 109, 255, 0.14);
+                color: #EEF2FF;
+                border: 1px solid rgba(112, 132, 255, 0.34);
+                min-width: 40px;
+                max-width: 40px;
+                min-height: 24px;
+                max-height: 24px;
+                padding: 0 4px;
+            }
+            QPushButton#PasteBtn:hover {
+                background: rgba(88, 109, 255, 0.24);
+                border-color: rgba(133, 151, 255, 0.50);
             }
             QPushButton#PrimaryBtn:disabled {
                 background: #26314F;
@@ -527,19 +546,12 @@ class JieLongDialog(QWidget):
 
         login_heading = QHBoxLayout()
         login_heading.setSpacing(6)
-        login_title = QLabel("Token 登录")
-        login_title.setObjectName("InputLabel")
-        login_heading.addWidget(login_title)
-        self.login_status_chip = QLabel(LOGIN_IDLE_TEXT)
+        self.login_status_chip = QLabel("")
         self.login_status_chip.setObjectName("StatusChip")
+        self.login_status_chip.hide()
         login_heading.addWidget(self.login_status_chip, 0, Qt.AlignLeft | Qt.AlignVCenter)
         login_heading.addStretch()
         top_layout.addLayout(login_heading)
-
-        self.login_hint_label = QLabel(LOGIN_QR_HINT)
-        self.login_hint_label.setObjectName("SectionHint")
-        self.login_hint_label.setWordWrap(True)
-        top_layout.addWidget(self.login_hint_label)
 
         self.token_input = QLineEdit()
         self.token_input.setPlaceholderText(TOKEN_REQUIRED)
@@ -547,51 +559,47 @@ class JieLongDialog(QWidget):
         self.token_input.setFixedHeight(24)
         self.token_input.hide()
 
-        share_label = QLabel("接龙分享链接")
+        share_label = QLabel("??????")
         share_label.setObjectName("InputLabel")
         top_layout.addWidget(share_label)
 
-        share_row = QHBoxLayout()
-        share_row.setSpacing(6)
+        share_input_row = QHBoxLayout()
+        share_input_row.setContentsMargins(0, 0, 0, 0)
+        share_input_row.setSpacing(4)
+
         self.share_url_input = QLineEdit()
         self.share_url_input.setPlaceholderText(SHARE_URL_PLACEHOLDER)
         self.share_url_input.setClearButtonEnabled(True)
         self.share_url_input.setFixedHeight(24)
-        self.share_url_input.textChanged.connect(self._on_share_url_changed)
-        share_row.addWidget(self.share_url_input, 1)
-        self.btn_parse_thread = QPushButton(PARSE_BUTTON)
-        self.btn_parse_thread.setObjectName("LoadBtn")
-        self.btn_parse_thread.setFixedSize(72, 24)
-        self.btn_parse_thread.clicked.connect(self._parse_share_url)
-        share_row.addWidget(self.btn_parse_thread)
-        top_layout.addLayout(share_row)
+        share_input_row.addWidget(self.share_url_input, 1)
 
-        form_grid = QGridLayout()
-        form_grid.setContentsMargins(0, 0, 0, 0)
-        form_grid.setHorizontalSpacing(6)
-        form_grid.setVerticalSpacing(2)
-        form_grid.setColumnStretch(0, 4)
-        form_grid.setColumnStretch(1, 1)
+        self.btn_paste_share = QPushButton(PASTE_BUTTON)
+        self.btn_paste_share.setObjectName("PasteBtn")
+        self.btn_paste_share.setFixedSize(40, 24)
+        self.btn_paste_share.clicked.connect(self._parse_share_url)
+        share_input_row.addWidget(self.btn_paste_share)
+        top_layout.addLayout(share_input_row)
 
         thread_label = QLabel("threadId")
         thread_label.setObjectName("InputLabel")
-        form_grid.addWidget(thread_label, 0, 0)
+        top_layout.addWidget(thread_label)
+
+        thread_row = QHBoxLayout()
+        thread_row.setContentsMargins(0, 0, 0, 0)
+        thread_row.setSpacing(6)
+
         self.thread_input = QLineEdit()
         self.thread_input.setPlaceholderText(THREAD_REQUIRED)
         self.thread_input.setClearButtonEnabled(True)
         self.thread_input.setFixedHeight(24)
-        form_grid.addWidget(self.thread_input, 1, 0)
+        thread_row.addWidget(self.thread_input, 1)
 
-        button_spacer = QWidget()
-        button_spacer.setFixedHeight(1)
-        form_grid.addWidget(button_spacer, 0, 1)
         self.btn_load = QPushButton(LOAD_BUTTON)
         self.btn_load.setObjectName("LoadBtn")
         self.btn_load.setFixedSize(72, 24)
         self.btn_load.clicked.connect(self._start_load)
-        form_grid.addWidget(self.btn_load, 1, 1, 1, 1, Qt.AlignBottom)
-
-        top_layout.addLayout(form_grid)
+        thread_row.addWidget(self.btn_load)
+        top_layout.addLayout(thread_row)
 
         layout.addWidget(top_card)
 
@@ -684,6 +692,7 @@ class JieLongDialog(QWidget):
         self.qr_popup = JieLongQrPopupDialog(self)
 
     def _load_config(self) -> dict:
+
         try:
             return read_config(CONFIG_FILE)
         except Exception:
@@ -767,8 +776,12 @@ class JieLongDialog(QWidget):
             elif kind == "textarea":
                 answers[field_id] = {"value": info["widget"].toPlainText().strip()}
             elif kind == "location":
+                area = info["area_widget"].text().strip()
+                place = info["place_widget"].text().strip()
                 answers[field_id] = {
-                    "value": info["widget"].text().strip(),
+                    "value": self._compose_location_text(area, place),
+                    "area": area,
+                    "place": place,
                     "longitude": info["longitude_widget"].text().strip(),
                     "latitude": info["latitude_widget"].text().strip(),
                 }
@@ -777,6 +790,108 @@ class JieLongDialog(QWidget):
             elif kind == "media":
                 answers[field_id] = {"files": deepcopy(info.get("files") or [])}
         return answers
+
+    @staticmethod
+    def _compose_location_text(area: str, place: str) -> str:
+        left = str(area or "").strip()
+        right = str(place or "").strip()
+        if left and right:
+            return f"{left}•{right}"
+        return left or right
+
+    @staticmethod
+    def _split_location_text(value: str) -> tuple[str, str]:
+        text = str(value or "").strip()
+        if not text:
+            return "", ""
+        separator = "•" if "•" in text else "·" if "·" in text else ""
+        if not separator:
+            return text, ""
+        area, place = [part.strip() for part in text.split(separator, 1)]
+        return area, place
+
+    @staticmethod
+    def _is_valid_location_area(value: str) -> bool:
+        text = str(value or "").strip()
+        if not text or len(text) < 4:
+            return False
+        return any(marker in text for marker in ("市", "区", "县", "旗", "镇", "乡", "街道", "新区", "开发区"))
+
+    @staticmethod
+    def _is_valid_location_place(value: str) -> bool:
+        text = str(value or "").strip()
+        return len(text) >= 2
+
+    @staticmethod
+    def _is_valid_coordinate_value(value: str, *, axis: str) -> bool:
+        text = str(value or "").strip()
+        if not text:
+            return False
+        try:
+            number = float(text)
+        except (TypeError, ValueError):
+            return False
+        minimum, maximum = (-180.0, 180.0) if axis == "longitude" else (-90.0, 90.0)
+        return minimum <= number <= maximum
+
+    @staticmethod
+    def _set_line_edit_invalid(widget: QLineEdit, invalid: bool):
+        widget.setProperty("invalid", invalid)
+        widget.style().unpolish(widget)
+        widget.style().polish(widget)
+        widget.update()
+
+    def _validate_location_widgets(self, info: dict, *, strict: bool) -> bool:
+        area = info["area_widget"].text().strip()
+        place = info["place_widget"].text().strip()
+        longitude = info["longitude_widget"].text().strip()
+        latitude = info["latitude_widget"].text().strip()
+        has_any_value = bool(area or place or longitude or latitude)
+
+        area_invalid = False
+        place_invalid = False
+        longitude_invalid = False
+        latitude_invalid = False
+
+        if strict or has_any_value:
+            area_invalid = not self._is_valid_location_area(area)
+            place_invalid = not self._is_valid_location_place(place)
+
+        if strict or longitude or latitude:
+            longitude_invalid = not self._is_valid_coordinate_value(longitude, axis="longitude")
+            latitude_invalid = not self._is_valid_coordinate_value(latitude, axis="latitude")
+
+        self._set_line_edit_invalid(info["area_widget"], area_invalid)
+        self._set_line_edit_invalid(info["place_widget"], place_invalid)
+        self._set_line_edit_invalid(info["longitude_widget"], longitude_invalid)
+        self._set_line_edit_invalid(info["latitude_widget"], latitude_invalid)
+        return not (area_invalid or place_invalid or longitude_invalid or latitude_invalid)
+
+    def _validate_visible_location_fields(self):
+        for info in self._field_widgets.values():
+            if info.get("kind") != "location":
+                continue
+            field = info.get("field") or {}
+            if int(field.get("Id") or 0) != 0 and info["card"].isHidden():
+                continue
+            has_any_value = any(
+                widget.text().strip()
+                for widget in (
+                    info["area_widget"],
+                    info["place_widget"],
+                    info["longitude_widget"],
+                    info["latitude_widget"],
+                )
+            )
+            if not field.get("IsRequired") and not has_any_value:
+                self._validate_location_widgets(info, strict=False)
+                continue
+            if not self._validate_location_widgets(info, strict=True):
+                raise RuntimeError(LOCATION_VALIDATION_ERROR)
+
+    def _on_location_changed(self, info: dict):
+        self._validate_location_widgets(info, strict=False)
+        self._save_form_draft()
 
     def _save_form_draft(self):
         if self._restoring_form_draft or not self._current_bundle:
@@ -802,9 +917,10 @@ class JieLongDialog(QWidget):
             info["widget"].textChanged.connect(self._save_form_draft)
             return
         if kind == "location":
-            info["widget"].textChanged.connect(lambda *_: self._save_form_draft())
-            info["longitude_widget"].textChanged.connect(lambda *_: self._save_form_draft())
-            info["latitude_widget"].textChanged.connect(lambda *_: self._save_form_draft())
+            info["widget"].textChanged.connect(lambda *_: self._on_location_changed(info))
+            info["place_widget"].textChanged.connect(lambda *_: self._on_location_changed(info))
+            info["longitude_widget"].textChanged.connect(lambda *_: self._on_location_changed(info))
+            info["latitude_widget"].textChanged.connect(lambda *_: self._on_location_changed(info))
             return
         if kind == "text":
             info["widget"].textChanged.connect(lambda *_: self._save_form_draft())
@@ -834,9 +950,15 @@ class JieLongDialog(QWidget):
                 elif kind == "textarea":
                     info["widget"].setPlainText(str(answer.get("value") or ""))
                 elif kind == "location":
-                    info["widget"].setText(str(answer.get("value") or ""))
+                    area = str(answer.get("area") or "").strip()
+                    place = str(answer.get("place") or "").strip()
+                    if not area and not place:
+                        area, place = self._split_location_text(str(answer.get("value") or ""))
+                    info["widget"].setText(area)
+                    info["place_widget"].setText(place)
                     info["longitude_widget"].setText(str(answer.get("longitude") or ""))
                     info["latitude_widget"].setText(str(answer.get("latitude") or ""))
+                    self._validate_location_widgets(info, strict=False)
                 elif kind == "text":
                     info["widget"].setText(str(answer.get("value") or ""))
                 elif kind == "media":
@@ -844,11 +966,10 @@ class JieLongDialog(QWidget):
                     self._refresh_media_widget(info)
         finally:
             self._restoring_form_draft = False
-        self._last_auto_parsed_share_url = ""
         self._refresh_visibility()
 
     def _format_location_hint(self) -> str:
-        return LOCATION_HINT_EMPTY
+        return LOCATION_HINT_TEXT
 
     def _sync_action_state(self):
         busy = self._is_busy()
@@ -856,8 +977,8 @@ class JieLongDialog(QWidget):
         logging_in = self._is_logging_in()
         login_blocked = self._is_loading() or self._is_submitting()
         self.share_url_input.setEnabled(not busy)
+        self.btn_paste_share.setEnabled(not busy)
         self.thread_input.setEnabled(not busy)
-        self.btn_parse_thread.setEnabled(not busy)
         self.btn_load.setEnabled(not busy)
         self.btn_submit.setEnabled(has_bundle and not busy)
         self.btn_qr_login.setEnabled(not login_blocked)
@@ -872,6 +993,8 @@ class JieLongDialog(QWidget):
 
     def _set_login_status(self, text: str):
         self._set_chip_text(self.login_status_chip, text)
+        self.login_status_chip.setVisible(bool(str(text or "").strip()))
+        self.login_status_chip.setVisible(bool(str(text or "").strip()))
 
     def _set_chip_text(self, chip: QLabel, text: str):
         chip.setText(text)
@@ -931,19 +1054,11 @@ class JieLongDialog(QWidget):
     def _is_busy(self) -> bool:
         return self._is_loading() or self._is_submitting() or self._is_logging_in()
 
-    def _on_share_url_changed(self, text: str):
-        share_url = str(text or "").strip()
-        if not share_url.startswith("http") or "/s/" not in share_url:
-            return
-        if share_url == self._last_auto_parsed_share_url:
-            return
-        self._last_auto_parsed_share_url = share_url
-        QTimer.singleShot(50, lambda: self._parse_share_url(show_toast=False))
-
     def _parse_share_url(self, show_toast: bool = True):
         share_url = self.share_url_input.text().strip()
         if not share_url:
-            ToastManager.instance().show(SHARE_URL_REQUIRED, "warning")
+            if show_toast:
+                ToastManager.instance().show(SHARE_URL_REQUIRED, "warning")
             return
         try:
             thread_id = get_thread_id_by_url(share_url)
@@ -1203,6 +1318,7 @@ class JieLongDialog(QWidget):
         self._submit_payload(self._last_submit_token, payload)
 
     def _build_submit_payload(self) -> dict:
+        self._validate_visible_location_fields()
         answers = self._collect_field_answers(visible_only=True)
         visible_fields = []
         fields = self._current_bundle.get("fields") or []
@@ -1512,16 +1628,35 @@ class JieLongDialog(QWidget):
             layout.setContentsMargins(0, 0, 0, 0)
             layout.setSpacing(3)
 
-            edit_label = QLabel("地址说明（可编辑）")
+            edit_label = QLabel("位置说明")
             edit_label.setObjectName("InputLabel")
             layout.addWidget(edit_label)
 
-            line_edit = QLineEdit()
-            line_edit.setPlaceholderText(placeholder or LOCATION_PLACEHOLDER)
-            line_edit.setClearButtonEnabled(True)
-            line_edit.setToolTip("这里填写会作为提交请求里的 Texts")
-            line_edit.setText(initial_value)
-            layout.addWidget(line_edit)
+            text_row = QHBoxLayout()
+            text_row.setContentsMargins(0, 0, 0, 0)
+            text_row.setSpacing(6)
+
+            area_value, place_value = self._split_location_text(initial_value)
+
+            area_input = QLineEdit()
+            area_input.setPlaceholderText(LOCATION_AREA_PLACEHOLDER)
+            area_input.setClearButtonEnabled(True)
+            area_input.setToolTip("填写市区部分，提交时会自动拼接“•”。")
+            area_input.setText(area_value)
+            text_row.addWidget(area_input)
+
+            dot_label = QLabel("•")
+            dot_label.setObjectName("InputLabel")
+            text_row.addWidget(dot_label, 0, Qt.AlignCenter)
+
+            place_input = QLineEdit()
+            place_input.setPlaceholderText(LOCATION_PLACE_PLACEHOLDER)
+            place_input.setClearButtonEnabled(True)
+            place_input.setToolTip("填写地点部分，提交时会自动拼接“•”。")
+            place_input.setText(place_value)
+            text_row.addWidget(place_input)
+
+            layout.addLayout(text_row)
 
             coord_row = QHBoxLayout()
             coord_row.setContentsMargins(0, 0, 0, 0)
@@ -1543,15 +1678,20 @@ class JieLongDialog(QWidget):
             hint.setObjectName("HintText")
             hint.setWordWrap(True)
             layout.addWidget(hint)
-            return {
+            info = {
                 "kind": "location",
                 "container": container,
-                "widget": line_edit,
+                "widget": area_input,
+                "area_widget": area_input,
+                "place_widget": place_input,
                 "hint": hint,
                 "edit_label": edit_label,
+                "separator_label": dot_label,
                 "longitude_widget": longitude_input,
                 "latitude_widget": latitude_input,
             }
+            self._validate_location_widgets(info, strict=False)
+            return info
 
         line_edit = QLineEdit()
         line_edit.setPlaceholderText(placeholder)
