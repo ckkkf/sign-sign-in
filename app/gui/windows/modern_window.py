@@ -252,7 +252,7 @@ class ModernWindow(QMainWindow):
 
         t_grid = QGridLayout()
         t_grid.setContentsMargins(0, 0, 0, 0)
-        t_grid.setSpacing(5)
+        t_grid.setSpacing(8)
         tools = [
             ("🔗 系统代理", lambda: subprocess.Popen('rundll32.exe shell32.dll,Control_RunDLL inetcpl.cpl,,4', shell=True, creationflags=subprocess.CREATE_NO_WINDOW)),
             ("🔒 证书管理", lambda: subprocess.Popen('certmgr.msc', shell=True, creationflags=subprocess.CREATE_NO_WINDOW)),
@@ -314,7 +314,7 @@ class ModernWindow(QMainWindow):
 
         # 第一行：签到 + 签退
         mode_row1 = QHBoxLayout()
-        mode_row1.setSpacing(9)
+        mode_row1.setSpacing(20)
         mode_row1.addWidget(rb_in)
         mode_row1.addWidget(rb_out)
         mode_row1.addWidget(rb_img_in)
