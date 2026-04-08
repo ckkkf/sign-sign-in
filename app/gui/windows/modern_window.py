@@ -120,10 +120,29 @@ class ModernWindow(QMainWindow):
         left_rail.setObjectName("LeftRail")
         left_rail.setFixedWidth(52)
         rail_layout = QVBoxLayout(left_rail)
-        rail_layout.setContentsMargins(0, 0, 0, 0)
-        rail_layout.setSpacing(10)
+        rail_layout.setContentsMargins(0, 10, 0, 10)
+        rail_layout.setSpacing(8)
 
-        rail_layout.addSpacing(78)
+        rail_brand = QLabel("SS")
+        rail_brand.setObjectName("RailBrandMark")
+        rail_brand.setAlignment(Qt.AlignCenter)
+        rail_brand.setFixedSize(28, 28)
+        rail_layout.addWidget(rail_brand, 0, Qt.AlignTop | Qt.AlignHCenter)
+
+        rail_layout.addSpacing(10)
+
+        rail_hint = QLabel("NAV")
+        rail_hint.setObjectName("RailHint")
+        rail_hint.setAlignment(Qt.AlignCenter)
+        rail_layout.addWidget(rail_hint, 0, Qt.AlignTop | Qt.AlignHCenter)
+
+        rail_layout.addSpacing(6)
+
+        nav_shell = QFrame()
+        nav_shell.setObjectName("RailNavShell")
+        nav_shell_layout = QVBoxLayout(nav_shell)
+        nav_shell_layout.setContentsMargins(4, 6, 4, 6)
+        nav_shell_layout.setSpacing(8)
 
         self.btn_platform_xyb = QPushButton("校")
         self.btn_platform_xyb.setObjectName("RailNavCurrentBtn")
@@ -131,8 +150,9 @@ class ModernWindow(QMainWindow):
         self.btn_platform_xyb.setFixedSize(36, 36)
         self.btn_platform_xyb.setToolTip("切换到校友邦签到页")
         self.btn_platform_xyb.setCheckable(True)
+        self.btn_platform_xyb.setText("校\n友")
         self.btn_platform_xyb.clicked.connect(self.show_home_page)
-        rail_layout.addWidget(self.btn_platform_xyb, 0, Qt.AlignTop | Qt.AlignHCenter)
+        nav_shell_layout.addWidget(self.btn_platform_xyb, 0, Qt.AlignTop | Qt.AlignHCenter)
 
         self.btn_nav_jielong = QPushButton("接龙")
         self.btn_nav_jielong.setObjectName("RailNavShortcutBtn")
@@ -140,14 +160,16 @@ class ModernWindow(QMainWindow):
         self.btn_nav_jielong.setFixedSize(36, 36)
         self.btn_nav_jielong.setToolTip("切换到接龙页")
         self.btn_nav_jielong.setCheckable(True)
+        self.btn_nav_jielong.setText("接\n龙")
         self.btn_nav_jielong.clicked.connect(self.open_jielong_dialog)
-        rail_layout.addWidget(self.btn_nav_jielong, 0, Qt.AlignTop | Qt.AlignHCenter)
+        nav_shell_layout.addWidget(self.btn_nav_jielong, 0, Qt.AlignTop | Qt.AlignHCenter)
 
         self.nav_group = QButtonGroup(self)
         self.nav_group.setExclusive(True)
         self.nav_group.addButton(self.btn_platform_xyb)
         self.nav_group.addButton(self.btn_nav_jielong)
 
+        rail_layout.addWidget(nav_shell, 0, Qt.AlignTop | Qt.AlignHCenter)
         rail_layout.addStretch()
         left_layout.addWidget(left_rail, 0)
 
@@ -695,8 +717,32 @@ class ModernWindow(QMainWindow):
                 padding-bottom: 3px;
             }
             #LeftRail {
-                background: transparent;
-                border-right: 1px solid rgba(36, 42, 63, 0.95);
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 rgba(19, 24, 39, 0.98), stop:1 rgba(11, 15, 27, 0.98));
+                border: 1px solid rgba(43, 51, 79, 0.90);
+                border-right: 1px solid rgba(58, 69, 102, 0.95);
+                border-radius: 18px;
+            }
+            #RailBrandMark {
+                color: #F4F7FF;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                    stop:0 rgba(87, 118, 255, 1.0), stop:1 rgba(42, 179, 212, 0.96));
+                border: 1px solid rgba(165, 210, 255, 0.42);
+                border-radius: 14px;
+                font-size: 8pt;
+                font-weight: 900;
+                letter-spacing: 1px;
+            }
+            #RailHint {
+                color: #6E7BA8;
+                font-size: 7pt;
+                font-weight: 700;
+                letter-spacing: 1px;
+            }
+            #RailNavShell {
+                background: rgba(8, 12, 22, 0.82);
+                border: 1px solid rgba(57, 67, 99, 0.88);
+                border-radius: 18px;
             }
             #LeftPageStack {
                 background: transparent;
@@ -708,34 +754,41 @@ class ModernWindow(QMainWindow):
                 max-width: 36px;
                 min-height: 36px;
                 max-height: 36px;
-                background: rgba(15, 20, 33, 0.98);
-                color: #CFE6FF;
-                border: 1px solid rgba(59, 78, 122, 0.95);
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 rgba(27, 36, 58, 0.98), stop:1 rgba(17, 23, 38, 0.98));
+                color: #C8D6FF;
+                border: 1px solid rgba(76, 92, 136, 0.96);
                 border-radius: 11px;
                 padding: 0;
-                font-size: 8.4pt;
+                font-size: 7.4pt;
                 font-weight: 800;
                 text-align: center;
+                line-height: 1.05;
             }
             QPushButton#RailNavCurrentBtn:hover,
             QPushButton#RailNavShortcutBtn:hover {
-                border-color: #63A3FF;
+                border-color: #74B4FF;
                 color: #FFFFFF;
-                background: rgba(69, 142, 255, 0.12);
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                    stop:0 rgba(49, 88, 168, 0.88), stop:1 rgba(29, 44, 84, 0.98));
             }
             QPushButton#RailNavCurrentBtn:checked,
             QPushButton#RailNavShortcutBtn:checked {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-                    stop:0 rgba(90, 112, 255, 0.98), stop:1 rgba(54, 82, 196, 0.98));
+                    stop:0 rgba(90, 112, 255, 1.0), stop:0.55 rgba(59, 132, 241, 0.98), stop:1 rgba(37, 76, 188, 1.0));
                 color: #F6F8FF;
-                border: 1px solid rgba(130, 146, 255, 0.46);
+                border: 1px solid rgba(160, 190, 255, 0.62);
             }
             QPushButton#RailNavCurrentBtn:checked:hover,
             QPushButton#RailNavShortcutBtn:checked:hover {
-                border-color: #A4B1FF;
+                border-color: #D4E3FF;
                 color: #FFFFFF;
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-                    stop:0 rgba(104, 125, 255, 1.0), stop:1 rgba(66, 94, 210, 1.0));
+                    stop:0 rgba(108, 128, 255, 1.0), stop:0.55 rgba(73, 146, 250, 1.0), stop:1 rgba(49, 87, 207, 1.0));
+            }
+            QPushButton#RailNavCurrentBtn:focus,
+            QPushButton#RailNavShortcutBtn:focus {
+                border: 1px solid rgba(174, 214, 255, 0.90);
             }
             #QQGroupBar {
                 background: #101420;
