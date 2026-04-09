@@ -10,7 +10,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 DIST_ROOT = ROOT / "dist" / "pyinstaller"
 BUILD_ROOT = ROOT / "build" / "pyinstaller"
-APP_NAME = "SignSignIn-dev"
+APP_NAME = "Sign sign in"
 WORKFLOW_NAME = "PyInstaller Cross Build"
 RESOURCE_SUBDIRS = [
     Path("config"),
