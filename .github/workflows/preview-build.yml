@@ -41,7 +41,7 @@ jobs:
         run: |
           mkdir -p preview
           short_sha="${GITHUB_SHA::7}"
-          cp dist/pyinstaller/windows/SignSignIn-dev.exe "preview/sign-sign-in-preview-${short_sha}.exe"
+          cp dist/pyinstaller/windows/SignSignIn.exe "preview/sign-sign-in-preview-${short_sha}.exe"
 
       - name: Upload preview artifact
         uses: actions/upload-artifact@v4
