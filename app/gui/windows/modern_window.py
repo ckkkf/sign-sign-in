@@ -1619,7 +1619,7 @@ class ModernWindow(QMainWindow):
         if not self.is_running:
             checked_id = self.grp.checkedId()
             photo_image = None
-            if checked_id in [2, 3]:
+            if checked_id in [3, 4]:
                 if self._last_action_from_tray and not self.isVisible():
                     self._show_tray_message("开始执行失败", "拍照签到/签退需要先显示主窗口进行选择。", False)
                     self._last_action_from_tray = False

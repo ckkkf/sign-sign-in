@@ -5,6 +5,7 @@ import sys
 
 from PySide6.QtGui import QFont, QIcon
 from PySide6.QtWidgets import (QApplication, QMessageBox)
+from app.config.common import ensure_resource_layout
 from app.gui.windows.modern_window import ModernWindow
 from app.mitm.embedded_runner import main as mitm_runner_main
 import traceback
@@ -38,6 +39,7 @@ if __name__ == '__main__':
         raise SystemExit(mitm_runner_main(sys.argv[runner_index + 1:]))
 
     if "QT_FONT_DPI" in os.environ: del os.environ["QT_FONT_DPI"]
+    ensure_resource_layout()
 
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)

@@ -39,8 +39,23 @@ jobs:
 
       - name: Zip macOS artifact
         run: |
-          mkdir -p release
-          ditto -c -k --sequesterRsrc --keepParent dist/pyinstaller/macos release/sign-sign-in-macos-${{ inputs.git_ref }}.zip
+          package_dir="release/macos-package"
+          mkdir -p "${package_dir}"
+          cp -R dist/pyinstaller/macos/SignSignIn.app "${package_dir}/SignSignIn.app"
+          mkdir -p "${package_dir}/resources"
+          cp -R resources/. "${package_dir}/resources/"
+          find "${package_dir}/resources" -type d -name "__pycache__" -prune -exec rm -rf {} +
+          find "${package_dir}/resources" -type f \( -name "*.pyc" -o -name "*.pyo" -o -name "*.log" \) -delete
+          mkdir -p \
+            "${package_dir}/resources/cert" \
+            "${package_dir}/resources/config" \
+            "${package_dir}/resources/img" \
+            "${package_dir}/resources/journals" \
+            "${package_dir}/resources/logs" \
+            "${package_dir}/resources/mitm/addons" \
+            "${package_dir}/resources/mitm/conf" \
+            "${package_dir}/resources/software"
+          ditto -c -k --sequesterRsrc --keepParent "${package_dir}" release/sign-sign-in-macos-${{ inputs.git_ref }}.zip
 
       - name: Upload macOS artifact
         uses: actions/upload-artifact@v4

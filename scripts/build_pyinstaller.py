@@ -16,6 +16,7 @@ RESOURCE_SUBDIRS = [
     Path("config"),
     Path("cert"),
     Path("img"),
+    Path("journals"),
     Path("logs"),
     Path("mitm") / "addons",
     Path("mitm") / "conf",
@@ -62,12 +63,12 @@ def prepare_bundle_data(target: str):
     resources_stage = stage_root / "resources"
     for relative_path in RESOURCE_SUBDIRS:
         source = ROOT / "resources" / relative_path
+        destination = resources_stage / relative_path
+        destination.mkdir(parents=True, exist_ok=True)
         if not source.exists():
             continue
 
-        destination = resources_stage / relative_path
         if source.is_dir():
-            destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copytree(source, destination, dirs_exist_ok=True)
         else:
             destination.parent.mkdir(parents=True, exist_ok=True)

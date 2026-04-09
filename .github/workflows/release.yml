@@ -102,14 +102,30 @@ jobs:
       - name: Prepare Windows artifact
         shell: bash
         run: |
-          mkdir -p release
-          cp dist/pyinstaller/windows/SignSignIn.exe "release/sign-sign-in-windows-${{ needs.verify-tag.outputs.tag }}.exe"
+          package_dir="release/windows-package"
+          mkdir -p "${package_dir}"
+          cp dist/pyinstaller/windows/SignSignIn.exe "${package_dir}/SignSignIn.exe"
+          mkdir -p "${package_dir}/resources"
+          cp -R resources/. "${package_dir}/resources/"
+          find "${package_dir}/resources" -type d -name "__pycache__" -prune -exec rm -rf {} +
+          find "${package_dir}/resources" -type f \( -name "*.pyc" -o -name "*.pyo" -o -name "*.log" \) -delete
+          mkdir -p \
+            "${package_dir}/resources/cert" \
+            "${package_dir}/resources/config" \
+            "${package_dir}/resources/img" \
+            "${package_dir}/resources/journals" \
+            "${package_dir}/resources/logs" \
+            "${package_dir}/resources/mitm/addons" \
+            "${package_dir}/resources/mitm/conf" \
+            "${package_dir}/resources/software"
+          cd release
+          powershell -NoProfile -Command "Compress-Archive -Path 'windows-package\\*' -DestinationPath 'sign-sign-in-windows-${{ needs.verify-tag.outputs.tag }}.zip' -Force"
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
         with:
           name: release-windows-${{ needs.verify-tag.outputs.tag }}
-          path: release/sign-sign-in-windows-${{ needs.verify-tag.outputs.tag }}.exe
+          path: release/sign-sign-in-windows-${{ needs.verify-tag.outputs.tag }}.zip
 
   build-macos:
     needs: verify-tag
@@ -139,8 +155,23 @@ jobs:
 
       - name: Prepare macOS artifact
         run: |
-          mkdir -p release
-          ditto -c -k --sequesterRsrc --keepParent dist/pyinstaller/macos "release/sign-sign-in-macos-${{ needs.verify-tag.outputs.tag }}.zip"
+          package_dir="release/macos-package"
+          mkdir -p "${package_dir}"
+          cp -R dist/pyinstaller/macos/SignSignIn.app "${package_dir}/SignSignIn.app"
+          mkdir -p "${package_dir}/resources"
+          cp -R resources/. "${package_dir}/resources/"
+          find "${package_dir}/resources" -type d -name "__pycache__" -prune -exec rm -rf {} +
+          find "${package_dir}/resources" -type f \( -name "*.pyc" -o -name "*.pyo" -o -name "*.log" \) -delete
+          mkdir -p \
+            "${package_dir}/resources/cert" \
+            "${package_dir}/resources/config" \
+            "${package_dir}/resources/img" \
+            "${package_dir}/resources/journals" \
+            "${package_dir}/resources/logs" \
+            "${package_dir}/resources/mitm/addons" \
+            "${package_dir}/resources/mitm/conf" \
+            "${package_dir}/resources/software"
+          ditto -c -k --sequesterRsrc --keepParent "${package_dir}" "release/sign-sign-in-macos-${{ needs.verify-tag.outputs.tag }}.zip"
 
       - name: Upload macOS artifact
         uses: actions/upload-artifact@v4
@@ -259,7 +290,7 @@ jobs:
           name: ${{ needs.verify-tag.outputs.release_name }}
           body_path: ${{ steps.notes.outputs.notes_file }}
           files: |
-            release/sign-sign-in-windows-${{ needs.verify-tag.outputs.tag }}.exe
+            release/sign-sign-in-windows-${{ needs.verify-tag.outputs.tag }}.zip
             release/sign-sign-in-macos-${{ needs.verify-tag.outputs.tag }}.zip
             release/README.md
             release/LICENSE

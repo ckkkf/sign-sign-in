@@ -39,12 +39,28 @@ jobs:
       - name: Prepare preview artifact
         shell: bash
         run: |
-          mkdir -p preview
+          package_dir="preview/windows-package"
+          mkdir -p "${package_dir}"
           short_sha="${GITHUB_SHA::7}"
-          cp dist/pyinstaller/windows/SignSignIn.exe "preview/sign-sign-in-preview-${short_sha}.exe"
+          cp dist/pyinstaller/windows/SignSignIn.exe "${package_dir}/SignSignIn.exe"
+          mkdir -p "${package_dir}/resources"
+          cp -R resources/. "${package_dir}/resources/"
+          find "${package_dir}/resources" -type d -name "__pycache__" -prune -exec rm -rf {} +
+          find "${package_dir}/resources" -type f \( -name "*.pyc" -o -name "*.pyo" -o -name "*.log" \) -delete
+          mkdir -p \
+            "${package_dir}/resources/cert" \
+            "${package_dir}/resources/config" \
+            "${package_dir}/resources/img" \
+            "${package_dir}/resources/journals" \
+            "${package_dir}/resources/logs" \
+            "${package_dir}/resources/mitm/addons" \
+            "${package_dir}/resources/mitm/conf" \
+            "${package_dir}/resources/software"
+          cd preview
+          powershell -NoProfile -Command "Compress-Archive -Path 'windows-package\\*' -DestinationPath 'sign-sign-in-preview-${short_sha}.zip' -Force"
 
       - name: Upload preview artifact
         uses: actions/upload-artifact@v4
         with:
           name: preview-windows-${{ github.sha }}
-          path: preview/*
+          path: preview/sign-sign-in-preview-*.zip

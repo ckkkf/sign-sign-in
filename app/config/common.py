@@ -63,6 +63,17 @@ APP_DIR = os.path.join(BASE_DIR, "app")
 # 资源目录
 RES_DIR = os.path.join(BASE_DIR, "resources")
 USER_DATA_DIR = get_user_data_dir("SignSignIn")
+REQUIRED_RESOURCE_DIRS = [
+    os.path.join(RES_DIR, "cert"),
+    os.path.join(RES_DIR, "config"),
+    os.path.join(RES_DIR, "img"),
+    os.path.join(RES_DIR, "journals"),
+    os.path.join(RES_DIR, "logs"),
+    os.path.join(RES_DIR, "mitm"),
+    os.path.join(RES_DIR, "mitm", "addons"),
+    os.path.join(RES_DIR, "mitm", "conf"),
+    os.path.join(RES_DIR, "software"),
+]
 
 # mitm static resources / runtime dirs
 MITM_RESOURCE_DIR = os.path.join(RES_DIR, "mitm")
@@ -95,6 +106,11 @@ ADDONS_DIR = os.path.join(MITM_RESOURCE_DIR, "addons")
 
 # code 文件传递路径（mitm addon 写入，主程序轮询读取）
 CODE_FILE = os.path.join(RES_DIR, "config", "mitm_code.json")
+
+
+def ensure_resource_layout():
+    for directory in REQUIRED_RESOURCE_DIRS:
+        os.makedirs(directory, exist_ok=True)
 
 # system prompt
 SYSTEM_PROMPT = """
