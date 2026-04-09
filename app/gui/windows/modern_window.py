@@ -123,7 +123,7 @@ class ModernWindow(QMainWindow):
         rail_layout.setContentsMargins(0, 10, 0, 10)
         rail_layout.setSpacing(8)
 
-        rail_brand = QLabel("SS")
+        rail_brand = QLabel("😎")
         rail_brand.setObjectName("RailBrandMark")
         rail_brand.setAlignment(Qt.AlignCenter)
         rail_brand.setFixedSize(28, 28)
@@ -987,7 +987,8 @@ class ModernWindow(QMainWindow):
         self.lbls['pid'].setText(f"🟢 PID: <span style='color:#58D68D'>{os.getpid()}</span>")
 
         ntype = get_network_type()
-        self.lbls['net'].setText(f"📶 网络: <span style='color:#58D68D'>{ntype}</span>")
+        net_color = "#EC7063" if ntype == "拨号上网" else "#58D68D"
+        self.lbls['net'].setText(f"📶 网络: <span style='color:{net_color}'>{ntype}</span>")
 
         cur_io = get_net_io()
         now = time.time()
@@ -1028,7 +1029,9 @@ class ModernWindow(QMainWindow):
         self.lbls['pid'].setText(f"🟢 PID: <span style='color:#58D68D'>{os.getpid()}</span>")
 
         # 使用后台线程传来的数据
-        self.lbls['net'].setText(f"📶 网络: <span style='color:#58D68D'>{data['net']}</span>")
+        net_type = str(data['net'])
+        net_color = "#EC7063" if net_type == "拨号上网" else "#58D68D"
+        self.lbls['net'].setText(f"📶 网络: <span style='color:{net_color}'>{net_type}</span>")
 
         self.lbls['speed'].setText(
             f"🚀 速率: <span style='color:#58D68D'>↓ {data['speed_d']:.0f}K</span>"

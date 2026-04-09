@@ -40,7 +40,7 @@ from app.utils.files import read_config, save_json_file
 
 
 TITLE = "接龙"
-FORM_TITLE = "接龙表单"
+FORM_TITLE = "接龙管家"
 LOAD_BUTTON = "拉取表单"
 LOADING_BUTTON = "拉取中..."
 SUBMIT_BUTTON = "提交打卡"

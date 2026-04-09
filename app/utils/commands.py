@@ -16,6 +16,14 @@ def get_network_type():
                 lower = iface.lower()
                 if "wi-fi" in lower or "wlan" in lower: return "Wi-Fi"
                 if "ethernet" in lower or "以太网" in lower: return "Ethernet"
+                if (
+                    "ppp" in lower
+                    or "wan miniport" in lower
+                    or "拨号" in lower
+                    or "宽带连接" in lower
+                    or "ras" in lower
+                ):
+                    return "拨号上网"
         return "Unknown"
     except:
         return "Unknown"
