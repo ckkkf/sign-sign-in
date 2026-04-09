@@ -103,7 +103,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p release
-          cp dist/pyinstaller/windows/SignSignIn-dev.exe release/sign-sign-in-windows.exe
+          cp dist/pyinstaller/windows/SignSignIn.exe release/sign-sign-in-windows.exe
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
