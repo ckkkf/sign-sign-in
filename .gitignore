@@ -50,3 +50,4 @@ tests
 /resources/logs
 /resources/mitm/conf/
 /resources/config/mitm*.json
+*/__pycache__
