@@ -103,13 +103,13 @@ jobs:
         shell: bash
         run: |
           mkdir -p release
-          cp dist/pyinstaller/windows/SignSignIn.exe release/sign-sign-in-windows.exe
+          cp dist/pyinstaller/windows/SignSignIn.exe "release/sign-sign-in-windows-${{ needs.verify-tag.outputs.tag }}.exe"
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
         with:
           name: release-windows-${{ needs.verify-tag.outputs.tag }}
-          path: release/sign-sign-in-windows.exe
+          path: release/sign-sign-in-windows-${{ needs.verify-tag.outputs.tag }}.exe
 
   build-macos:
     needs: verify-tag
@@ -140,13 +140,13 @@ jobs:
       - name: Prepare macOS artifact
         run: |
           mkdir -p release
-          ditto -c -k --sequesterRsrc --keepParent dist/pyinstaller/macos release/sign-sign-in-macos.zip
+          ditto -c -k --sequesterRsrc --keepParent dist/pyinstaller/macos "release/sign-sign-in-macos-${{ needs.verify-tag.outputs.tag }}.zip"
 
       - name: Upload macOS artifact
         uses: actions/upload-artifact@v4
         with:
           name: release-macos-${{ needs.verify-tag.outputs.tag }}
-          path: release/sign-sign-in-macos.zip
+          path: release/sign-sign-in-macos-${{ needs.verify-tag.outputs.tag }}.zip
 
   publish-release:
     needs:
@@ -158,6 +158,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Download Windows artifact
         uses: actions/download-artifact@v4
@@ -177,14 +179,87 @@ jobs:
           cp README.md release/
           cp LICENSE release/
 
+      - name: Generate release notes
+        id: notes
+        shell: bash
+        run: |
+          tag="${{ needs.verify-tag.outputs.tag }}"
+          git fetch origin --tags --force
+
+          previous_tag="$(git tag --sort=-version:refname | grep -vx "${tag}" | head -n 1 || true)"
+          notes_file="release/release-notes.md"
+
+          {
+            echo "## 更新日志"
+            echo
+
+            if [[ -n "${previous_tag}" ]]; then
+              log_range="${previous_tag}..${tag}"
+              echo "> 对比版本：${previous_tag} -> ${tag}"
+            else
+              log_range="${tag}"
+              echo "> 首个发布版本"
+            fi
+
+            echo
+
+            raw_changes="$(git log "${log_range}" --pretty=format:'%s' --no-merges || true)"
+            filtered_changes="$(printf '%s\n' "${raw_changes}" | sed '/^$/d' | grep -viE '^(merge( branch| pull request)?|bump version|release[: ]|merge remote-tracking branch)' || true)"
+
+            added_changes="$(printf '%s\n' "${filtered_changes}" | grep -iE '^(feat|feature|新增|添加)(\(.+\))?: ' || true)"
+            fixed_changes="$(printf '%s\n' "${filtered_changes}" | grep -iE '^(fix|bugfix|修复)(\(.+\))?: ' || true)"
+            improved_changes="$(printf '%s\n' "${filtered_changes}" | grep -iE '^(perf|refactor|optimize|优化|改进)(\(.+\))?: ' || true)"
+            other_changes="$(printf '%s\n' "${filtered_changes}" | grep -ivE '^(feat|feature|新增|添加|fix|bugfix|修复|perf|refactor|optimize|优化|改进)(\(.+\))?: ' || true)"
+
+            has_section=0
+            if [[ -n "${added_changes}" ]]; then
+              echo "### 新增"
+              printf '%s\n' "${added_changes}" | sed 's/^/- /'
+              echo
+              has_section=1
+            fi
+
+            if [[ -n "${fixed_changes}" ]]; then
+              echo "### 修复"
+              printf '%s\n' "${fixed_changes}" | sed 's/^/- /'
+              echo
+              has_section=1
+            fi
+
+            if [[ -n "${improved_changes}" ]]; then
+              echo "### 优化"
+              printf '%s\n' "${improved_changes}" | sed 's/^/- /'
+              echo
+              has_section=1
+            fi
+
+            if [[ -n "${other_changes}" ]]; then
+              echo "### 其他"
+              printf '%s\n' "${other_changes}" | sed 's/^/- /'
+              echo
+              has_section=1
+            fi
+
+            if [[ "${has_section}" -eq 0 ]]; then
+              echo "- 无可用提交说明"
+            fi
+
+            if [[ -n "${previous_tag}" ]]; then
+              echo
+              echo "Full Changelog: https://github.com/${{ github.repository }}/compare/${previous_tag}...${tag}"
+            fi
+          } > "${notes_file}"
+
+          echo "notes_file=${notes_file}" >> "$GITHUB_OUTPUT"
+
       - name: Create or update GitHub release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.verify-tag.outputs.tag }}
           name: ${{ needs.verify-tag.outputs.release_name }}
-          generate_release_notes: true
+          body_path: ${{ steps.notes.outputs.notes_file }}
           files: |
-            release/sign-sign-in-windows.exe
-            release/sign-sign-in-macos.zip
+            release/sign-sign-in-windows-${{ needs.verify-tag.outputs.tag }}.exe
+            release/sign-sign-in-macos-${{ needs.verify-tag.outputs.tag }}.zip
             release/README.md
             release/LICENSE
