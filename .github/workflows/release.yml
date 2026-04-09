@@ -109,6 +109,10 @@ jobs:
           cp -R resources/. "${package_dir}/resources/"
           find "${package_dir}/resources" -type d -name "__pycache__" -prune -exec rm -rf {} +
           find "${package_dir}/resources" -type f \( -name "*.pyc" -o -name "*.pyo" -o -name "*.log" \) -delete
+          rm -f \
+            "${package_dir}/resources/config/session_cache.json" \
+            "${package_dir}/resources/config/mitm_code.json" \
+            "${package_dir}/resources/config/mitm_cert_state.json"
           mkdir -p \
             "${package_dir}/resources/cert" \
             "${package_dir}/resources/config" \
@@ -162,6 +166,10 @@ jobs:
           cp -R resources/. "${package_dir}/resources/"
           find "${package_dir}/resources" -type d -name "__pycache__" -prune -exec rm -rf {} +
           find "${package_dir}/resources" -type f \( -name "*.pyc" -o -name "*.pyo" -o -name "*.log" \) -delete
+          rm -f \
+            "${package_dir}/resources/config/session_cache.json" \
+            "${package_dir}/resources/config/mitm_code.json" \
+            "${package_dir}/resources/config/mitm_cert_state.json"
           mkdir -p \
             "${package_dir}/resources/cert" \
             "${package_dir}/resources/config" \
