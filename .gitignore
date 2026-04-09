@@ -47,7 +47,6 @@ md/
 *.png
 tests
 .omx
-.github
 /resources/logs
 /resources/mitm/conf/
 /resources/config/mitm*.json
