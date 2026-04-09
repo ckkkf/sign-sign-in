@@ -30,17 +30,18 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+          pip install pyinstaller
 
-      - name: Build with Nuitka
+      - name: Build with PyInstaller
         shell: cmd
-        run: scripts\build-nuitka.bat
+        run: scripts\build-pyinstaller.bat --local-only
 
       - name: Prepare preview artifact
         shell: bash
         run: |
           mkdir -p preview
           short_sha="${GITHUB_SHA::7}"
-          cp out/main.exe "preview/sign-sign-in-preview-${short_sha}.exe"
+          cp dist/pyinstaller/windows/SignSignIn-dev.exe "preview/sign-sign-in-preview-${short_sha}.exe"
 
       - name: Upload preview artifact
         uses: actions/upload-artifact@v4

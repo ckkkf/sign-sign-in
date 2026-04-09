@@ -17,12 +17,69 @@ permissions:
   contents: write
 
 jobs:
+  verify-tag:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+      release_name: ${{ steps.meta.outputs.release_name }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve release metadata
+        id: meta
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            tag="${GITHUB_REF_NAME}"
+          else
+            tag="${{ github.event.inputs.tag }}"
+          fi
+
+          if [[ -z "$tag" ]]; then
+            echo "Tag is required" >&2
+            exit 1
+          fi
+
+          release_name="${{ github.event.inputs.release_name }}"
+          if [[ -z "$release_name" ]]; then
+            release_name="Sign sign In Release ${tag}"
+          fi
+
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "release_name=$release_name" >> "$GITHUB_OUTPUT"
+
+      - name: Verify tag points to master history
+        shell: bash
+        run: |
+          tag="${{ steps.meta.outputs.tag }}"
+          git fetch origin master --tags --force
+
+          if ! git rev-parse -q --verify "refs/tags/${tag}" >/dev/null; then
+            echo "Tag ${tag} does not exist in repository." >&2
+            exit 1
+          fi
+
+          tag_commit="$(git rev-list -n 1 "refs/tags/${tag}")"
+          master_commit="$(git rev-parse origin/master)"
+
+          if ! git merge-base --is-ancestor "${tag_commit}" "${master_commit}"; then
+            echo "Tag ${tag} is not on master history; release is restricted to master tags." >&2
+            exit 1
+          fi
+
   build-windows:
+    needs: verify-tag
     runs-on: windows-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.verify-tag.outputs.tag }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -51,15 +108,18 @@ jobs:
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
         with:
-          name: release-windows
+          name: release-windows-${{ needs.verify-tag.outputs.tag }}
           path: release/sign-sign-in-windows.exe
 
   build-macos:
+    needs: verify-tag
     runs-on: macos-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.verify-tag.outputs.tag }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -85,11 +145,12 @@ jobs:
       - name: Upload macOS artifact
         uses: actions/upload-artifact@v4
         with:
-          name: release-macos
+          name: release-macos-${{ needs.verify-tag.outputs.tag }}
           path: release/sign-sign-in-macos.zip
 
   publish-release:
     needs:
+      - verify-tag
       - build-windows
       - build-macos
     runs-on: ubuntu-latest
@@ -98,39 +159,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Resolve release metadata
-        id: meta
-        shell: bash
-        run: |
-          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
-            tag="${GITHUB_REF_NAME}"
-          else
-            tag="${{ github.event.inputs.tag }}"
-          fi
-
-          if [[ -z "$tag" ]]; then
-            echo "Tag is required" >&2
-            exit 1
-          fi
-
-          release_name="${{ github.event.inputs.release_name }}"
-          if [[ -z "$release_name" ]]; then
-            release_name="Sign sign In Release ${tag}"
-          fi
-
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
-          echo "release_name=$release_name" >> "$GITHUB_OUTPUT"
-
       - name: Download Windows artifact
         uses: actions/download-artifact@v4
         with:
-          name: release-windows
+          name: release-windows-${{ needs.verify-tag.outputs.tag }}
           path: release
 
       - name: Download macOS artifact
         uses: actions/download-artifact@v4
         with:
-          name: release-macos
+          name: release-macos-${{ needs.verify-tag.outputs.tag }}
           path: release
 
       - name: Prepare release attachments
@@ -142,8 +180,8 @@ jobs:
       - name: Create or update GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.meta.outputs.tag }}
-          name: ${{ steps.meta.outputs.release_name }}
+          tag_name: ${{ needs.verify-tag.outputs.tag }}
+          name: ${{ needs.verify-tag.outputs.release_name }}
           generate_release_notes: true
           files: |
             release/sign-sign-in-windows.exe
