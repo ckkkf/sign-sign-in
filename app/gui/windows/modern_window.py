@@ -339,7 +339,7 @@ class ModernWindow(QMainWindow):
 
         # 第一行：签到 + 签退
         mode_row1 = QHBoxLayout()
-        mode_row1.setSpacing(20)
+        mode_row1.setSpacing(5)
         mode_row1.addWidget(rb_in)
         mode_row1.addWidget(rb_out)
         mode_row1.addWidget(rb_in_out)
