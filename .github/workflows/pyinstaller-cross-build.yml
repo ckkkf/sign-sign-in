@@ -57,7 +57,7 @@ jobs:
             "${package_dir}/resources/journals" \
             "${package_dir}/resources/logs" \
             "${package_dir}/resources/mitm/addons" \
-            "${package_dir}/resources/mitm/conf" \
+            "${package_dir}/resources/mitm/conf"
           ditto -c -k --sequesterRsrc --keepParent "${package_dir}" release/sign-sign-in-macos-${{ inputs.git_ref }}.zip
 
       - name: Upload macOS artifact
