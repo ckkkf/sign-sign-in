@@ -57,13 +57,16 @@ def current_cert_matches_installed_state():
 
 
 def summarize_cert_state():
-    if current_cert_matches_installed_state():
+    current_cert_matches = current_cert_matches_installed_state()
+    cert_installed = check_cert()
+
+    if current_cert_matches and cert_installed:
         return True, "新mitm证书"
 
-    if check_cert():
+    if cert_installed:
         return False, "旧mitm证书"
 
-    if current_cert_fingerprint():
-        return False, "未安装新证书"
+    if current_cert_matches or current_cert_fingerprint():
+        return False, "未安装证书"
 
     return False, "未生成证书"
