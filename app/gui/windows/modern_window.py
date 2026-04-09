@@ -94,7 +94,7 @@ class ModernWindow(QMainWindow):
         free_layout.setContentsMargins(14, 8, 14, 8)
         free_layout.setSpacing(10)
 
-        free_badge = QLabel("免费")
+        free_badge = QLabel("公告")
         free_badge.setObjectName("FreeBannerBadge")
         free_layout.addWidget(free_badge, 0, Qt.AlignVCenter)
 
@@ -291,12 +291,12 @@ class ModernWindow(QMainWindow):
             b.clicked.connect(func)
             t_grid.addWidget(b, i // 4, i % 4)
 
-        btn_journal = QPushButton("✨ AI 与 周记（测试）")
+        btn_journal = QPushButton("✨ AI 与 周记")
         btn_journal.setObjectName("ToolBtn")
         btn_journal.clicked.connect(self.open_weekly_journal)
         t_grid.addWidget(btn_journal, 2, 0, 1, 2)
 
-        btn_auto_clock = QPushButton("⏱️定时打卡配置（测试）")
+        btn_auto_clock = QPushButton("⏱️定时打卡（测试）by thirteen")
         btn_auto_clock.setObjectName("ToolBtn")
         btn_auto_clock.clicked.connect(self.open_auto_clock_config)
         t_grid.addWidget(btn_auto_clock, 2, 2, 1, 2)
@@ -328,17 +328,21 @@ class ModernWindow(QMainWindow):
         rb_out = QRadioButton("普通签退")
         self.grp.addButton(rb_out, 1)
 
+        rb_in_out = QRadioButton("普通签到签退")
+        self.grp.addButton(rb_in_out, 2)
+
         rb_img_in = QRadioButton("拍照签到")
-        self.grp.addButton(rb_img_in, 2)
+        self.grp.addButton(rb_img_in, 3)
 
         rb_img_out = QRadioButton("拍照签退")
-        self.grp.addButton(rb_img_out, 3)
+        self.grp.addButton(rb_img_out, 4)
 
         # 第一行：签到 + 签退
         mode_row1 = QHBoxLayout()
         mode_row1.setSpacing(20)
         mode_row1.addWidget(rb_in)
         mode_row1.addWidget(rb_out)
+        mode_row1.addWidget(rb_in_out)
         mode_row1.addWidget(rb_img_in)
         mode_row1.addWidget(rb_img_out)
         mode_row1.addStretch()
@@ -1631,8 +1635,10 @@ class ModernWindow(QMainWindow):
             elif checked_id == 1:
                 opt = self._mode_to_option("out")
             elif checked_id == 2:
-                opt = self._mode_to_option("photo_in", photo_image)
+                opt = {"action": "普通签到签退", "steps": [self._mode_to_option("in"), self._mode_to_option("out")]}
             elif checked_id == 3:
+                opt = self._mode_to_option("photo_in", photo_image)
+            elif checked_id == 4:
                 opt = self._mode_to_option("photo_out", photo_image)
             else:
                 ToastManager.instance().show("请选择打卡模式", "warning")

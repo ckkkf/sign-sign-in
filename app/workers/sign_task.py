@@ -11,8 +11,16 @@ from PySide6.QtCore import QThread, Signal
 from app.apis.xybsyw import login, get_plan, regeo, photo_sign_in_or_out, simple_sign_in_or_out
 from app.config.common import CERT_FILE, MITM_PROXY, XYB_APP_ID
 from app.mitm.cert_state import remember_current_cert_installed, summarize_cert_state
-from app.utils.commands import get_system_proxy, set_proxy, check_port_listening, reset_proxy, check_cert, bash
 from app.utils.code_channel import CodeChannel
+from app.utils.commands import (
+    get_system_proxy,
+    set_proxy,
+    check_port_listening,
+    reset_proxy,
+    check_cert,
+    bash,
+    remove_mitmproxy_certs,
+)
 from app.utils.files import read_config, check_img
 
 
@@ -199,6 +207,16 @@ class SignTaskThread(QThread):
         if action in ['普通签到', '普通签退']:
             simple_sign_in_or_out(args=args, config=config, geo=geo, traineeId=plan_data[0]['dateList'][0]['traineeId'],
                                   opt=self.sign_option)
+        elif action == '普通签到签退':
+            for step in self.sign_option.get('steps', []):
+                self.check_stop()
+                simple_sign_in_or_out(
+                    args=args,
+                    config=config,
+                    geo=geo,
+                    traineeId=plan_data[0]['dateList'][0]['traineeId'],
+                    opt=step,
+                )
         elif action in ['拍照签到', '拍照签退']:
             photo_sign_in_or_out(args=args, config=config, geo=geo, traineeId=plan_data[0]['dateList'][0]['traineeId'],
                                  opt=self.sign_option)
@@ -252,6 +270,9 @@ class SignTaskThread(QThread):
         logging.info("正在安装证书，若出现弹窗请点击[确定]！")
         # 使用 certutil 安装证书到 Windows 系统中
         try:
+            removed = remove_mitmproxy_certs()
+            if removed > 0:
+                logging.info(f"已清理 {removed} 个旧 mitmproxy 证书")
             # 安装证书
             while True:
                 stdout = bash(f'certutil -user -addstore Root "{file_name}"')
@@ -400,6 +421,9 @@ class GetCodeAndSessionThread(QThread):
     def install_cert(self, file_name):
         logging.info("正在安装证书，若出现弹窗请点击[确定]！")
         try:
+            removed = remove_mitmproxy_certs()
+            if removed > 0:
+                logging.info(f"已清理 {removed} 个旧 mitmproxy 证书")
             while True:
                 stdout = bash(f'certutil -user -addstore Root "{file_name}"')
                 if stdout and '命令成功完成' in stdout and check_cert():
@@ -413,7 +437,10 @@ class GetCodeAndSessionThread(QThread):
     @staticmethod
     def kill_wechat_before_launch():
         # 唤醒前仅关闭“小程序渲染进程”，不关闭 Host/微信主进程，避免影响 URI 唤起
-        process_names = ["WeChatAppEx.exe", "WeixinAppEx.exe"]
+        process_names = [
+            "WeChatAppEx.exe",
+            "WeixinAppEx.exe"
+        ]
         for name in process_names:
             try:
                 subprocess.run(

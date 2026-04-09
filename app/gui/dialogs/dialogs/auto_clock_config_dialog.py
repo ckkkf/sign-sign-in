@@ -303,7 +303,7 @@ class AutoClockConfigDialog(QDialog):
         self.notification_data = []
         self.pushplus_worker = None
 
-        self.setWindowTitle("定时打卡配置")
+        self.setWindowTitle("定时打卡配置 by thirteen")
         self.setFixedSize(900, 540)
         self.setAttribute(Qt.WA_StyledBackground, True)
 

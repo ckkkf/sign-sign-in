@@ -152,3 +152,19 @@ def check_cert():
     # 使用 os.popen 检查输出
     stdout = bash('certutil -user -store root | findstr mitmproxy')
     return bool(stdout and "mitmproxy" in stdout)
+
+
+def remove_mitmproxy_certs():
+    command = (
+        "powershell -NoProfile -Command "
+        "\"$ErrorActionPreference='SilentlyContinue'; "
+        "$certs = Get-ChildItem Cert:\\CurrentUser\\Root | Where-Object { $_.Subject -like '*mitmproxy*' }; "
+        "$count = @($certs).Count; "
+        "foreach ($cert in $certs) { Remove-Item -LiteralPath $cert.PSPath -Force }; "
+        "Write-Output $count\""
+    )
+    output = (bash(command) or "").strip()
+    try:
+        return int(output.splitlines()[-1]) if output else 0
+    except (ValueError, IndexError):
+        return 0
