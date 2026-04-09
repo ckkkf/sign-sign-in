@@ -904,7 +904,7 @@ class WeeklyJournalDialog(QDialog):
             # 在子线程中加载数据，避免阻塞UI
             with open("debug_crash.txt", "a", encoding="utf-8") as f: f.write("STEP 11: Creating LoadYearDataThread\n")
             self._is_loading_year_data = True
-            self._load_data_thread = LoadYearDataThread(self.config)
+            self._load_data_thread = LoadYearDataThread(self.config, self.args)
             self._load_data_thread.finished_signal.connect(self._on_year_data_loaded)
             self._load_data_thread.error_signal.connect(self._on_year_data_error)
             self._load_data_thread.start()

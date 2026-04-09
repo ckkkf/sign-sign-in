@@ -85,8 +85,10 @@ LOGIN_QR_READY_TEMPLATE = "等待扫码（{seconds:g}s）"
 LOGIN_QR_HINT = "点击“扫码登录”后会弹出完整二维码；扫码成功后会按默认 1 秒轮询并换取 Token。"
 LOGIN_QR_PLACEHOLDER = "二维码将在这里显示"
 LOGIN_QR_SCANNED = "扫码成功"
+LOGIN_QR_RETRYING = "微信轮询超时，正在重试..."
 LOGIN_QR_DIALOG_TITLE = "接龙扫码登录"
 LOGIN_QR_POLL_INTERVAL_SECONDS = 1.0
+LOGIN_QR_MAX_TIMEOUT_RETRIES = 5
 LOGIN_SUCCESS = "登录成功"
 LOGIN_FAILED = "登录失败"
 LOGIN_STOPPED = "已停止登录"
@@ -167,6 +169,7 @@ class JieLongQrLoginThread(QThread):
         try:
             self.check_stop()
             last_status = ""
+            timeout_retries = 0
             last_status = self._emit_status(LOGIN_QR_PREPARING, last_status)
             qr_payload = create_qr_login()
             image_bytes = download_qrcode_image(qr_payload["qrcode_url"])
@@ -188,6 +191,16 @@ class JieLongQrLoginThread(QThread):
                 result = poll_qr_login(qr_payload["uuid"])
                 status = result.get("status")
                 message = str(result.get("message") or LOGIN_TIMEOUT)
+
+                if status == "timeout":
+                    timeout_retries += 1
+                    if timeout_retries >= LOGIN_QR_MAX_TIMEOUT_RETRIES:
+                        raise RuntimeError("微信轮询多次超时，请检查网络后重试")
+                    last_status = self._emit_status(LOGIN_QR_RETRYING, last_status)
+                    self.msleep(int(self.poll_interval_seconds * 1000))
+                    continue
+
+                timeout_retries = 0
 
                 if status == "confirmed":
                     last_status = self._emit_status(LOGIN_TOKEN_EXCHANGE, last_status)
@@ -576,7 +589,7 @@ class JieLongDialog(QWidget):
         self.btn_paste_share = QPushButton(PASTE_BUTTON)
         self.btn_paste_share.setObjectName("PasteBtn")
         self.btn_paste_share.setFixedSize(40, 24)
-        self.btn_paste_share.clicked.connect(self._parse_share_url)
+        self.btn_paste_share.clicked.connect(lambda _checked=False: self._parse_share_url())
         share_input_row.addWidget(self.btn_paste_share)
         top_layout.addLayout(share_input_row)
 

@@ -1,6 +1,6 @@
 import os
 
-from core.paths import get_base_dir
+from core.paths import get_base_dir, get_user_data_dir
 
 # 项目信息
 PROJECT_VERSION = "v1.2.3"
@@ -62,15 +62,19 @@ APP_DIR = os.path.join(BASE_DIR, "app")
 
 # 资源目录
 RES_DIR = os.path.join(BASE_DIR, "resources")
+USER_DATA_DIR = get_user_data_dir("SignSignIn")
 
-# mitmdump
-MITM_DIR = os.path.join(RES_DIR, "mitm")
+# mitm static resources / runtime dirs
+MITM_RESOURCE_DIR = os.path.join(RES_DIR, "mitm")
+MITM_DIR = os.path.join(USER_DATA_DIR, "mitm")
+MITM_CONF_DIR = os.path.join(MITM_DIR, "conf")
+MITM_CERT_STATE_FILE = os.path.join(USER_DATA_DIR, "config", "mitm_cert_state.json")
 
 # 配置文件目录（你如果想放 resources/config/ 也可以）
 CONFIG_FILE = os.path.join(RES_DIR, "config", "config.json")
 
 # code文件目录
-CERT_FILE = os.path.join(RES_DIR, "cert", "mitmproxy-ca-cert.p12")
+CERT_FILE = os.path.join(USER_DATA_DIR, "cert", "mitmproxy-ca-cert.p12")
 
 # 图片目录
 IMAGE_DIR = os.path.join(RES_DIR, "img")
@@ -87,7 +91,7 @@ PACKET_LOG_FILE = os.path.join(LOG_DIR, "mitm_packet.log")
 SESSION_CACHE_FILE = os.path.join(RES_DIR, "config", "session_cache.json")
 
 # mitm addons
-ADDONS_DIR = os.path.join(MITM_DIR, "addons")
+ADDONS_DIR = os.path.join(MITM_RESOURCE_DIR, "addons")
 
 # code 文件传递路径（mitm addon 写入，主程序轮询读取）
 CODE_FILE = os.path.join(RES_DIR, "config", "mitm_code.json")

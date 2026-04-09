@@ -5,7 +5,8 @@ import subprocess
 import sys
 import time
 
-from app.config.common import ADDONS_DIR, BASE_DIR, LOG_DIR, MITM_DIR, MITM_PROXY
+from app.config.common import ADDONS_DIR, BASE_DIR, LOG_DIR, MITM_CONF_DIR, MITM_PROXY
+from app.mitm.runtime_storage import ensure_runtime_mitm_files
 from app.utils.commands import check_port_listening, get_process_by_port, kill_process_tree
 
 
@@ -17,7 +18,7 @@ class MitmService:
         self.host, port = MITM_PROXY.split(":")
         self.port = int(port)
         self.addon = os.path.join(ADDONS_DIR, "get_code.py")
-        self.confdir = os.path.join(MITM_DIR, "conf")
+        self.confdir = MITM_CONF_DIR
         self.start_log = os.path.join(LOG_DIR, "mitm_start.log")
         self.last_error = ""
 
@@ -98,6 +99,7 @@ class MitmService:
         if self.is_running():
             self.stop_mitm()
 
+        ensure_runtime_mitm_files()
         os.makedirs(self.confdir, exist_ok=True)
         os.makedirs(os.path.dirname(self.start_log), exist_ok=True)
         self.last_error = ""

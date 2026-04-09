@@ -6,9 +6,10 @@ class LoadYearDataThread(QThread):
     finished_signal = Signal(dict, str, list)  # login_args, trainee_id, year_data
     error_signal = Signal(str)
 
-    def __init__(self, config):
+    def __init__(self, config, login_args=None):
         super().__init__()
         self.config = config
+        self.login_args = dict(login_args) if login_args else None
 
     def run(self):
         try:
@@ -17,17 +18,21 @@ class LoadYearDataThread(QThread):
             with open("debug_crash.txt", "a", encoding="utf-8") as f: f.write("THREAD STEP 1: Thread started\n")
             from app.apis.xybsyw import login, get_plan, load_blog_year
 
-            # 尝试使用缓存的登录信息
-            try:
-                with open("debug_crash.txt", "a", encoding="utf-8") as f: f.write("THREAD STEP 2: Attempting login\n")
-                login_args = login(self.config['input'], use_cache=True)
-                if self.isInterruptionRequested():
+            # 优先复用打开周记页时已经校验过的登录信息，避免重复触发登录流程日志。
+            login_args = dict(self.login_args) if self.login_args else None
+            if login_args:
+                with open("debug_crash.txt", "a", encoding="utf-8") as f: f.write("THREAD STEP 2: Reusing existing login args\n")
+            else:
+                try:
+                    with open("debug_crash.txt", "a", encoding="utf-8") as f: f.write("THREAD STEP 2: Attempting login\n")
+                    login_args = login(self.config['input'], use_cache=True)
+                    if self.isInterruptionRequested():
+                        return
+                    with open("debug_crash.txt", "a", encoding="utf-8") as f: f.write("THREAD STEP 3: Login successful\n")
+                except Exception as login_err:
+                    with open("debug_crash.txt", "a", encoding="utf-8") as f: f.write(f"THREAD ERROR: Login failed - {login_err}\n")
+                    self.error_signal.emit(f"使用缓存登录失败: {login_err}")
                     return
-                with open("debug_crash.txt", "a", encoding="utf-8") as f: f.write("THREAD STEP 3: Login successful\n")
-            except Exception as login_err:
-                with open("debug_crash.txt", "a", encoding="utf-8") as f: f.write(f"THREAD ERROR: Login failed - {login_err}\n")
-                self.error_signal.emit(f"使用缓存登录失败: {login_err}")
-                return
 
             # 获取traineeId
             with open("debug_crash.txt", "a", encoding="utf-8") as f: f.write("THREAD STEP 4: Getting plan\n")

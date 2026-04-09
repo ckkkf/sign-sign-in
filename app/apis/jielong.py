@@ -87,6 +87,9 @@ def get_thread_id_by_url(url: str) -> str:
     share_url = str(url or "").strip()
     if not share_url:
         raise RuntimeError("请先粘贴接龙分享链接")
+    if not share_url.lower().startswith(("http://", "https://")):
+        logging.warning("[接龙] 分享链接无效：%s", share_url)
+        raise RuntimeError("请先粘贴有效的接龙分享链接")
     logging.info("[JieLong] ===== PARSE SHARE URL =====")
     logging.info("[JieLong] GET %s", share_url)
     response = requests.get(share_url, allow_redirects=False, timeout=12)
@@ -231,28 +234,36 @@ def download_qrcode_image(qrcode_url: str) -> bytes:
     response.raise_for_status()
     return response.content
 def poll_qr_login(uuid: str) -> Dict[str, Any]:
-    response = requests.get(
-        JIELONG_QR_POLL_URL,
-        headers={
-            "accept": "*/*",
-            "accept-language": "zh-CN,zh;q=0.9",
-            "cache-control": "no-cache",
-            "pragma": "no-cache",
-            "referer": "https://open.weixin.qq.com/",
-            "sec-fetch-dest": "script",
-            "sec-fetch-mode": "no-cors",
-            "sec-fetch-site": "same-site",
-            "user-agent": (
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-                "(KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36"
-            ),
-        },
+    try:
+        response = requests.get(
+            JIELONG_QR_POLL_URL,
+            headers={
+                "accept": "*/*",
+                "accept-language": "zh-CN,zh;q=0.9",
+                "cache-control": "no-cache",
+                "pragma": "no-cache",
+                "referer": "https://open.weixin.qq.com/",
+                "sec-fetch-dest": "script",
+                "sec-fetch-mode": "no-cors",
+                "sec-fetch-site": "same-site",
+                "user-agent": (
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                    "(KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36"
+                ),
+            },
         params={
             "uuid": str(uuid or "").strip(),
             "_": int(time.time() * 1000),
         },
-        timeout=12,
     )
+    except requests.exceptions.ReadTimeout:
+        return {
+            "status": "timeout",
+            "wx_errcode": "",
+            "code": "",
+            "message": "微信轮询超时",
+            "raw": "",
+        }
     response.raise_for_status()
     text = response.text or ""
     errcode_match = re.search(r"window\.wx_errcode=(\d+);", text)

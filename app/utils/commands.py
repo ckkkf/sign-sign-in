@@ -1,4 +1,5 @@
 import ctypes
+import locale
 import logging
 import re
 import socket
@@ -118,13 +119,16 @@ def is_port_in_use(port: int) -> bool: return get_process_by_port(port) is not N
 
 def bash(command: str) -> str:
     try:
+        encoding = locale.getpreferredencoding(False) or "utf-8"
         p = subprocess.Popen(
             command,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            shell=True,  # 让字符串命令可用
-            text=True,  # 返回字符串而不是字节
-            creationflags=subprocess.CREATE_NO_WINDOW  # ⭐ 隐藏黑窗口（关键）
+            shell=True,
+            text=True,
+            encoding=encoding,
+            errors="ignore",
+            creationflags=subprocess.CREATE_NO_WINDOW
         )
         out, _ = p.communicate()
         return out if out else ""

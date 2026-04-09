@@ -2,14 +2,16 @@ import hashlib
 import json
 import os
 
-from app.config.common import MITM_DIR, RES_DIR
+from app.config.common import MITM_CERT_STATE_FILE, MITM_CONF_DIR
+from app.mitm.runtime_storage import ensure_runtime_mitm_files
 from app.utils.commands import check_cert
 
-STATE_FILE = os.path.join(RES_DIR, "config", "mitm_cert_state.json")
-CURRENT_CERT_FILE = os.path.join(MITM_DIR, "conf", "mitmproxy-ca-cert.cer")
+STATE_FILE = MITM_CERT_STATE_FILE
+CURRENT_CERT_FILE = os.path.join(MITM_CONF_DIR, "mitmproxy-ca-cert.cer")
 
 
 def _read_state():
+    ensure_runtime_mitm_files()
     if not os.path.exists(STATE_FILE):
         return {}
     try:
@@ -20,12 +22,14 @@ def _read_state():
 
 
 def _write_state(payload: dict):
+    ensure_runtime_mitm_files()
     os.makedirs(os.path.dirname(STATE_FILE), exist_ok=True)
     with open(STATE_FILE, "w", encoding="utf-8") as handle:
         json.dump(payload, handle, ensure_ascii=False, indent=2)
 
 
 def current_cert_fingerprint():
+    ensure_runtime_mitm_files()
     if not os.path.exists(CURRENT_CERT_FILE):
         return ""
 
@@ -57,7 +61,7 @@ def summarize_cert_state():
         return True, "匹配当前 mitm 证书"
 
     if check_cert():
-        return False, "已安装旧证书"
+        return True, "已安装旧证书"
 
     if current_cert_fingerprint():
         return False, "未安装当前证书"

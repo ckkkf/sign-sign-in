@@ -196,7 +196,6 @@ def login(config, use_cache=True):
                 'traineeId': cached.get('traineeId')
             }
 
-    logging.info('正在执行登录流程...')
     code = config.get('code')
     if not code or code == '':
         raise RuntimeError('❌ Code为空，请重新获取！')

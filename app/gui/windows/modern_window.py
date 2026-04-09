@@ -1460,7 +1460,7 @@ class ModernWindow(QMainWindow):
             self._log_next_auto_clock_times()
         else:
             self.auto_clock_timer.stop()
-            logging.info("Auto-clock disabled")
+            logging.info("Auto-clock disabled (feature not enabled or no valid tasks configured)")
 
     def _can_start_sign_task(self) -> bool:
 
