@@ -86,6 +86,8 @@ MITM_CERT_STATE_FILE = os.path.join(USER_DATA_DIR, "config", "mitm_cert_state.js
 # 配置文件目录（你如果想放 resources/config/ 也可以）
 CONFIG_FILE = os.path.join(RES_DIR, "config", "config.json")
 UPDATE_ASSET_CACHE_FILE = os.path.join(RES_DIR, "cache", "update_asset_cache.json")
+UPDATE_SETTINGS_FILE = os.path.join(RES_DIR, "cache", "update_settings.json")
+JIELONG_FORM_DRAFTS_FILE = os.path.join(RES_DIR, "cache", "jielong_form_drafts.json")
 
 # code文件目录
 CERT_FILE = os.path.join(USER_DATA_DIR, "cert", "mitmproxy-ca-cert.p12")
@@ -102,13 +104,13 @@ LOG_DIR = os.path.join(RES_DIR, "logs")
 PACKET_LOG_FILE = os.path.join(LOG_DIR, "mitm_packet.log")
 
 # 会话缓存文件
-SESSION_CACHE_FILE = os.path.join(RES_DIR, "config", "session_cache.json")
+SESSION_CACHE_FILE = os.path.join(RES_DIR, "cache", "session_cache.json")
 
 # mitm addons
 ADDONS_DIR = os.path.join(MITM_RESOURCE_DIR, "addons")
 
 # code 文件传递路径（mitm addon 写入，主程序轮询读取）
-CODE_FILE = os.path.join(RES_DIR, "config", "mitm_code.json")
+CODE_FILE = os.path.join(RES_DIR, "cache", "mitm_code.json")
 
 
 def ensure_resource_layout():

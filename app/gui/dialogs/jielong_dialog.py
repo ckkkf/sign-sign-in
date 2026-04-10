@@ -31,7 +31,7 @@ from app.apis.jielong import (
     poll_qr_login,
     submit_record,
 )
-from app.config.common import CONFIG_FILE
+from app.config.common import CONFIG_FILE, JIELONG_FORM_DRAFTS_FILE
 from app.gui.components.no_wheel_combo import NoWheelComboBox
 from app.gui.components.toast import ToastManager
 from app.gui.dialogs.image_manager_dialog import ImageManagerDialog
@@ -758,13 +758,24 @@ class JieLongDialog(QWidget):
         return thread_id
 
     def _load_form_draft_answers(self) -> dict:
-        config = self._load_config() or {}
-        jielong = ((config.get("settings") or {}).get("jielong") or {})
-        drafts = jielong.get("form_drafts") or {}
+        drafts = self._load_form_drafts()
         thread_key = self._current_form_draft_key()
         draft = drafts.get(thread_key) or {}
         answers = draft.get("answers") or {}
         return deepcopy(answers) if isinstance(answers, dict) else {}
+
+    def _load_form_drafts(self) -> dict:
+        try:
+            drafts = read_config(JIELONG_FORM_DRAFTS_FILE)
+        except Exception:
+            drafts = {}
+        if isinstance(drafts, dict) and not isinstance(drafts.get("settings"), dict):
+            return drafts
+
+        config = self._load_config() or {}
+        jielong = ((config.get("settings") or {}).get("jielong") or {})
+        drafts = jielong.get("form_drafts") or {}
+        return drafts if isinstance(drafts, dict) else {}
 
     def _collect_field_answers(self, *, visible_only: bool) -> dict:
         answers = {}
@@ -912,12 +923,9 @@ class JieLongDialog(QWidget):
         if not thread_key:
             return
         answers = self._collect_field_answers(visible_only=False)
-        def updater(config: dict):
-            settings = config.setdefault("settings", {})
-            jielong = settings.setdefault("jielong", {})
-            drafts = jielong.setdefault("form_drafts", {})
-            drafts[thread_key] = {"answers": answers}
-        self._update_config_file(updater)
+        drafts = self._load_form_drafts()
+        drafts[thread_key] = {"answers": answers}
+        save_json_file(JIELONG_FORM_DRAFTS_FILE, drafts)
 
     def _bind_form_draft_persistence(self, info: dict):
         kind = info.get("kind")

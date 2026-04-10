@@ -10,7 +10,7 @@ CODE_FILE = os.path.normpath(
         os.path.dirname(__file__),
         "..",
         "..",
-        "config",
+        "cache",
         "mitm_code.json",
     )
 )

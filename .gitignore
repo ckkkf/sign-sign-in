@@ -48,6 +48,7 @@ md/
 tests
 .omx
 /resources/logs
+/resources/cache
 /resources/mitm/conf/
 /resources/config/mitm*.json
 */__pycache__

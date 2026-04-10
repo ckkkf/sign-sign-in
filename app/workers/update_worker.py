@@ -10,7 +10,7 @@ from urllib.parse import unquote, urlparse
 import requests
 from PySide6.QtCore import QThread, Signal
 
-from app.config.common import CONFIG_FILE
+from app.config.common import CONFIG_FILE, UPDATE_SETTINGS_FILE
 from app.utils.files import read_config
 
 
@@ -356,6 +356,12 @@ class UpdateCheckWorker(QThread):
 
     @staticmethod
     def _load_update_settings() -> Dict[str, Any]:
+        try:
+            update_settings = read_config(UPDATE_SETTINGS_FILE)
+        except Exception:
+            update_settings = {}
+        if isinstance(update_settings, dict) and not isinstance(update_settings.get("settings"), dict):
+            return update_settings
         try:
             config = read_config(CONFIG_FILE)
         except Exception:

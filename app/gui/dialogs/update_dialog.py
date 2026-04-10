@@ -24,7 +24,14 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from app.config.common import BASE_DIR, CONFIG_FILE, PROJECT_GITHUB, PROJECT_VERSION, UPDATE_ASSET_CACHE_FILE
+from app.config.common import (
+    BASE_DIR,
+    CONFIG_FILE,
+    PROJECT_GITHUB,
+    PROJECT_VERSION,
+    UPDATE_ASSET_CACHE_FILE,
+    UPDATE_SETTINGS_FILE,
+)
 from app.gui.components.toast import ToastManager
 from app.utils.files import read_config, save_json_file
 from app.workers.update_worker import UpdateCheckWorker, UpdateDownloadWorker
@@ -32,7 +39,7 @@ from app.workers.update_worker import UpdateCheckWorker, UpdateDownloadWorker
 
 SOURCE_LABELS = {
     "github": "GitHub 官方",
-    "gh_proxy": "gh-proxy 主站",
+    # "gh_proxy": "gh-proxy 主站",
     "gh_proxy_hk": "gh-proxy 香港",
     "gh_proxy_cdn": "gh-proxy Fastly",
     "gh_proxy_edgeone": "gh-proxy EdgeOne",
@@ -648,7 +655,6 @@ class UpdateDialog(QDialog):
             cache = self._load_legacy_asset_cache()
             if cache:
                 self._persist_asset_cache_payload(cache)
-                self._clear_legacy_asset_cache()
         if not isinstance(cache, dict):
             return {}
         normalized: Dict[str, Dict[str, Any]] = {}
@@ -661,7 +667,6 @@ class UpdateDialog(QDialog):
     def _persist_asset_cache(self):
         payload = {tag: dict(value) for tag, value in self.release_asset_cache.items() if tag}
         self._persist_asset_cache_payload(payload)
-        self._clear_legacy_asset_cache()
 
     def _load_asset_cache_file(self) -> Dict[str, Any]:
         try:
@@ -675,22 +680,13 @@ class UpdateDialog(QDialog):
         return payload
 
     def _load_legacy_asset_cache(self) -> Dict[str, Any]:
-        config = self._load_update_config()
+        config = self._load_main_config()
         update_settings = ((config.get("settings") or {}).get("update") or {})
         cache = update_settings.get("asset_cache") or {}
         return cache if isinstance(cache, dict) else {}
 
     def _persist_asset_cache_payload(self, payload: Dict[str, Any]):
         save_json_file(UPDATE_ASSET_CACHE_FILE, payload if isinstance(payload, dict) else {})
-
-    def _clear_legacy_asset_cache(self):
-        config = self._load_update_config()
-        settings = config.get("settings") or {}
-        update_settings = settings.get("update") or {}
-        if "asset_cache" not in update_settings:
-            return
-        update_settings.pop("asset_cache", None)
-        save_json_file(CONFIG_FILE, config)
 
     def _apply_cached_assets_to_releases(self):
         for release in [self.latest_release] + self.history_releases:
@@ -737,15 +733,28 @@ class UpdateDialog(QDialog):
         self._merge_release_asset(release, asset_info)
         return bool((release or {}).get("download_url"))
 
-    def _load_update_config(self) -> dict:
+    def _load_main_config(self) -> dict:
         try:
             return read_config(CONFIG_FILE)
         except Exception:
-            return {"settings": {"update": {"source": "gh_proxy_edgeone", "sources": {}}}}
+            return {}
+
+    def _load_update_settings(self) -> dict:
+        try:
+            payload = read_config(UPDATE_SETTINGS_FILE)
+        except Exception:
+            payload = {}
+        if isinstance(payload, dict) and not isinstance(payload.get("settings"), dict):
+            return payload
+        config = self._load_main_config()
+        update_settings = ((config.get("settings") or {}).get("update") or {})
+        return dict(update_settings) if isinstance(update_settings, dict) else {}
+
+    def _persist_update_settings(self, update_settings: dict):
+        save_json_file(UPDATE_SETTINGS_FILE, dict(update_settings or {}))
 
     def _load_source_controls(self):
-        config = self._load_update_config()
-        update_settings = ((config.get("settings") or {}).get("update") or {})
+        update_settings = self._load_update_settings()
         source_name = UpdateCheckWorker._get_update_source_name(update_settings)
         custom_sources = update_settings.get("sources") or {}
         index = self.source_combo.findData(source_name)
@@ -763,17 +772,14 @@ class UpdateDialog(QDialog):
         return value or self._default_download_dir()
 
     def _load_download_dir_controls(self):
-        config = self._load_update_config()
-        update_settings = ((config.get("settings") or {}).get("update") or {})
+        update_settings = self._load_update_settings()
         saved_dir = str(update_settings.get("download_dir") or "").strip()
         self.download_dir_input.setText(saved_dir or self._default_download_dir())
 
     def _persist_download_dir(self, download_dir: str):
-        config = self._load_update_config()
-        settings = config.setdefault("settings", {})
-        update_settings = settings.setdefault("update", {})
+        update_settings = self._load_update_settings()
         update_settings["download_dir"] = download_dir.strip()
-        save_json_file(CONFIG_FILE, config)
+        self._persist_update_settings(update_settings)
 
     def _browse_download_dir(self):
         current_dir = self._resolved_download_dir()
@@ -805,21 +811,20 @@ class UpdateDialog(QDialog):
         ToastManager.instance().show(message, "success")
 
     def _persist_source_settings(self, source_name: str, custom_value: str = ""):
-        config = self._load_update_config()
-        settings = config.setdefault("settings", {})
-        update_settings = settings.setdefault("update", {})
+        update_settings = self._load_update_settings()
         sources = update_settings.setdefault("sources", {})
         update_settings["source"] = source_name
         if custom_value:
             sources["custom"] = custom_value.strip()
-        save_json_file(CONFIG_FILE, config)
+        elif isinstance(sources, dict):
+            sources.pop("custom", None)
+        self._persist_update_settings(update_settings)
 
     def _refresh_release_urls(self):
         current_source = self.source_combo.currentData()
         custom_value = self.custom_source_input.text().strip()
         self._persist_source_settings(current_source, custom_value)
-        source_config = self._load_update_config()
-        update_settings = ((source_config.get("settings") or {}).get("update") or {})
+        update_settings = self._load_update_settings()
         for release in [self.latest_release] + self.history_releases:
             raw_url = release.get("raw_download_url") or ""
             if not raw_url:
