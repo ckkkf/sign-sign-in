@@ -1135,8 +1135,8 @@ class ModernWindow(QMainWindow):
                 ToastManager.instance().show("正在检查更新，请稍候...", "info")
             return
 
-        # 直接基于 GitHub Release 检查更新
-        self.update_worker = UpdateCheckWorker(PROJECT_GITHUB, PROJECT_VERSION)
+        worker_mode = "latest" if silent else "center"
+        self.update_worker = UpdateCheckWorker(PROJECT_GITHUB, PROJECT_VERSION, mode=worker_mode)
         self.update_worker.result_signal.connect(
             lambda success, data: self.on_update_check_result(success, data, silent)
         )
@@ -1158,13 +1158,12 @@ class ModernWindow(QMainWindow):
             return
 
         has_update = data.get("has_update", False)
-        if has_update:
-            # 有新版本，显示更新对话框
-            UpdateDialog(data, self).exec()
-        else:
-            # 无新版本
-            if not silent:
-                ToastManager.instance().show("当前已是最新版本！", "success")
+        if silent:
+            if has_update:
+                UpdateDialog(data, self).exec()
+            return
+
+        UpdateDialog(data, self).exec()
 
     def open_weekly_journal(self):
         """打开周记对话框，先检查jsessionid是否有效"""

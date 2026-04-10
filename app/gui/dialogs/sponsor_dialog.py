@@ -22,6 +22,25 @@ from app.workers.http_worker import HttpWorker
 from app.utils.files import save_json_file, read_config
 
 
+def build_qr_image(url: str, box_size: int = 5) -> QImage:
+    if hasattr(qrcode, "make"):
+        qr_image = qrcode.make(url, box_size=box_size)
+    elif hasattr(qrcode, "QRCode"):
+        qr_builder = qrcode.QRCode(box_size=box_size, border=4)
+        qr_builder.add_data(url)
+        qr_builder.make(fit=True)
+        qr_image = qr_builder.make_image(fill_color="black", back_color="white")
+    else:
+        raise RuntimeError("?????????????????? qrcode[pil]????? django_qrcode")
+
+    buffer = io.BytesIO()
+    qr_image.save(buffer, format="PNG")
+    qimg = QImage.fromData(buffer.getvalue())
+    if qimg.isNull():
+        raise RuntimeError("???????")
+    return qimg
+
+
 class SponsorSubmitDialog(QDialog):
     """赞助榜提交对话框 (含二维码)"""
 
@@ -151,10 +170,7 @@ class SponsorSubmitDialog(QDialog):
             column = QVBoxLayout()
             column.setSpacing(5)
             lbl_img = QLabel(alignment=Qt.AlignCenter)
-            qr = qrcode.make(url,box_size=5)
-            buffer = io.BytesIO()
-            qr.save(buffer, kind="png", scale=1)
-            qimg = QImage.fromData(buffer.getvalue())
+            qimg = build_qr_image(url, box_size=5)
             lbl_img.setPixmap(QPixmap.fromImage(qimg))
             column.addWidget(lbl_img)
 

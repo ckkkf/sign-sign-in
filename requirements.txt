@@ -1,4 +1,4 @@
-django_qrcode==0.3
+qrcode[pil]==8.2
 gmssl==3.2.2
 mitmproxy==12.2.1
 playwright==1.58.0
