@@ -283,7 +283,7 @@ class ModernWindow(QMainWindow):
             ("📤 发送反馈", self.show_feedback),
             ("💻 打开CMD", lambda: subprocess.Popen(["cmd.exe"], creationflags=subprocess.CREATE_NEW_CONSOLE)),
             ("🖼 图片管理", self.open_image_manager),
-            ("🔄 检查更新", self.check_update),
+            ("🔄 更新中心", self.check_update),
         ]
         for i, (name, func) in enumerate(tools):
             b = QPushButton(name)
@@ -1130,6 +1130,10 @@ class ModernWindow(QMainWindow):
 
     def check_update(self, silent: bool = False):
         """检查更新"""
+        if not silent:
+            UpdateDialog({}, self).exec()
+            return
+
         if hasattr(self, 'update_worker') and self.update_worker.isRunning():
             if not silent:
                 ToastManager.instance().show("正在检查更新，请稍候...", "info")
@@ -1141,9 +1145,6 @@ class ModernWindow(QMainWindow):
             lambda success, data: self.on_update_check_result(success, data, silent)
         )
         self.update_worker.start()
-
-        if not silent:
-            ToastManager.instance().show("正在检查更新...", "info")
 
     def check_update_silent(self):
         """静默检查更新（启动时调用）"""
@@ -1160,7 +1161,8 @@ class ModernWindow(QMainWindow):
         has_update = data.get("has_update", False)
         if silent:
             if has_update:
-                UpdateDialog(data, self).exec()
+                latest_version = data.get("latest_version") or "新版本"
+                ToastManager.instance().show(f"发现新版本：{latest_version}", "info")
             return
 
         UpdateDialog(data, self).exec()

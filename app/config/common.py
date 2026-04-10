@@ -3,7 +3,8 @@ import os
 from core.paths import get_base_dir, get_user_data_dir
 
 # 项目信息
-PROJECT_VERSION = "v1.3.0"
+# PROJECT_VERSION = "v1.3.0"
+PROJECT_VERSION = "v1.2.9"
 PROJECT_NAME = "🔰 Sign sign in"
 PROJECT_GITHUB = "https://github.com/ckkkf/sign-sign-in"
 PROJECT_GITEE = "https://gitee.com/ckkk524334/sign-sign-in"
@@ -64,6 +65,7 @@ APP_DIR = os.path.join(BASE_DIR, "app")
 RES_DIR = os.path.join(BASE_DIR, "resources")
 USER_DATA_DIR = get_user_data_dir("SignSignIn")
 REQUIRED_RESOURCE_DIRS = [
+    os.path.join(RES_DIR, "cache"),
     os.path.join(RES_DIR, "cert"),
     os.path.join(RES_DIR, "config"),
     os.path.join(RES_DIR, "img"),
@@ -83,6 +85,7 @@ MITM_CERT_STATE_FILE = os.path.join(USER_DATA_DIR, "config", "mitm_cert_state.js
 
 # 配置文件目录（你如果想放 resources/config/ 也可以）
 CONFIG_FILE = os.path.join(RES_DIR, "config", "config.json")
+UPDATE_ASSET_CACHE_FILE = os.path.join(RES_DIR, "cache", "update_asset_cache.json")
 
 # code文件目录
 CERT_FILE = os.path.join(USER_DATA_DIR, "cert", "mitmproxy-ca-cert.p12")

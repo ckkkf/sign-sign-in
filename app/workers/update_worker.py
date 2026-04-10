@@ -1,5 +1,7 @@
 import platform
 import re
+import threading
+import time
 from html import unescape
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -16,6 +18,7 @@ class UpdateCheckWorker(QThread):
     """更新检查线程。"""
 
     result_signal = Signal(bool, dict)
+    DEFAULT_UPDATE_SOURCE_NAME = "gh_proxy_edgeone"
 
     def __init__(
         self,
@@ -105,7 +108,7 @@ class UpdateCheckWorker(QThread):
 
         while len(releases) < limit and empty_pages < 2:
             html = self._fetch_releases_page(owner, repo, page)
-            page_releases = self._parse_releases_page(html, owner, repo)
+            page_releases = self._parse_releases_page(html, owner, repo, resolve_assets=False)
             fresh_items = []
             for item in page_releases:
                 tag = item.get("tag_name") or ""
@@ -122,17 +125,69 @@ class UpdateCheckWorker(QThread):
                 break
             page += 1
 
-        return releases[:limit]
+        releases = releases[:limit]
+        if releases:
+            releases[0] = self._hydrate_release_asset(owner, repo, releases[0])
+        return releases
 
     def _fetch_releases_page(self, owner: str, repo: str, page: int) -> str:
         url = f"https://github.com/{owner}/{repo}/releases"
         if page > 1:
             url = f"{url}?page={page}"
-        response = requests.get(url, headers=self._github_headers(), timeout=self.timeout)
-        response.raise_for_status()
-        return response.text
+        return self._request_text(url)
 
-    def _parse_releases_page(self, html: str, owner: str, repo: str) -> List[Dict[str, Any]]:
+    def _fetch_release_assets_page(self, owner: str, repo: str, tag_name: str) -> str:
+        url = f"https://github.com/{owner}/{repo}/releases/expanded_assets/{tag_name}"
+        return self._request_text(url)
+
+    def _request_text(self, url: str) -> str:
+        last_error: Optional[Exception] = None
+        for candidate in self._build_request_urls(url):
+            try:
+                response = requests.get(candidate, headers=self._github_headers(), timeout=self.timeout)
+                response.raise_for_status()
+                return response.text
+            except requests.RequestException as exc:
+                last_error = exc
+        if last_error:
+            raise last_error
+        raise RuntimeError("请求地址为空")
+
+    def _resolve_release_assets(self, owner: str, repo: str, tag_name: str, block: str) -> List[Dict[str, Any]]:
+        try:
+            expanded_assets_html = self._fetch_release_assets_page(owner, repo, tag_name)
+        except Exception:
+            expanded_assets_html = ""
+        assets = self._parse_release_assets(expanded_assets_html) if expanded_assets_html else []
+        if assets:
+            return assets
+        return self._parse_release_assets(block)
+
+    def _hydrate_release_asset(self, owner: str, repo: str, release: Dict[str, Any]) -> Dict[str, Any]:
+        hydrated = dict(release or {})
+        tag_name = hydrated.get("tag_name") or ""
+        if not tag_name:
+            return hydrated
+        assets = self._resolve_release_assets(owner, repo, tag_name, "")
+        asset = self._pick_download_asset({"assets": assets})
+        raw_download_url = asset.get("browser_download_url", "")
+        download_name = asset.get("name", "")
+        suffix = Path(download_name).suffix.lower()
+        install_kind = "exe" if suffix == ".exe" else "zip" if suffix == ".zip" else ""
+        hydrated["raw_download_url"] = raw_download_url
+        hydrated["download_url"] = self._apply_download_source(raw_download_url)
+        hydrated["download_name"] = download_name
+        hydrated["download_source"] = self._get_update_source_name()
+        hydrated["asset_available"] = bool(download_name and raw_download_url)
+        hydrated["install_kind"] = install_kind
+        hydrated["install_supported"] = install_kind in {"exe", "zip"}
+        return hydrated
+
+    def get_release_asset(self, repo_url: str, tag_name: str) -> Dict[str, Any]:
+        owner, repo = self._parse_github_repo(repo_url)
+        return self._hydrate_release_asset(owner, repo, {"tag_name": tag_name})
+
+    def _parse_releases_page(self, html: str, owner: str, repo: str, resolve_assets: bool = False) -> List[Dict[str, Any]]:
         matches = list(
             re.finditer(
                 rf'href="(?:https://github\.com)?/{re.escape(owner)}/{re.escape(repo)}/releases/tag/([^"#?]+)"[^>]*>(.*?)</a>',
@@ -155,7 +210,7 @@ class UpdateCheckWorker(QThread):
             body = self._extract_release_body(block) or "暂无更新说明"
             published_at = self._extract_release_time(block)
             html_url = f"https://github.com/{repo_key}/releases/tag/{tag_name}"
-            assets = self._parse_release_assets(block)
+            assets = self._resolve_release_assets(owner, repo, tag_name, block) if resolve_assets else []
             asset = self._pick_download_asset({"assets": assets})
             raw_download_url = asset.get("browser_download_url", "")
             download_name = asset.get("name", "")
@@ -310,7 +365,7 @@ class UpdateCheckWorker(QThread):
         return update_settings if isinstance(update_settings, dict) else {}
 
     @classmethod
-    def _get_update_sources(cls) -> Dict[str, str]:
+    def _get_update_sources(cls, update_settings: Optional[Dict[str, Any]] = None) -> Dict[str, str]:
         default_sources = {
             "github": "",
             "gh_proxy": "https://gh-proxy.org/{url}",
@@ -318,7 +373,7 @@ class UpdateCheckWorker(QThread):
             "gh_proxy_cdn": "https://cdn.gh-proxy.org/{url}",
             "gh_proxy_edgeone": "https://edgeone.gh-proxy.org/{url}",
         }
-        update_settings = cls._load_update_settings()
+        update_settings = update_settings if isinstance(update_settings, dict) else cls._load_update_settings()
         custom_sources = update_settings.get("sources") or {}
         if not isinstance(custom_sources, dict):
             return default_sources
@@ -329,18 +384,40 @@ class UpdateCheckWorker(QThread):
         return merged
 
     @classmethod
-    def _get_update_source_name(cls) -> str:
-        update_settings = cls._load_update_settings()
-        source_name = str(update_settings.get("source") or "github").strip()
-        return source_name or "github"
+    def _resolve_update_source(cls, update_settings: Optional[Dict[str, Any]] = None) -> Tuple[str, str]:
+        update_settings = update_settings if isinstance(update_settings, dict) else cls._load_update_settings()
+        sources = cls._get_update_sources(update_settings)
+        source_name = str(update_settings.get("source") or cls.DEFAULT_UPDATE_SOURCE_NAME).strip()
+        source_name = source_name or cls.DEFAULT_UPDATE_SOURCE_NAME
+        if source_name == "github":
+            return "github", ""
+
+        source_value = str(sources.get(source_name, "") or "").strip()
+        if source_value:
+            return source_name, source_value
+
+        fallback_name = cls.DEFAULT_UPDATE_SOURCE_NAME
+        fallback_value = str(sources.get(fallback_name, "") or "").strip()
+        if fallback_value:
+            return fallback_name, fallback_value
+        return "github", ""
 
     @classmethod
-    def _apply_download_source(cls, url: str) -> str:
+    def _get_update_source_name(cls, update_settings: Optional[Dict[str, Any]] = None) -> str:
+        return cls._resolve_update_source(update_settings)[0]
+
+    @classmethod
+    def _apply_download_source(cls, url: str, update_settings: Optional[Dict[str, Any]] = None) -> str:
         raw_url = (url or "").strip()
         if not raw_url:
             return ""
-        source_name = cls._get_update_source_name()
-        source_value = str(cls._get_update_sources().get(source_name, "") or "").strip()
+        if isinstance(update_settings, dict):
+            source_name, source_value = cls._resolve_update_source(update_settings)
+        else:
+            source_name = cls._get_update_source_name()
+            source_value = str(cls._get_update_sources().get(source_name, "") or "").strip()
+            if source_name != "github" and not source_value:
+                source_name, source_value = cls._resolve_update_source()
         if not source_value or source_name == "github":
             return raw_url
         if "{url}" in source_value:
@@ -348,6 +425,26 @@ class UpdateCheckWorker(QThread):
         if source_value.endswith("/"):
             return f"{source_value}{raw_url}"
         return f"{source_value}/{raw_url}"
+
+    @classmethod
+    def _apply_source_to_request_url(cls, url: str) -> str:
+        raw_url = (url or "").strip()
+        if not raw_url:
+            return ""
+        return cls._apply_download_source(raw_url)
+
+    @classmethod
+    def _build_request_urls(cls, url: str) -> List[str]:
+        raw_url = (url or "").strip()
+        if not raw_url:
+            return []
+        candidates: List[str] = []
+        mirrored_url = cls._apply_source_to_request_url(raw_url)
+        if mirrored_url:
+            candidates.append(mirrored_url)
+        if raw_url not in candidates:
+            candidates.append(raw_url)
+        return candidates
 
     @staticmethod
     def _pick_download_asset(release: Dict[str, Any]) -> Dict[str, Any]:
@@ -396,17 +493,51 @@ class UpdateDownloadWorker(QThread):
         self.download_url = download_url
         self.save_dir = save_dir
         self.timeout = timeout
+        self._pause_requested = threading.Event()
+        self._stop_requested = threading.Event()
+
+    def pause_download(self):
+        self._pause_requested.set()
+
+    def resume_download(self):
+        self._pause_requested.clear()
+
+    def stop_download(self):
+        self._stop_requested.set()
+        self._pause_requested.clear()
+
+    def is_paused(self) -> bool:
+        return self._pause_requested.is_set()
 
     def run(self):
+        file_path: Optional[Path] = None
+        partial_path: Optional[Path] = None
         try:
             if not self.download_url:
                 raise RuntimeError("下载链接为空")
             target_dir = Path(self.save_dir) if self.save_dir else Path.home() / "Downloads" / "sign-sign-in"
             target_dir.mkdir(parents=True, exist_ok=True)
-            with requests.get(self.download_url, stream=True, timeout=(10, self.timeout), allow_redirects=True) as resp:
+            filename = self._resolve_filename_from_url(self.download_url)
+            file_path = target_dir / filename
+            partial_path = target_dir / f"{filename}.part"
+            resume_from = partial_path.stat().st_size if partial_path.exists() else 0
+            headers = {"Range": f"bytes={resume_from}-"} if resume_from > 0 else None
+            with requests.get(
+                self.download_url,
+                stream=True,
+                timeout=(10, self.timeout),
+                allow_redirects=True,
+                headers=headers,
+            ) as resp:
                 resp.raise_for_status()
                 filename = self._resolve_filename(resp, self.download_url)
                 file_path = target_dir / filename
+                partial_path = target_dir / f"{filename}.part"
+                if resume_from > 0 and resp.status_code != 206:
+                    partial_path.unlink(missing_ok=True)
+                    resume_from = 0
+                elif resume_from > 0 and not partial_path.exists():
+                    partial_path = target_dir / f"{filename}.part"
                 total = int(resp.headers.get("Content-Length", "0") or "0")
                 if total <= 0:
                     remaining = getattr(resp.raw, "length_remaining", 0) or 0
@@ -414,38 +545,66 @@ class UpdateDownloadWorker(QThread):
                         total = int(remaining)
                     except Exception:
                         total = 0
-                written = 0
+                if resume_from > 0 and total > 0:
+                    total += resume_from
+                written = resume_from
                 if total > 0:
-                    self.progress_signal.emit(0)
-                    self.status_signal.emit(f"已下载 0.0 / {total / 1024 / 1024:.1f} MB")
+                    self.progress_signal.emit(min(100, max(0, int(written * 100 / total))))
+                    self.status_signal.emit(self._build_status_text(written, total, 0.0))
                 else:
                     self.progress_signal.emit(-1)
                     self.status_signal.emit("下载中...（总大小未知）")
                 last_pct = -1
                 last_status_emit = 0
-                with open(file_path, "wb") as handle:
+                speed_bytes_base = written
+                speed_time_base = time.monotonic()
+                speed_bps = 0.0
+                file_path.unlink(missing_ok=True)
+                write_mode = "ab" if resume_from > 0 else "wb"
+                with open(partial_path, write_mode) as handle:
                     for chunk in resp.iter_content(chunk_size=64 * 1024):
+                        if self._stop_requested.is_set():
+                            raise RuntimeError("__download_stopped__")
+                        while self._pause_requested.is_set() and not self._stop_requested.is_set():
+                            self.status_signal.emit(self._build_status_text(written, total, speed_bps, paused=True))
+                            self.msleep(150)
+                        if self._stop_requested.is_set():
+                            raise RuntimeError("__download_stopped__")
                         if not chunk:
                             continue
                         handle.write(chunk)
                         written += len(chunk)
+                        now = time.monotonic()
+                        elapsed = max(now - speed_time_base, 0.001)
+                        if written > speed_bytes_base:
+                            speed_bps = (written - speed_bytes_base) / elapsed
+                        if elapsed >= 0.8:
+                            speed_bytes_base = written
+                            speed_time_base = now
                         if total > 0:
                             pct = min(100, max(0, int(written * 100 / total)))
                             if pct != last_pct:
                                 self.progress_signal.emit(pct)
                                 last_pct = pct
                             if written - last_status_emit >= 512 * 1024 or pct == 100:
-                                self.status_signal.emit(
-                                    f"已下载 {written / 1024 / 1024:.1f} / {total / 1024 / 1024:.1f} MB"
-                                )
+                                self.status_signal.emit(self._build_status_text(written, total, speed_bps))
                                 last_status_emit = written
                         elif written - last_status_emit >= 512 * 1024:
-                            self.status_signal.emit(f"已下载 {written / 1024 / 1024:.1f} MB")
+                            self.status_signal.emit(self._build_status_text(written, total, speed_bps))
                             last_status_emit = written
+                partial_path.replace(file_path)
                 self.progress_signal.emit(100)
                 self.status_signal.emit("下载完成")
                 self.result_signal.emit(True, {"file_path": str(file_path)})
         except Exception as exc:
+            if str(exc) == "__download_stopped__":
+                if partial_path:
+                    try:
+                        partial_path.unlink(missing_ok=True)
+                    except Exception:
+                        pass
+                self.result_signal.emit(False, {"error": "下载已停止", "stopped": True})
+                return
             self.result_signal.emit(False, {"error": str(exc)})
 
     @staticmethod
@@ -461,5 +620,38 @@ class UpdateDownloadWorker(QThread):
             name = match.group(1).strip()
             if name:
                 return name
+        return UpdateDownloadWorker._resolve_filename_from_url(url)
+
+    @staticmethod
+    def _resolve_filename_from_url(url: str) -> str:
         name = Path(urlparse(url).path).name
         return name or "update_package.bin"
+
+    @staticmethod
+    def _build_status_text(downloaded: int, total: int, speed_bps: float, paused: bool = False) -> str:
+        downloaded_mb = downloaded / 1024 / 1024
+        if total > 0:
+            total_mb = total / 1024 / 1024
+            base = f"已下载 {downloaded_mb:.1f} / {total_mb:.1f} MB"
+        else:
+            base = f"已下载 {downloaded_mb:.1f} MB"
+        if speed_bps > 0:
+            speed_text = f"{speed_bps / 1024 / 1024:.2f} MB/s"
+            if total > 0 and downloaded < total:
+                eta_seconds = max(0, int((total - downloaded) / speed_bps))
+                base = f"{base} · {speed_text} · 剩余 {UpdateDownloadWorker._format_eta(eta_seconds)}"
+            else:
+                base = f"{base} · {speed_text}"
+        if paused:
+            base = f"{base} · 已暂停"
+        return base
+
+    @staticmethod
+    def _format_eta(seconds: int) -> str:
+        minutes, secs = divmod(max(0, int(seconds)), 60)
+        hours, minutes = divmod(minutes, 60)
+        if hours:
+            return f"{hours}h{minutes:02d}m"
+        if minutes:
+            return f"{minutes}m{secs:02d}s"
+        return f"{secs}s"
