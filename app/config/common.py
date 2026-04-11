@@ -3,8 +3,7 @@ import os
 from core.paths import get_base_dir, get_user_data_dir
 
 # 项目信息
-# PROJECT_VERSION = "v1.3.0"
-PROJECT_VERSION = "v1.2.9"
+PROJECT_VERSION = "v1.3.1"
 PROJECT_NAME = "🔰 Sign sign in"
 PROJECT_GITHUB = "https://github.com/ckkkf/sign-sign-in"
 PROJECT_GITEE = "https://gitee.com/ckkk524334/sign-sign-in"
