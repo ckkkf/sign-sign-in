@@ -134,6 +134,7 @@ const headlineStatus = computed(() => [
 ]);
 
 let unsubscribeLog: (() => void) | undefined;
+let unsubscribeCode: (() => void) | undefined;
 let timer: number | undefined;
 let stopResize: (() => void) | undefined;
 
@@ -399,6 +400,17 @@ onMounted(async () => {
   document.body.setAttribute("theme-mode", "dark");
   try {
     unsubscribeLog = window.signSignIn.log.subscribe((entry) => logs.value.unshift(entry));
+    unsubscribeCode = window.signSignIn.code.onCaptured(() => {
+      // 抓到 code 后主进程已自动停代理；这里联动当前选中的签到动作。
+      // 防止重复触发：仅在没有任务在跑时启动。
+      if (task.value.running) return;
+      if (isPhotoAction.value && !selectedImage.value) {
+        pushLocalLog("已抓到 code，但当前为拍照签到/签退且未选图片，跳过自动执行", "warn");
+        return;
+      }
+      Toast.success("已抓到 code，自动执行签到");
+      void startTask();
+    });
     await loadConfig();
     await refreshAll();
     timer = window.setInterval(() => {
@@ -412,6 +424,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   unsubscribeLog?.();
+  unsubscribeCode?.();
   if (timer) window.clearInterval(timer);
   stopResize?.();
 });

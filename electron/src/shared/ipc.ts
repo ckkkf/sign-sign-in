@@ -26,6 +26,7 @@ export interface SignSignInApi {
     setManualCode: (code: string) => Promise<ApiResult<CaptureState>>;
     startFridaHook: () => Promise<ApiResult<CaptureState>>;
     stopFridaHook: () => Promise<ApiResult<CaptureState>>;
+    onCaptured: (callback: (code: string) => void) => () => void;
   };
   system: {
     getStatus: () => Promise<ApiResult<SystemStatus>>;

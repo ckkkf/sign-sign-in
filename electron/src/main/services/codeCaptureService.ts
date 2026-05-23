@@ -1,6 +1,7 @@
 import { createServer, request as httpRequest, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { connect as connectTcp, type Socket } from "node:net";
 import { connect as connectTls, createSecureContext, createServer as createTlsServer, type TLSSocket } from "node:tls";
+import { EventEmitter } from "node:events";
 import { URL } from "node:url";
 import { MITM_HOST, MITM_PORT, XYB_APP_ID } from "@shared/constants";
 import type { CaptureState } from "@shared/types";
@@ -11,12 +12,13 @@ import { setSystemProxy, resetSystemProxy, killWeChatAppEx, wakeApplet } from ".
 const CONNECT_OK = "HTTP/1.1 200 Connection Established\r\n\r\n";
 const MAX_CAPTURE_BUFFER = 256 * 1024;
 
-export class CodeCaptureService {
+export class CodeCaptureService extends EventEmitter {
   private server: Server | null = null;
   private sockets = new Set<Socket>();
   private originProxy = "";
   private lastCode = "";
   private message = "";
+  private autoStopping = false;
 
   getState(): CaptureState {
     return {
@@ -277,6 +279,15 @@ export class CodeCaptureService {
     void killWeChatAppEx().then((n) => {
       if (n > 0) logger.info("🧹 已关闭小程序渲染进程，避免缓存导致下次抓不到 code");
     });
+    this.emit("code", code);
+    if (this.server && !this.autoStopping) {
+      this.autoStopping = true;
+      void this.stop()
+        .catch((error) => logger.warn(`自动停止代理失败：${error instanceof Error ? error.message : String(error)}`))
+        .finally(() => {
+          this.autoStopping = false;
+        });
+    }
   }
 
   private shouldCaptureText(host: string, text: string): boolean {

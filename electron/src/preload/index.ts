@@ -18,7 +18,12 @@ const api: SignSignInApi = {
     getState: () => ipcRenderer.invoke("code:getState"),
     setManualCode: (code: string) => ipcRenderer.invoke("code:setManualCode", code),
     startFridaHook: () => ipcRenderer.invoke("code:startFridaHook"),
-    stopFridaHook: () => ipcRenderer.invoke("code:stopFridaHook")
+    stopFridaHook: () => ipcRenderer.invoke("code:stopFridaHook"),
+    onCaptured: (callback: (code: string) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, code: string) => callback(code);
+      ipcRenderer.on("code:captured", listener);
+      return () => ipcRenderer.off("code:captured", listener);
+    }
   },
   system: {
     getStatus: () => ipcRenderer.invoke("system:getStatus"),

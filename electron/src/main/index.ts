@@ -93,6 +93,11 @@ app.whenReady().then(() => {
   registerIpc();
   createWindow();
   createTray();
+  codeCaptureService.on("code", (code: string) => {
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed()) win.webContents.send("code:captured", code);
+    }
+  });
   logger.info("Electron 主进程已启动");
 });
 
