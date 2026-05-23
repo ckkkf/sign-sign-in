@@ -10,15 +10,14 @@ const api: SignSignInApi = {
   task: {
     startSign: (option: SignOption) => ipcRenderer.invoke("task:startSign", option),
     stopSign: () => ipcRenderer.invoke("task:stopSign"),
-    getState: () => ipcRenderer.invoke("task:getState")
+    getState: () => ipcRenderer.invoke("task:getState"),
+    refreshSessionFromCode: () => ipcRenderer.invoke("task:refreshSessionFromCode")
   },
   code: {
     startCapture: () => ipcRenderer.invoke("code:startCapture"),
     stopCapture: () => ipcRenderer.invoke("code:stopCapture"),
     getState: () => ipcRenderer.invoke("code:getState"),
     setManualCode: (code: string) => ipcRenderer.invoke("code:setManualCode", code),
-    startFridaHook: () => ipcRenderer.invoke("code:startFridaHook"),
-    stopFridaHook: () => ipcRenderer.invoke("code:stopFridaHook"),
     onCaptured: (callback: (code: string) => void) => {
       const listener = (_event: Electron.IpcRendererEvent, code: string) => callback(code);
       ipcRenderer.on("code:captured", listener);

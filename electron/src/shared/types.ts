@@ -80,7 +80,10 @@ export interface CaptureState {
 
 export interface SystemStatus {
   time: string;
+  pid: number;
+  networkType: string;
   proxy: string;
+  speed: string;
   proxyServerRunning: boolean;
   certInstalled: boolean;
   ip: string;

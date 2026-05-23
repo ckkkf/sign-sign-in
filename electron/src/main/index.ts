@@ -4,7 +4,6 @@ import { join } from "node:path";
 import { registerIpc } from "./ipc/registerIpc";
 import { logger } from "./services/logger";
 import { codeCaptureService } from "./services/codeCaptureService";
-import { fridaHookService } from "./services/fridaHookService";
 
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
@@ -43,15 +42,26 @@ function createWindow(): void {
     if (level >= 2) logger.error(`渲染控制台: ${message} (${sourceId}:${line})`);
   });
   mainWindow.webContents.on("context-menu", (_event, params) => {
+    const targetWindow = mainWindow;
     Menu.buildFromTemplate([
+      {
+        label: "复制",
+        enabled: Boolean(params.selectionText),
+        click: () => targetWindow?.webContents.copy()
+      },
+      {
+        label: "粘贴",
+        click: () => targetWindow?.webContents.paste()
+      },
+      { type: "separator" },
       {
         label: "检查",
         click: () => {
-          mainWindow?.webContents.openDevTools({ mode: "detach" });
-          mainWindow?.webContents.inspectElement(params.x, params.y);
+          targetWindow?.webContents.openDevTools({ mode: "detach" });
+          targetWindow?.webContents.inspectElement(params.x, params.y);
         }
       }
-    ]).popup({ window: mainWindow || undefined });
+    ]).popup({ window: targetWindow || undefined });
   });
 
   if (process.env.ELECTRON_RENDERER_URL) {
@@ -109,5 +119,4 @@ app.on("activate", () => {
 app.on("before-quit", async () => {
   isQuitting = true;
   await codeCaptureService.stop().catch(() => undefined);
-  await fridaHookService.stop().catch(() => undefined);
 });

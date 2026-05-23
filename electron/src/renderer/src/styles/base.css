@@ -90,7 +90,7 @@ body {
 .nav {
   min-height: 0;
   display: grid;
-  grid-template-rows: auto auto auto 1fr auto;
+  grid-template-rows: auto 1fr auto;
   justify-items: center;
   gap: 10px;
   margin: 1px 15px 8px 0;
@@ -120,6 +120,7 @@ body {
 }
 
 .rail-nav-shell {
+  align-self: center;
   display: grid;
   gap: 8px;
   padding: 6px 4px;
@@ -137,7 +138,7 @@ body {
 }
 
 .rail-spacer {
-  display: block;
+  display: none;
 }
 
 .main-panel {
@@ -186,6 +187,12 @@ body {
 
 .notice-track span {
   flex: 0 0 auto;
+}
+
+.notice-track strong {
+  margin-right: 6px;
+  color: #ffdf6e;
+  font-weight: 900;
 }
 
 @keyframes notice-scroll {
@@ -264,17 +271,18 @@ body {
 
 .title-pair h3 {
   margin: 0;
-  color: var(--text);
-  font-size: 24px;
+  color: #ffffff;
+  font-size: 31px;
   line-height: 1.05;
   letter-spacing: 0;
+  text-shadow: 0 0 18px rgba(127, 219, 255, 0.18);
 }
 
-.title-pair .semi-typography {
-  padding-bottom: 3px;
-  color: #7d86a7;
-  font-size: 13px;
-  font-weight: 600;
+.title-pair > span {
+  padding-bottom: 4px;
+  color: #5f6788;
+  font-size: 11px;
+  font-weight: 500;
 }
 
 .qq-strip {
@@ -370,16 +378,37 @@ body {
 }
 
 .status-cell span {
-  color: #8991b5;
+  color: currentColor;
+  opacity: 0.72;
 }
 
 .status-cell strong {
   min-width: 0;
   overflow: hidden;
-  color: #ffffff;
+  color: currentColor;
   font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.status-info {
+  color: #8ed9ff;
+}
+
+.status-success {
+  color: #5ee6a8;
+}
+
+.status-warning {
+  color: #ffd166;
+}
+
+.status-danger {
+  color: #ff8a8a;
+}
+
+.status-muted {
+  color: #9aa3c7;
 }
 
 .tool-grid {
@@ -387,25 +416,6 @@ body {
   grid-template-columns: repeat(5, minmax(88px, 1fr));
   gap: 8px;
   margin-top: 4px;
-}
-
-.tool-grid .semi-button {
-  width: 100%;
-  min-width: 0;
-  height: 36px;
-  justify-content: center;
-  padding: 0 8px;
-  color: #d0d5ff;
-  background: #191b2a;
-  border: 1px solid #22263a;
-  border-radius: 10px;
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.tool-grid .semi-button:hover {
-  border-color: var(--blue-2);
-  color: #ffffff;
 }
 
 .reminder-line {
@@ -678,6 +688,51 @@ body {
   background: #191b2a;
   border-color: #22263a;
   color: #d0d5ff;
+}
+
+.tool-button.semi-button,
+.tool-button.semi-button-light {
+  width: 100%;
+  min-width: 0;
+  height: 36px;
+  justify-content: center;
+  padding: 0 8px;
+  color: #d0d5ff;
+  background: #191b2a;
+  border: 1px solid #22263a;
+  border-radius: 10px;
+  box-shadow: none;
+  font-size: 12px;
+  font-weight: 600;
+  opacity: 1;
+  transition: border-color 0.12s ease, color 0.12s ease, background 0.12s ease;
+}
+
+.tool-button.semi-button:hover,
+.tool-button.semi-button-light:hover {
+  color: #ffffff;
+  background: #1f2436;
+  border-color: var(--blue-2);
+  box-shadow: 0 0 0 1px var(--blue-2) inset;
+}
+
+.tool-button.semi-button.is-disabled,
+.tool-button.semi-button.is-disabled:hover,
+.tool-button.semi-button-light.is-disabled,
+.tool-button.semi-button-light.is-disabled:hover {
+  cursor: default;
+  color: #7d86a7;
+  background: #151826;
+  border-color: #22263a;
+  box-shadow: none;
+  opacity: 1;
+}
+
+.tool-button.semi-button .semi-button-content,
+.tool-button.semi-button .semi-button-content-left,
+.tool-button.semi-button-light .semi-button-content,
+.tool-button.semi-button-light .semi-button-content-left {
+  color: inherit;
 }
 
 .semi-input-wrapper,

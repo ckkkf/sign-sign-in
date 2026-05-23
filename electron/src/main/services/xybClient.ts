@@ -14,6 +14,15 @@ type XybResponse<T = unknown> = {
   data?: T;
 };
 
+function responseMessage(data: unknown): string {
+  if (data && typeof data === "object") {
+    const body = data as { msg?: unknown; message?: unknown };
+    const msg = body.msg ?? body.message;
+    if (msg !== undefined && msg !== null && String(msg).trim()) return String(msg);
+  }
+  return JSON.stringify(data);
+}
+
 export interface LoginArgs {
   openId: string;
   unionId: string;
@@ -102,9 +111,9 @@ export class XybClient {
     );
     const body = response.data as XybResponse<Record<string, string>>;
     if (body.code === "202" || body.code === 202) {
-      throw new Error(`code已失效，请重启小程序。接口响应：${JSON.stringify(body)}`);
+      throw new Error(`code已失效，请重启小程序。接口响应：${responseMessage(body)}`);
     }
-    if (!body.data) throw new Error(`获取OpenID失败: ${JSON.stringify(body)}`);
+    if (!body.data) throw new Error(`获取OpenID失败: ${responseMessage(body)}`);
     return body.data;
   }
 
@@ -137,7 +146,7 @@ export class XybClient {
       }
     );
     const body = response.data as XybResponse<Record<string, string>>;
-    if (!body.data) throw new Error(`登录失败: ${JSON.stringify(body)}`);
+    if (!body.data) throw new Error(`登录失败: ${responseMessage(body)}`);
     return body.data;
   }
 
@@ -181,7 +190,7 @@ export class XybClient {
       includeDeviceCode: false
     });
     const body = this.requireValidResponse<any[]>(response, "获取计划失败");
-    if (!Array.isArray(body)) throw new Error(`获取计划失败: ${JSON.stringify(response.data)}`);
+    if (!Array.isArray(body)) throw new Error(`获取计划失败: ${responseMessage(response.data)}`);
     return body;
   }
 
@@ -344,7 +353,7 @@ export class XybClient {
     const body = response.data as XybResponse<T>;
     this.assertSession(body);
     if (response.status !== 200 || !(body.code === "200" || body.code === 200) || body.data === undefined) {
-      throw new Error(`${context}: ${body.msg || JSON.stringify(body)}`);
+      throw new Error(`${context}: ${responseMessage(body)}`);
     }
     return body.data;
   }

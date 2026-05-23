@@ -48,6 +48,58 @@ export function getLocalIp(): string {
   return "127.0.0.1";
 }
 
+function classifyNetworkName(name: string): string {
+  const lower = name.toLowerCase();
+  if (/wi-?fi|wlan|wireless|airport|无线/.test(lower)) return "Wi-Fi";
+  if (/ethernet|以太网|有线|thunderbolt|usb.*lan/.test(lower)) return "有线";
+  if (/ppp|pppoe|dial|拨号/.test(lower)) return "拨号";
+  if (/^wl/.test(lower)) return "Wi-Fi";
+  if (/^(en|eth)/.test(lower)) return "有线";
+  return "";
+}
+
+function getNetworkTypeFromInterfaces(): string {
+  const nets = networkInterfaces();
+  for (const [name, addresses] of Object.entries(nets)) {
+    if (!addresses?.some((addr) => addr.family === "IPv4" && !addr.internal)) continue;
+    const type = classifyNetworkName(name);
+    if (type) return type;
+  }
+  return "未知";
+}
+
+async function getMacosDefaultInterface(): Promise<string> {
+  const { stdout } = await execFileAsync("route", ["-n", "get", "default"]);
+  return stdout.match(/interface:\s*(\S+)/)?.[1]?.trim() || "";
+}
+
+async function getMacosHardwarePort(device: string): Promise<string> {
+  if (!device) return "";
+  const { stdout } = await execFileAsync("networksetup", ["-listallhardwareports"]);
+  const blocks = stdout.split(/\n\n+/);
+  for (const block of blocks) {
+    const port = block.match(/Hardware Port:\s*(.+)/)?.[1]?.trim();
+    const foundDevice = block.match(/Device:\s*(.+)/)?.[1]?.trim();
+    if (foundDevice === device) return port || "";
+  }
+  return "";
+}
+
+export async function getNetworkType(): Promise<string> {
+  if (isMacos()) {
+    const device = await getMacosDefaultInterface();
+    const port = await getMacosHardwarePort(device);
+    return classifyNetworkName(port || device) || port || device || "未知";
+  }
+  if (isWindows()) {
+    const { stdout } = await execAsync(
+      "powershell -NoProfile -Command \"Get-NetAdapter | Where-Object {$_.Status -eq 'Up'} | Select-Object -First 1 -ExpandProperty InterfaceDescription\""
+    );
+    return classifyNetworkName(stdout.trim()) || stdout.trim() || "未知";
+  }
+  return getNetworkTypeFromInterfaces();
+}
+
 async function macosNetworkServices(): Promise<string[]> {
   const { stdout } = await execFileAsync("networksetup", ["-listallnetworkservices"]);
   return stdout

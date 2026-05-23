@@ -70,6 +70,20 @@ export class SignTaskService {
     return this.getState();
   }
 
+  async refreshSessionFromCapturedCode(): Promise<TaskState> {
+    if (this.state.running) throw new Error("已有任务正在执行");
+    this.abortController = new AbortController();
+    this.state = {
+      running: true,
+      source: "manual",
+      action: "获取code",
+      message: "正在刷新 JSESSIONID",
+      startedAt: Date.now()
+    };
+    void this.runRefreshSession(this.abortController.signal);
+    return this.getState();
+  }
+
   private checkStop(signal: AbortSignal): void {
     if (signal.aborted) throw new Error("用户停止执行");
   }
@@ -132,6 +146,41 @@ export class SignTaskService {
         logger.warn("任务已停止");
       } else {
         logger.error(`任务失败：${message}`);
+      }
+    } finally {
+      this.abortController = null;
+    }
+  }
+
+  private async runRefreshSession(signal: AbortSignal): Promise<void> {
+    try {
+      const config = configStore.read();
+      const input = structuredClone(config.input);
+      const capturedCode = codeCaptureService.consumeCode();
+      if (capturedCode) {
+        input.code = capturedCode;
+      }
+      this.checkStop(signal);
+      await xybClient.login(input, false);
+      this.state = {
+        running: false,
+        source: "",
+        action: "获取code",
+        message: "JSESSIONID 已更新"
+      };
+      logger.info("JSESSIONID 已更新");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.state = {
+        running: false,
+        source: "",
+        action: "获取code",
+        message
+      };
+      if (message === "用户停止执行") {
+        logger.warn("任务已停止");
+      } else {
+        logger.error(`获取code失败：${message}`);
       }
     } finally {
       this.abortController = null;

@@ -3,7 +3,6 @@ import type { ApiResult } from "@shared/types";
 import { configStore } from "../services/configStore";
 import { imageStore } from "../services/imageStore";
 import { codeCaptureService } from "../services/codeCaptureService";
-import { fridaHookService } from "../services/fridaHookService";
 import { openCertManager, openSystemProxySettings } from "../services/systemService";
 import { getSystemStatus } from "../services/statusService";
 import { signTaskService } from "../services/signTaskService";
@@ -26,13 +25,12 @@ export function registerIpc(): void {
   ipcMain.handle("task:startSign", (_event, option) => wrap(() => signTaskService.start(option)));
   ipcMain.handle("task:stopSign", () => wrap(() => signTaskService.stop()));
   ipcMain.handle("task:getState", () => wrap(() => signTaskService.getState()));
+  ipcMain.handle("task:refreshSessionFromCode", () => wrap(() => signTaskService.refreshSessionFromCapturedCode()));
 
   ipcMain.handle("code:startCapture", () => wrap(() => codeCaptureService.start()));
   ipcMain.handle("code:stopCapture", () => wrap(() => codeCaptureService.stop()));
   ipcMain.handle("code:getState", () => wrap(() => codeCaptureService.getState()));
   ipcMain.handle("code:setManualCode", (_event, code) => wrap(() => codeCaptureService.setManualCode(code)));
-  ipcMain.handle("code:startFridaHook", () => wrap(() => fridaHookService.start()));
-  ipcMain.handle("code:stopFridaHook", () => wrap(() => fridaHookService.stop()));
 
   ipcMain.handle("system:getStatus", () => wrap(() => getSystemStatus()));
   ipcMain.handle("system:openProxySettings", () => wrap(() => openSystemProxySettings()));

@@ -18,14 +18,13 @@ export interface SignSignInApi {
     startSign: (option: SignOption) => Promise<ApiResult<TaskState>>;
     stopSign: () => Promise<ApiResult<TaskState>>;
     getState: () => Promise<ApiResult<TaskState>>;
+    refreshSessionFromCode: () => Promise<ApiResult<TaskState>>;
   };
   code: {
     startCapture: () => Promise<ApiResult<CaptureState>>;
     stopCapture: () => Promise<ApiResult<CaptureState>>;
     getState: () => Promise<ApiResult<CaptureState>>;
     setManualCode: (code: string) => Promise<ApiResult<CaptureState>>;
-    startFridaHook: () => Promise<ApiResult<CaptureState>>;
-    stopFridaHook: () => Promise<ApiResult<CaptureState>>;
     onCaptured: (callback: (code: string) => void) => () => void;
   };
   system: {
