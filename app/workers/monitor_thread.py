@@ -50,7 +50,8 @@ class MonitorThread(QThread):
                 if started:
                     logging.info("🛡️ Mitm 自动启动成功")
                 else:
-                    logging.error("❌ Mitm 自动启动失败，请检查程序目录或权限")
+                    detail = getattr(self.mitm, "last_error", "") or "请检查程序目录或权限"
+                    logging.error(f"❌ Mitm 自动启动失败: {detail}")
 
             # =======================
             # ② 更新状态数据

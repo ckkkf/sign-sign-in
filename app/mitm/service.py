@@ -1,13 +1,14 @@
 import logging
 import os
 import platform
+import socket
 import subprocess
 import sys
 import time
 
 from app.config.common import ADDONS_DIR, BASE_DIR, LOG_DIR, MITM_CONF_DIR, MITM_PROXY
 from app.mitm.runtime_storage import ensure_runtime_mitm_files
-from app.utils.commands import check_port_listening, get_process_by_port, kill_process_tree
+from app.utils.commands import check_port_listening, get_process_by_port, kill_process_tree, subprocess_creationflags
 
 
 class MitmService:
@@ -33,9 +34,7 @@ class MitmService:
 
     @staticmethod
     def _creationflags():
-        if platform.system() == "Windows":
-            return subprocess.CREATE_NO_WINDOW
-        return 0
+        return subprocess_creationflags()
 
     def _venv_python(self):
         if platform.system() == "Windows":
@@ -95,9 +94,26 @@ class MitmService:
         env.setdefault("PYTHONUTF8", "1")
         return env
 
+    def _can_bind_port(self):
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            sock.bind((self.host, self.port))
+            sock.listen(1)
+            return True, ""
+        except OSError as exc:
+            return False, str(exc)
+        finally:
+            sock.close()
+
     def start(self):
         if self.is_running():
             self.stop_mitm()
+
+        can_bind, bind_error = self._can_bind_port()
+        if not can_bind:
+            self.last_error = f"系统阻止监听 {self.host}:{self.port}: {bind_error}"
+            logging.error(self.last_error)
+            return False
 
         ensure_runtime_mitm_files()
         os.makedirs(self.confdir, exist_ok=True)

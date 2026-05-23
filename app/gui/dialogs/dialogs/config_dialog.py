@@ -9,6 +9,7 @@ from PySide6.QtWidgets import QDialog, QVBoxLayout, QScrollArea, QWidget, QFormL
 
 from app.gui.components.no_wheel_combo import NoWheelComboBox
 from app.gui.components.toast import ToastManager
+from app.utils.commands import open_path_or_url
 from app.utils.files import (
     build_user_agent,
     read_config,
@@ -257,7 +258,7 @@ class ConfigDialog(QDialog):
 
         bot_layout = QHBoxLayout()
         btn_open = QPushButton("📄 打开配置文件")
-        btn_open.clicked.connect(lambda: os.startfile(os.path.abspath(self.config_path)))
+        btn_open.clicked.connect(lambda: open_path_or_url(os.path.abspath(self.config_path)))
         bot_layout.addWidget(btn_open)
 
         btn_save = QPushButton("💾 保存并应用")

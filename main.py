@@ -3,6 +3,13 @@ import logging
 import os
 import sys
 
+if sys.platform in ("darwin", "win32"):
+    qt_logging_rules = os.environ.get("QT_LOGGING_RULES", "")
+    qt_icc_rule = "qt.gui.icc.warning=false"
+    if qt_icc_rule not in qt_logging_rules.split(";"):
+        os.environ["QT_LOGGING_RULES"] = ";".join(filter(None, [qt_logging_rules, qt_icc_rule]))
+
+from PySide6.QtCore import QLoggingCategory
 from PySide6.QtGui import QFont, QIcon
 from PySide6.QtWidgets import (QApplication, QMessageBox)
 from app.config.common import ensure_resource_layout
@@ -37,6 +44,9 @@ if __name__ == '__main__':
     if '--mitm-runner' in sys.argv:
         runner_index = sys.argv.index('--mitm-runner')
         raise SystemExit(mitm_runner_main(sys.argv[runner_index + 1:]))
+
+    if sys.platform in ("darwin", "win32"):
+        QLoggingCategory.setFilterRules(os.environ.get("QT_LOGGING_RULES", ""))
 
     if "QT_FONT_DPI" in os.environ: del os.environ["QT_FONT_DPI"]
     ensure_resource_layout()

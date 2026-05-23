@@ -27,6 +27,7 @@ PACKET_LOG_FILE = os.path.normpath(
 
 XYB_SOURCE = "xyb_code"
 JIELONG_SOURCE = "jielong_token"
+SEEN_HOSTS = set()
 
 
 def append_packet_log(message: str):
@@ -205,6 +206,11 @@ class GetCode:
         flow.kill()
 
     def request(self, flow: http.HTTPFlow):
+        host = (flow.request.host or "").lower()
+        if host and host not in SEEN_HOSTS:
+            SEEN_HOSTS.add(host)
+            append_packet_log(f"[MITM][HOST] {host}")
+
         if not is_interesting_flow(flow):
             return
 

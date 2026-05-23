@@ -17,9 +17,11 @@ from app.utils.commands import (
     set_proxy,
     check_port_listening,
     reset_proxy,
-    check_cert,
-    bash,
-    remove_mitmproxy_certs,
+    install_mitmproxy_cert,
+    is_windows,
+    is_macos,
+    open_path_or_url,
+    subprocess_creationflags,
 )
 from app.utils.files import read_config, check_img
 
@@ -75,6 +77,7 @@ class SignTaskThread(QThread):
                 # 获取当前代理
                 logging.info(f"🔍 检测代理... 当前: {get_system_proxy() or '直连'}")
                 self.origin_proxy = set_proxy(target_proxy)
+                logging.info(f"🔍 代理切换后: {get_system_proxy() or '直连'}")
 
                 ### mitmdump
                 if not check_port_listening(self.target_host, int(self.target_port)):
@@ -183,6 +186,7 @@ class SignTaskThread(QThread):
             self.check_stop()
             if time.time() - last > 1.0:
                 if get_system_proxy() != proxy:
+                    logging.warning(f"⚠️ 系统代理被改为 {get_system_proxy() or '直连'}，重新设置为 {proxy}")
                     set_proxy(proxy)
                 last = time.time()
 
@@ -268,23 +272,11 @@ class SignTaskThread(QThread):
 
     def install_cert(self, file_name):
         logging.info("正在安装证书，若出现弹窗请点击[确定]！")
-        # 使用 certutil 安装证书到 Windows 系统中
         try:
-            removed = remove_mitmproxy_certs()
-            if removed > 0:
-                logging.info(f"已清理 {removed} 个旧 mitmproxy 证书")
-            # 安装证书
-            while True:
-                stdout = bash(f'certutil -user -addstore Root "{file_name}"')
-                # 再次检测
-                if stdout and '命令成功完成' in stdout and check_cert():
-                    remember_current_cert_installed()
-                    logging.info("安装成功")
-                    break
-
-                logging.warning("⚠️请点击[确定]以同意安装ssl证书，否则将无法使用本程序！")
-
-        except subprocess.CalledProcessError as e:
+            install_mitmproxy_cert(file_name)
+            remember_current_cert_installed()
+            logging.info("安装成功")
+        except Exception as e:
             raise RuntimeError(f"❌ 安装证书时发生错误: {e}")
 
 
@@ -317,6 +309,7 @@ class GetCodeAndSessionThread(QThread):
             target_proxy = f"{self.target_host}:{self.target_port}"
             logging.info(f"🔍 检测代理... 当前: {get_system_proxy() or '直连'}")
             self.origin_proxy = set_proxy(target_proxy)
+            logging.info(f"🔍 代理切换后: {get_system_proxy() or '直连'}")
 
             ### mitmdump
             if not check_port_listening(self.target_host, int(self.target_port)):
@@ -328,10 +321,13 @@ class GetCodeAndSessionThread(QThread):
             self.do_cert()
 
             ### 唤起微信小程序
-            weixin_url = f"weixin://launchapplet/?app_id={XYB_APP_ID}"
+            weixin_urls = [
+                f"weixin://launchapplet/?appid={XYB_APP_ID}",
+                f"weixin://launchapplet?appid={XYB_APP_ID}",
+            ]
             try:
                 self.kill_wechat_before_launch()
-                self.wake_applet_with_retry(weixin_url)
+                self.wake_applet_with_retry(weixin_urls)
                 logging.info("🌈 已发送唤醒指令到微信")
                 self.applet_wake_signal.emit()
             except Exception as e:
@@ -385,6 +381,7 @@ class GetCodeAndSessionThread(QThread):
             self.check_stop()
             if time.time() - last > 1.0:
                 if get_system_proxy() != proxy:
+                    logging.warning(f"⚠️ 系统代理被改为 {get_system_proxy() or '直连'}，重新设置为 {proxy}")
                     set_proxy(proxy)
                 last = time.time()
 
@@ -421,69 +418,83 @@ class GetCodeAndSessionThread(QThread):
     def install_cert(self, file_name):
         logging.info("正在安装证书，若出现弹窗请点击[确定]！")
         try:
-            removed = remove_mitmproxy_certs()
-            if removed > 0:
-                logging.info(f"已清理 {removed} 个旧 mitmproxy 证书")
-            while True:
-                stdout = bash(f'certutil -user -addstore Root "{file_name}"')
-                if stdout and '命令成功完成' in stdout and check_cert():
-                    remember_current_cert_installed()
-                    logging.info("安装成功")
-                    break
-                logging.warning("⚠️请点击[确定]以同意安装ssl证书，否则将无法使用本程序！")
-        except subprocess.CalledProcessError as e:
+            install_mitmproxy_cert(file_name)
+            remember_current_cert_installed()
+            logging.info("安装成功")
+        except Exception as e:
             raise RuntimeError(f"❌ 安装证书时发生错误: {e}")
 
     @staticmethod
     def kill_wechat_before_launch():
-        # 唤醒前仅关闭“小程序渲染进程”，不关闭 Host/微信主进程，避免影响 URI 唤起
-        process_names = [
-            "WeChatAppEx.exe",
-            "WeixinAppEx.exe"
-        ]
-        for name in process_names:
+        # 唤醒前仅关闭"小程序渲染进程"，不关闭 Host/微信主进程，避免影响 URI 唤起
+        if is_windows():
+            for name in ["WeChatAppEx.exe", "WeixinAppEx.exe"]:
+                try:
+                    subprocess.run(
+                        ["taskkill", "/F", "/IM", name],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        check=False,
+                        creationflags=subprocess_creationflags(),
+                    )
+                except Exception:
+                    pass
+        elif is_macos():
             try:
                 subprocess.run(
-                    ["taskkill", "/F", "/IM", name],
+                    ["pkill", "-9", "-f", "WeChatAppEx"],
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                     check=False,
-                    creationflags=subprocess.CREATE_NO_WINDOW,
                 )
             except Exception:
                 pass
         time.sleep(0.3)
 
     @staticmethod
-    def wake_applet_with_retry(weixin_url: str, retries: int = 3):
+    def wake_applet_with_retry(weixin_urls, retries: int = 3):
+        if isinstance(weixin_urls, str):
+            weixin_urls = [weixin_urls]
         last_exc = None
         for i in range(retries):
-            try:
-                os.startfile(weixin_url)
-                return
-            except Exception as e:
-                last_exc = e
-                logging.warning(f"⚠️ 唤醒微信失败（第 {i + 1}/{retries} 次）：{e}")
-                time.sleep(0.8)
+            for weixin_url in weixin_urls:
+                try:
+                    open_path_or_url(weixin_url)
+                    logging.info(f"已尝试唤醒微信小程序: {weixin_url}")
+                    time.sleep(0.8)
+                    return
+                except Exception as e:
+                    last_exc = e
+                    logging.warning(f"⚠️ 唤醒微信失败（第 {i + 1}/{retries} 次）：{e}")
+                    time.sleep(0.8)
         if last_exc:
             raise last_exc
 
     @staticmethod
     def close_applet_after_login():
         # 登录成功后仅关闭小程序渲染进程，避免影响微信主进程和后续唤醒
-        process_names = [
-            "WeChatAppEx.exe",
-            "WeixinAppEx.exe",
-        ]
         killed = 0
-        for name in process_names:
+        if is_windows():
+            for name in ["WeChatAppEx.exe", "WeixinAppEx.exe"]:
+                try:
+                    cp = subprocess.run(
+                        ["taskkill", "/F", "/IM", name],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        check=False,
+                        creationflags=subprocess_creationflags(),
+                    )
+                    if cp.returncode == 0:
+                        killed += 1
+                except Exception:
+                    pass
+        elif is_macos():
             try:
                 cp = subprocess.run(
-                    ["taskkill", "/F", "/IM", name],
+                    ["pkill", "-9", "-f", "WeChatAppEx"],
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                     check=False,
-                    creationflags=subprocess.CREATE_NO_WINDOW,
                 )
                 if cp.returncode == 0:
                     killed += 1

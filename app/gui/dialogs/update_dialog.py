@@ -33,6 +33,7 @@ from app.config.common import (
     UPDATE_SETTINGS_FILE,
 )
 from app.gui.components.toast import ToastManager
+from app.utils.commands import is_windows, open_path_or_url, subprocess_creationflags
 from app.utils.files import read_config, save_json_file
 from app.workers.update_worker import UpdateCheckWorker, UpdateDownloadWorker
 
@@ -1026,10 +1027,10 @@ class UpdateDialog(QDialog):
 
     def _install_package(self, package: Path):
         suffix = package.suffix.lower()
-        if suffix == ".exe":
+        if suffix in {".exe", ".dmg", ".pkg", ".app"}:
             try:
-                os.startfile(str(package))
-                ToastManager.instance().show("已启动安装程序，请按向导完成更新", "info")
+                open_path_or_url(str(package))
+                ToastManager.instance().show("已打开安装包，请按提示完成更新", "info")
             except Exception as exc:
                 ToastManager.instance().show(f"启动安装程序失败：{exc}", "error")
             return
@@ -1056,6 +1057,11 @@ class UpdateDialog(QDialog):
             ToastManager.instance().show(f"启动更新失败：{exc}", "error")
 
     def _launch_replace_script(self, package_path: str, app_dir: str):
+        if not is_windows():
+            open_path_or_url(package_path)
+            ToastManager.instance().show("macOS 请解压后手动替换应用程序", "info")
+            return
+
         pid = os.getpid()
         script = f"""
 $ErrorActionPreference = 'Stop'
@@ -1107,7 +1113,7 @@ if ($mainExe) {{
             handle.write(script)
         subprocess.Popen(
             ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script_path],
-            creationflags=subprocess.CREATE_NO_WINDOW,
+            creationflags=subprocess_creationflags(),
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )

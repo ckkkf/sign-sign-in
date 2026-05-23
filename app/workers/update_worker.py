@@ -474,7 +474,11 @@ class UpdateCheckWorker(QThread):
             ]
         elif "darwin" in system or "mac" in system:
             preferred = [
+                lambda name: ("macos" in name or "mac" in name or "darwin" in name) and name.endswith(".dmg"),
+                lambda name: ("macos" in name or "mac" in name or "darwin" in name) and name.endswith(".pkg"),
+                lambda name: ("macos" in name or "mac" in name or "darwin" in name) and name.endswith(".app"),
                 lambda name: ("macos" in name or "mac" in name or "darwin" in name) and name.endswith(".zip"),
+                lambda name: name.endswith(".dmg") or name.endswith(".pkg"),
                 lambda name: name.endswith(".zip") and "windows" not in name,
             ]
         else:

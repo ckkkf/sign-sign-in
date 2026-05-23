@@ -588,7 +588,7 @@ class JieLongDialog(QWidget):
         self.btn_paste_share = QPushButton(PASTE_BUTTON)
         self.btn_paste_share.setObjectName("PasteBtn")
         self.btn_paste_share.setFixedSize(40, 24)
-        self.btn_paste_share.clicked.connect(lambda _checked=False: self._parse_share_url())
+        self.btn_paste_share.clicked.connect(self._parse_share_url)
         share_input_row.addWidget(self.btn_paste_share)
         top_layout.addLayout(share_input_row)
 

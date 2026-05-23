@@ -1,8 +1,8 @@
 {
     "input": {
         "location": {
-            "longitude": "",
-            "latitude": ""
+            "longitude": "131",
+            "latitude": "23"
         },
         "device": {
             "brand": "OnePlus",

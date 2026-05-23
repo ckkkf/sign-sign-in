@@ -2,7 +2,6 @@ import logging
 import os
 import random
 import re
-import subprocess
 import threading
 import time
 import ctypes
@@ -29,7 +28,17 @@ from app.gui.dialogs.update_dialog import UpdateDialog
 from app.gui.dialogs.weekly_journal.WeeklyJournalDialog import WeeklyJournalDialog
 from app.mitm.cert_state import summarize_cert_state
 from app.mitm.service import MitmService
-from app.utils.commands import get_net_io, bash, get_network_type, get_local_ip, get_system_proxy, check_port_listening
+from app.utils.commands import (
+    check_port_listening,
+    flush_dns_cache,
+    get_local_ip,
+    get_net_io,
+    get_network_type,
+    get_system_proxy,
+    open_cert_manager,
+    open_system_proxy_settings,
+    open_terminal,
+)
 from app.utils.files import validate_config, read_config
 from app.utils.pushplus import notify_pushplus
 from app.workers.monitor_thread import MonitorThread
@@ -276,12 +285,12 @@ class ModernWindow(QMainWindow):
         t_grid.setContentsMargins(0, 0, 0, 0)
         t_grid.setSpacing(8)
         tools = [
-            ("🔗 系统代理", lambda: subprocess.Popen('rundll32.exe shell32.dll,Control_RunDLL inetcpl.cpl,,4', shell=True, creationflags=subprocess.CREATE_NO_WINDOW)),
-            ("🔒 证书管理", lambda: subprocess.Popen('certmgr.msc', shell=True, creationflags=subprocess.CREATE_NO_WINDOW)),
+            ("🔗 系统代理", self.open_system_proxy_settings),
+            ("🔒 证书管理", self.open_cert_manager),
             ("📄 编辑配置", self.open_config),
             ("🔁 刷新DNS", self.flush_dns),
             ("📤 发送反馈", self.show_feedback),
-            ("💻 打开CMD", lambda: subprocess.Popen(["cmd.exe"], creationflags=subprocess.CREATE_NEW_CONSOLE)),
+            ("💻 打开终端", self.open_terminal),
             ("🖼 图片管理", self.open_image_manager),
             ("🔄 更新中心", self.check_update),
         ]
@@ -1087,9 +1096,23 @@ class ModernWindow(QMainWindow):
         FeedbackDialog(self).exec()
 
     def flush_dns(self):
-        bash("ipconfig /flushdns")
-        logging.info(f'DNS 刷新成功')
-        ToastManager.instance().show("DNS 刷新成功", "success")
+        if flush_dns_cache():
+            logging.info('DNS 刷新成功')
+            ToastManager.instance().show("DNS 刷新成功", "success")
+        else:
+            ToastManager.instance().show("当前系统暂不支持自动刷新 DNS", "warning")
+
+    def open_system_proxy_settings(self):
+        if not open_system_proxy_settings():
+            ToastManager.instance().show("当前系统暂不支持打开系统代理设置", "warning")
+
+    def open_cert_manager(self):
+        if not open_cert_manager():
+            ToastManager.instance().show("当前系统暂不支持打开证书管理", "warning")
+
+    def open_terminal(self):
+        if not open_terminal():
+            ToastManager.instance().show("当前系统暂不支持打开终端", "warning")
 
     def copy_log(self):
         QApplication.clipboard().setText(self.log.toPlainText())

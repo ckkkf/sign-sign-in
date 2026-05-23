@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
 
 from app.gui.components.no_wheel_combo import NoWheelComboBox
 from app.gui.components.toast import ToastManager
+from app.utils.commands import open_path_or_url
 from app.utils.files import read_config, save_json_file
 from app.workers.pushplus_worker import PushplusWorker
 
@@ -1191,7 +1192,7 @@ class AutoClockConfigDialog(QDialog):
 
     def _open_config_file(self):
         try:
-            os.startfile(os.path.abspath(self.config_path))
+            open_path_or_url(os.path.abspath(self.config_path))
         except Exception as exc:
             QMessageBox.warning(self, "提示", f"打开配置文件失败: {exc}")
 
