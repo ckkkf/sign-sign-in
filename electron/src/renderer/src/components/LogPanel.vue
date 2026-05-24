@@ -8,7 +8,7 @@ import { renderIcon } from "../utils/icons";
 
 defineProps<{
   logs: LogEntry[];
-  packetItems: Array<{ key: string; value: string }>;
+  packetLogs: LogEntry[];
 }>();
 
 const emit = defineEmits<{
@@ -53,11 +53,13 @@ const emit = defineEmits<{
           <Button size="small" theme="light" :icon="renderIcon(IconDeleteStroked)" @click="emit('clearPacketSnapshot')">清空</Button>
         </Space>
       </header>
-      <div class="packet-list terminal-body">
-        <div v-for="item in packetItems" :key="item.key">
-          <span>{{ item.key }}</span>
-          <strong>{{ item.value }}</strong>
+      <div class="log-list terminal-body">
+        <div v-for="entry in packetLogs" :key="`${entry.time}-${entry.message}`" :class="['log-line', entry.level]">
+          <span>{{ entry.time }}</span>
+          <strong>{{ entry.level }}</strong>
+          <p>{{ entry.message }}</p>
         </div>
+        <TypographyText v-if="!packetLogs.length" type="tertiary">暂无抓包日志</TypographyText>
       </div>
     </section>
   </aside>

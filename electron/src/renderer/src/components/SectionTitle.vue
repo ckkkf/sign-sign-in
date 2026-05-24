@@ -5,5 +5,8 @@ defineProps<{
 </script>
 
 <template>
-  <span class="section-label">{{ label }}</span>
+  <div class="section-title-row">
+    <span class="section-label">{{ label }}</span>
+    <slot />
+  </div>
 </template>

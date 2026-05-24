@@ -28,6 +28,10 @@ export function getRuntimeSessionPath(): string {
   return join(getUserRoot(), "cache", "session_cache.json");
 }
 
+export function getRuntimeAuthPath(): string {
+  return join(getUserRoot(), "cache", "auth_cache.json");
+}
+
 export function getRuntimeImageDir(): string {
   return join(getUserRoot(), "img");
 }

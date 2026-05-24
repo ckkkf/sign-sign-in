@@ -7,6 +7,7 @@ import { openCertManager, openSystemProxySettings } from "../services/systemServ
 import { getSystemStatus } from "../services/statusService";
 import { signTaskService } from "../services/signTaskService";
 import { logger } from "../services/logger";
+import { authService } from "../services/authService";
 
 async function wrap<T>(fn: () => T | Promise<T>): Promise<ApiResult<T>> {
   try {
@@ -19,6 +20,12 @@ async function wrap<T>(fn: () => T | Promise<T>): Promise<ApiResult<T>> {
 }
 
 export function registerIpc(): void {
+  ipcMain.handle("auth:getState", () => wrap(() => authService.getState()));
+  ipcMain.handle("auth:login", (_event, payload) => wrap(() => authService.login(payload)));
+  ipcMain.handle("auth:captcha", () => wrap(() => authService.captcha()));
+  ipcMain.handle("auth:register", (_event, payload) => wrap(() => authService.register(payload)));
+  ipcMain.handle("auth:offline", () => wrap(() => authService.offline()));
+
   ipcMain.handle("config:read", () => wrap(() => configStore.read()));
   ipcMain.handle("config:save", (_event, config) => wrap(() => configStore.write(config)));
 

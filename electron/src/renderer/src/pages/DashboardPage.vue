@@ -98,7 +98,15 @@ function clickTool(tool: (typeof toolButtons.value)[number]) {
       <span class="qq-hint">点击复制</span>
     </Button>
 
-    <SectionTitle label="状态域" />
+    <SectionTitle label="状态域">
+      <Button
+        class-name="section-refresh-button"
+        theme="borderless"
+        type="tertiary"
+        :icon="renderIcon(IconRefresh)"
+        @click="emit('refreshAll')"
+      />
+    </SectionTitle>
     <StatusGrid :items="statusItems" />
 
     <SectionTitle label="工具箱" />

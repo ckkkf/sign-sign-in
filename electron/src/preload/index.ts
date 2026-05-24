@@ -1,8 +1,15 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { LogEntry, SignConfig, SignOption } from "@shared/types";
+import type { LogEntry, LoginPayload, RegisterPayload, SignConfig, SignOption } from "@shared/types";
 import type { SignSignInApi } from "@shared/ipc";
 
 const api: SignSignInApi = {
+  auth: {
+    getState: () => ipcRenderer.invoke("auth:getState"),
+    login: (payload: LoginPayload) => ipcRenderer.invoke("auth:login", payload),
+    captcha: () => ipcRenderer.invoke("auth:captcha"),
+    register: (payload: RegisterPayload) => ipcRenderer.invoke("auth:register", payload),
+    offline: () => ipcRenderer.invoke("auth:offline")
+  },
   config: {
     read: () => ipcRenderer.invoke("config:read"),
     save: (config: SignConfig) => ipcRenderer.invoke("config:save", config)

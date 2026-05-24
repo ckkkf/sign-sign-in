@@ -1,6 +1,18 @@
 import Toast from "@kousum/semi-ui-vue/dist/toast";
 import { computed, onMounted, onUnmounted, reactive, ref } from "vue";
-import type { CaptureState, ImageItem, LogEntry, SignConfig, SignOption, SystemStatus, TaskState } from "@shared/types";
+import type {
+  AuthState,
+  AuthCaptcha,
+  CaptureState,
+  ImageItem,
+  LoginPayload,
+  LogEntry,
+  RegisterPayload,
+  SignConfig,
+  SignOption,
+  SystemStatus,
+  TaskState
+} from "@shared/types";
 import { buildUserAgent } from "../services/config";
 import type { DraftConfigKey, PageKey } from "../types/app";
 import { ensureOk } from "../utils/api";
@@ -12,9 +24,19 @@ export function useAppState() {
   const selectedAction = ref<SignOption["action"]>("普通签到");
   const selectedImage = ref("");
   const logs = ref<LogEntry[]>([]);
+  const packetLogs = ref<LogEntry[]>([]);
   const images = ref<ImageItem[]>([]);
   const config = ref<SignConfig | null>(null);
   const logPanelWidth = ref(420);
+  const authState = ref<AuthState>({
+    loggedIn: false,
+    offline: false
+  });
+  const loginVisible = ref(false);
+  const loginLoading = ref(false);
+  const registerLoading = ref(false);
+  const captchaLoading = ref(false);
+  const authCaptcha = ref<AuthCaptcha | null>(null);
   const status = ref<SystemStatus>({
     time: "-",
     pid: 0,
@@ -60,23 +82,22 @@ export function useAppState() {
   const noticeText = "本软件完全免费，若您是付费获得，请及时退款并警惕倒卖。本项目仅支持个人学习，请勿用于商业活动。";
   const noticeContent = noticeText;
   const isPhotoAction = computed(() => selectedAction.value === "拍照签到" || selectedAction.value === "拍照签退");
-  const statusItems = computed(() => [
-    { key: "时间", value: status.value.time, tone: "info" as const },
-    { key: "PID", value: String(status.value.pid), tone: "muted" as const },
-    { key: "网络", value: status.value.networkType || "未知", tone: status.value.networkType === "未知" ? "warning" as const : "success" as const },
-    { key: "速度", value: status.value.speed || "-", tone: status.value.speed === "-" ? "muted" as const : "success" as const },
-    { key: "代理", value: status.value.proxy, tone: status.value.proxy === "直连" ? "muted" as const : "warning" as const },
-    { key: "证书", value: status.value.certInstalled ? "已就绪" : "未安装", tone: status.value.certInstalled ? "success" as const : "danger" as const },
-    { key: "Mitm", value: status.value.proxyServerRunning ? "运行中" : "未启动", tone: status.value.proxyServerRunning ? "success" as const : "muted" as const },
-    { key: "IP", value: status.value.ip, tone: "info" as const },
-    { key: "Session", value: status.value.sessionValid ? "JSESSIONID 有效" : "未缓存", tone: status.value.sessionValid ? "success" as const : "warning" as const }
-  ]);
-  const packetItems = computed(() => [
-    { key: "proxy", value: status.value.proxy },
-    { key: "capture", value: capture.value.running ? "running" : "stopped" },
-    { key: "code", value: capture.value.lastCode || "empty" },
-    { key: "task", value: task.value.message || "idle" }
-  ]);
+  const statusItems = computed(() => {
+    const mitmRunning = capture.value.running || status.value.proxyServerRunning;
+    return [
+      { key: "时间", value: status.value.time, tone: "info" as const },
+      { key: "PID", value: String(status.value.pid), tone: "muted" as const },
+      { key: "网络", value: status.value.networkType || "未知", tone: status.value.networkType === "未知" ? "warning" as const : "success" as const },
+      { key: "速度", value: status.value.speed || "-", tone: status.value.speed === "-" ? "muted" as const : "success" as const },
+      { key: "代理", value: status.value.proxy, tone: status.value.proxy === "直连" ? "muted" as const : "warning" as const },
+      { key: "证书", value: status.value.certInstalled ? "已就绪" : "未安装", tone: status.value.certInstalled ? "success" as const : "danger" as const },
+      { key: "Mitm", value: capture.value.running ? "抓包中" : status.value.proxyServerRunning ? "代理运行" : "未启动", tone: mitmRunning ? "success" as const : "muted" as const },
+      { key: "IP", value: status.value.ip, tone: "info" as const },
+      { key: "Session", value: status.value.sessionValid ? "JSESSIONID 有效" : "未缓存", tone: status.value.sessionValid ? "success" as const : "warning" as const },
+      { key: "Code", value: capture.value.lastCode || "未捕获", tone: capture.value.lastCode ? "success" as const : "muted" as const }
+    ];
+  });
+  const offlineMode = computed(() => authState.value.offline);
 
   let unsubscribeLog: (() => void) | undefined;
   let unsubscribeCode: (() => void) | undefined;
@@ -84,8 +105,32 @@ export function useAppState() {
   let stopResize: (() => void) | undefined;
   let refreshing = false;
 
+  function isPacketLog(message: string) {
+    return [
+      "MITM",
+      "HTTPS",
+      "TLS",
+      "抓包",
+      "code",
+      "Code",
+      "代理",
+      "小程序",
+      "微信",
+      "JSESSIONID",
+      "上游连接"
+    ].some((keyword) => message.includes(keyword));
+  }
+
+  function pushLog(entry: LogEntry) {
+    if (isPacketLog(entry.message)) {
+      packetLogs.value.unshift(entry);
+      return;
+    }
+    logs.value.unshift(entry);
+  }
+
   function pushLocalLog(message: string, level: LogEntry["level"] = "info") {
-    logs.value.unshift({
+    pushLog({
       time: new Date().toLocaleTimeString(),
       level,
       message
@@ -124,6 +169,70 @@ export function useAppState() {
     } finally {
       refreshing = false;
     }
+  }
+
+  async function manualRefreshAll() {
+    await refreshAll();
+    Toast.success("状态已刷新");
+  }
+
+  async function loadAuthState() {
+    await runAction(async () => {
+      const state = ensureOk(await window.signSignIn.auth.getState());
+      authState.value = state;
+      loginVisible.value = !state.loggedIn && !state.offline;
+      if (state.loggedIn) {
+        Toast.success("登录成功");
+      }
+    });
+  }
+
+  function openLoginIfLoggedOut() {
+    if (authState.value.loggedIn) return;
+    loginVisible.value = true;
+  }
+
+  async function login(payload: LoginPayload) {
+    loginLoading.value = true;
+    try {
+      await runAction(async () => {
+        const state = ensureOk(await window.signSignIn.auth.login(payload));
+        authState.value = state;
+        loginVisible.value = false;
+      }, "登录成功");
+    } finally {
+      loginLoading.value = false;
+    }
+  }
+
+  async function loadCaptcha() {
+    captchaLoading.value = true;
+    try {
+      await runAction(async () => {
+        authCaptcha.value = ensureOk(await window.signSignIn.auth.captcha());
+      });
+    } finally {
+      captchaLoading.value = false;
+    }
+  }
+
+  async function register(payload: RegisterPayload) {
+    registerLoading.value = true;
+    try {
+      await runAction(async () => {
+        ensureOk(await window.signSignIn.auth.register(payload));
+      }, "注册成功，请登录");
+      await loadCaptcha();
+    } finally {
+      registerLoading.value = false;
+    }
+  }
+
+  async function enterOfflineMode() {
+    await runAction(async () => {
+      authState.value = ensureOk(await window.signSignIn.auth.offline());
+      loginVisible.value = false;
+    }, "已进入离线模式");
   }
 
   async function loadConfig() {
@@ -275,17 +384,23 @@ export function useAppState() {
   }
 
   async function copyPacketSnapshot() {
+    if (!packetLogs.value.length) {
+      Toast.warning("暂无抓包日志可复制");
+      return;
+    }
     await runAction(async () => {
-      const text = packetItems.value.map((item) => `${item.key}: ${item.value}`).join("\n");
+      const text = packetLogs.value
+        .slice()
+        .reverse()
+        .map((entry) => `[${entry.time}] ${entry.level.toUpperCase()} ${entry.message}`)
+        .join("\n");
       await navigator.clipboard.writeText(text);
     }, "抓包快照已复制");
   }
 
   async function clearPacketSnapshot() {
-    await runAction(async () => {
-      capture.value = ensureOk(await window.signSignIn.code.setManualCode(""));
-      await refreshAll();
-    }, "抓包快照已清空");
+    packetLogs.value = [];
+    Toast.success("抓包快照已清空");
   }
 
   async function openProxySettings() {
@@ -327,7 +442,7 @@ export function useAppState() {
   onMounted(async () => {
     document.body.setAttribute("theme-mode", "dark");
     try {
-      unsubscribeLog = window.signSignIn.log.subscribe((entry) => logs.value.unshift(entry));
+      unsubscribeLog = window.signSignIn.log.subscribe(pushLog);
       unsubscribeCode = window.signSignIn.code.onCaptured(() => {
         if (task.value.running) return;
         Toast.success("已抓到 code，正在更新 JSESSIONID");
@@ -336,6 +451,7 @@ export function useAppState() {
           await refreshAll();
         });
       });
+      await loadAuthState();
       await loadConfig();
       await refreshAll();
       timer = window.setInterval(() => {
@@ -356,7 +472,10 @@ export function useAppState() {
 
   return {
     actionOptions,
+    authState,
+    authCaptcha,
     bootError,
+    captchaLoading,
     capture,
     changeInput,
     clearLogs,
@@ -368,17 +487,27 @@ export function useAppState() {
     draft,
     images,
     importImage,
+    enterOfflineMode,
     isPhotoAction,
+    login,
+    loginLoading,
+    loginVisible,
     loading,
     logPanelWidth,
     logs,
     noticeContent,
+    offlineMode,
     openCertManager,
+    openLoginIfLoggedOut,
     openProxySettings,
-    packetItems,
+    packetLogs,
     page,
+    manualRefreshAll,
     refreshAll,
     regenerateUserAgent,
+    register,
+    registerLoading,
+    loadCaptcha,
     saveConfig,
     selectedAction,
     selectedImage,

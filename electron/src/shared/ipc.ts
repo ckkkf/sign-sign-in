@@ -1,8 +1,12 @@
 import type {
   ApiResult,
+  AuthState,
   CaptureState,
   ImageItem,
+  LoginPayload,
   LogEntry,
+  AuthCaptcha,
+  RegisterPayload,
   SignConfig,
   SignOption,
   SystemStatus,
@@ -10,6 +14,13 @@ import type {
 } from "./types";
 
 export interface SignSignInApi {
+  auth: {
+    getState: () => Promise<ApiResult<AuthState>>;
+    login: (payload: LoginPayload) => Promise<ApiResult<AuthState>>;
+    captcha: () => Promise<ApiResult<AuthCaptcha>>;
+    register: (payload: RegisterPayload) => Promise<ApiResult<boolean>>;
+    offline: () => Promise<ApiResult<AuthState>>;
+  };
   config: {
     read: () => Promise<ApiResult<SignConfig>>;
     save: (config: SignConfig) => Promise<ApiResult<SignConfig>>;

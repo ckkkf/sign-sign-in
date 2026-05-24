@@ -90,6 +90,44 @@ export interface SystemStatus {
   sessionValid: boolean;
 }
 
+export interface AuthUser {
+  userId?: number;
+  username?: string;
+  nickName?: string;
+  avatar?: string;
+  xybUserId?: number;
+  xybUserName?: string;
+  phone?: string;
+  schoolName?: string;
+  companyName?: string;
+  wxid?: string;
+  openId?: string;
+  unionId?: string;
+  status?: string;
+}
+
+export interface AuthState {
+  loggedIn: boolean;
+  offline: boolean;
+  user?: AuthUser;
+}
+
+export interface LoginPayload {
+  username: string;
+  password: string;
+}
+
+export interface RegisterPayload extends LoginPayload {
+  confirmPassword: string;
+  code: string;
+  uuid: string;
+}
+
+export interface AuthCaptcha {
+  uuid: string;
+  img: string;
+}
+
 export interface ImageItem {
   name: string;
   path: string;
