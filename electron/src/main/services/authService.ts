@@ -1,6 +1,7 @@
-import type { AuthCaptcha, AuthState, LoginPayload, RegisterPayload } from "@shared/types";
-import { authClient, authErrorMessage } from "./authClient";
+import type { AuthSessionPayload, AuthState } from "@shared/types";
+import { isAuthExpiredError, me } from "../api/authClient";
 import { authStore } from "./authStore";
+import { logger } from "./logger";
 
 class AuthService {
   async getState(): Promise<AuthState> {
@@ -14,57 +15,31 @@ class AuthService {
     }
 
     try {
-      const user = await authClient.me(cache.token);
-      authStore.save(cache.token, user);
-      return { loggedIn: true, offline: false, user };
-    } catch {
-      authStore.clear();
-      return { loggedIn: false, offline: false };
+      const user = await me(cache.token, cache.tokenName);
+      return authStore.save(cache.token, user, cache.tokenName);
+    } catch (error) {
+      if (isAuthExpiredError(error)) {
+        authStore.clear();
+        return { loggedIn: false, offline: false };
+      }
+
+      logger.warn(`登录态校验失败，保留本地登录缓存：${error instanceof Error ? error.message : String(error)}`);
+      return authStore.toState(cache);
     }
   }
 
-  async login(payload: LoginPayload): Promise<AuthState> {
-    const username = payload.username.trim();
-    const password = payload.password;
-    if (!username || !password) {
-      throw new Error("请输入账号和密码");
+  saveLogin(payload: AuthSessionPayload): AuthState {
+    const token = payload.token.trim();
+    if (!token) {
+      throw new Error("登录成功但 token 为空");
     }
 
-    try {
-      const token = await authClient.login(username, password);
-      const user = await authClient.me(token);
-      return authStore.save(token, user);
-    } catch (error) {
-      throw new Error(authErrorMessage(error, "登录失败"));
-    }
+    return authStore.save(token, payload.user || {}, payload.tokenName);
   }
 
-  async captcha(): Promise<AuthCaptcha> {
-    try {
-      return await authClient.captcha();
-    } catch (error) {
-      throw new Error(authErrorMessage(error, "获取验证码失败"));
-    }
-  }
-
-  async register(payload: RegisterPayload): Promise<boolean> {
-    const username = payload.username.trim();
-    const password = payload.password;
-    const confirmPassword = payload.confirmPassword;
-    const code = payload.code.trim();
-    if (!username || !password || !confirmPassword || !code || !payload.uuid) {
-      throw new Error("请完整填写注册信息");
-    }
-    if (password !== confirmPassword) {
-      throw new Error("两次输入的密码不一致");
-    }
-
-    try {
-      await authClient.register({ ...payload, username, code });
-      return true;
-    } catch (error) {
-      throw new Error(authErrorMessage(error, "注册失败"));
-    }
+  logout(): AuthState {
+    authStore.clear();
+    return { loggedIn: false, offline: false };
   }
 
   offline(): AuthState {

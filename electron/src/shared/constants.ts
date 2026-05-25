@@ -1,7 +1,6 @@
 export const PROJECT_NAME = "Sign sign in";
-export const PROJECT_VERSION = "v1.3.1";
-export const PROJECT_GITHUB = "https://github.com/ckkkf/sign-sign-in";
 export const QQ_GROUP = "859098272";
+export const AUTH_BASE_URL = "http://localhost:18080";
 
 export const XYB_VERSION = "1.6.40";
 export const XYB_KEY = "ZsE4rGnjI9PkHqAz2WseDc4RF8Uh7YgVMb5Ke48NemJ4saA6XcQ821fFT061pC";

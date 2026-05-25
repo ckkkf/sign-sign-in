@@ -1,12 +1,17 @@
 import type {
   ApiResult,
   AuthState,
+  AuthSessionPayload,
   CaptureState,
   ImageItem,
-  LoginPayload,
+  JieLongFieldAnswer,
+  JieLongFileInfo,
+  JieLongFormBundle,
+  JieLongQrLogin,
+  JieLongQrState,
+  JieLongSettings,
+  JieLongSubmitPayload,
   LogEntry,
-  AuthCaptcha,
-  RegisterPayload,
   SignConfig,
   SignOption,
   SystemStatus,
@@ -16,9 +21,8 @@ import type {
 export interface SignSignInApi {
   auth: {
     getState: () => Promise<ApiResult<AuthState>>;
-    login: (payload: LoginPayload) => Promise<ApiResult<AuthState>>;
-    captcha: () => Promise<ApiResult<AuthCaptcha>>;
-    register: (payload: RegisterPayload) => Promise<ApiResult<boolean>>;
+    saveLogin: (payload: AuthSessionPayload) => Promise<ApiResult<AuthState>>;
+    logout: () => Promise<ApiResult<AuthState>>;
     offline: () => Promise<ApiResult<AuthState>>;
   };
   config: {
@@ -46,7 +50,29 @@ export interface SignSignInApi {
   image: {
     list: () => Promise<ApiResult<ImageItem[]>>;
     import: () => Promise<ApiResult<ImageItem>>;
+    rename: (path: string, name: string) => Promise<ApiResult<ImageItem>>;
+    replace: (path: string) => Promise<ApiResult<ImageItem>>;
     delete: (path: string) => Promise<ApiResult<boolean>>;
+    openDir: () => Promise<ApiResult<boolean>>;
+  };
+  jielong: {
+    getSettings: () => Promise<ApiResult<JieLongSettings>>;
+    saveSettings: (settings: Partial<JieLongSettings>) => Promise<ApiResult<JieLongSettings>>;
+    createQrLogin: () => Promise<ApiResult<JieLongQrLogin>>;
+    pollQrLogin: (uuid: string) => Promise<ApiResult<JieLongQrState>>;
+    exchangeQrToken: (code: string) => Promise<ApiResult<JieLongSettings>>;
+    parseShareUrl: (shareUrl: string) => Promise<ApiResult<string>>;
+    loadForm: (token: string, threadId: string) => Promise<ApiResult<JieLongFormBundle>>;
+    getDraft: (threadId: string) => Promise<ApiResult<Record<string, JieLongFieldAnswer>>>;
+    saveDraft: (threadId: string, answers: Record<string, JieLongFieldAnswer>) => Promise<ApiResult<boolean>>;
+    buildLocalMediaFiles: (paths: string[]) => Promise<ApiResult<JieLongFileInfo[]>>;
+    buildSubmitPayload: (
+      bundle: JieLongFormBundle,
+      answers: Record<string, JieLongFieldAnswer>,
+      signature: string,
+      number: string
+    ) => Promise<ApiResult<JieLongSubmitPayload>>;
+    submit: (token: string, payload: JieLongSubmitPayload) => Promise<ApiResult<Record<string, any>>>;
   };
   log: {
     clear: () => Promise<ApiResult<boolean>>;

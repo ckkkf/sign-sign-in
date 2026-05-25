@@ -1,13 +1,21 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { LogEntry, LoginPayload, RegisterPayload, SignConfig, SignOption } from "@shared/types";
+import type {
+  AuthSessionPayload,
+  JieLongFieldAnswer,
+  JieLongFormBundle,
+  JieLongSettings,
+  JieLongSubmitPayload,
+  LogEntry,
+  SignConfig,
+  SignOption
+} from "@shared/types";
 import type { SignSignInApi } from "@shared/ipc";
 
 const api: SignSignInApi = {
   auth: {
     getState: () => ipcRenderer.invoke("auth:getState"),
-    login: (payload: LoginPayload) => ipcRenderer.invoke("auth:login", payload),
-    captcha: () => ipcRenderer.invoke("auth:captcha"),
-    register: (payload: RegisterPayload) => ipcRenderer.invoke("auth:register", payload),
+    saveLogin: (payload: AuthSessionPayload) => ipcRenderer.invoke("auth:saveLogin", payload),
+    logout: () => ipcRenderer.invoke("auth:logout"),
     offline: () => ipcRenderer.invoke("auth:offline")
   },
   config: {
@@ -39,7 +47,25 @@ const api: SignSignInApi = {
   image: {
     list: () => ipcRenderer.invoke("image:list"),
     import: () => ipcRenderer.invoke("image:import"),
-    delete: (path: string) => ipcRenderer.invoke("image:delete", path)
+    rename: (path: string, name: string) => ipcRenderer.invoke("image:rename", path, name),
+    replace: (path: string) => ipcRenderer.invoke("image:replace", path),
+    delete: (path: string) => ipcRenderer.invoke("image:delete", path),
+    openDir: () => ipcRenderer.invoke("image:openDir")
+  },
+  jielong: {
+    getSettings: () => ipcRenderer.invoke("jielong:getSettings"),
+    saveSettings: (settings: Partial<JieLongSettings>) => ipcRenderer.invoke("jielong:saveSettings", settings),
+    createQrLogin: () => ipcRenderer.invoke("jielong:createQrLogin"),
+    pollQrLogin: (uuid: string) => ipcRenderer.invoke("jielong:pollQrLogin", uuid),
+    exchangeQrToken: (code: string) => ipcRenderer.invoke("jielong:exchangeQrToken", code),
+    parseShareUrl: (shareUrl: string) => ipcRenderer.invoke("jielong:parseShareUrl", shareUrl),
+    loadForm: (token: string, threadId: string) => ipcRenderer.invoke("jielong:loadForm", token, threadId),
+    getDraft: (threadId: string) => ipcRenderer.invoke("jielong:getDraft", threadId),
+    saveDraft: (threadId: string, answers: Record<string, JieLongFieldAnswer>) => ipcRenderer.invoke("jielong:saveDraft", threadId, answers),
+    buildLocalMediaFiles: (paths: string[]) => ipcRenderer.invoke("jielong:buildLocalMediaFiles", paths),
+    buildSubmitPayload: (bundle: JieLongFormBundle, answers: Record<string, JieLongFieldAnswer>, signature: string, number: string) =>
+      ipcRenderer.invoke("jielong:buildSubmitPayload", bundle, answers, signature, number),
+    submit: (token: string, payload: JieLongSubmitPayload) => ipcRenderer.invoke("jielong:submit", token, payload)
   },
   log: {
     clear: () => ipcRenderer.invoke("log:clear"),

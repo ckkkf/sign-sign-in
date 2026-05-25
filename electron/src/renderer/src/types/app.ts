@@ -1,6 +1,6 @@
 import type { LogEntry } from "@shared/types";
 
-export type PageKey = "dashboard" | "config";
+export type PageKey = "dashboard" | "jielong" | "config";
 
 export interface StatusItem {
   key: string;

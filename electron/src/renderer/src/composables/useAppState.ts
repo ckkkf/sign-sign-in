@@ -1,5 +1,6 @@
 import Toast from "@kousum/semi-ui-vue/dist/toast";
 import { computed, onMounted, onUnmounted, reactive, ref } from "vue";
+import { QQ_GROUP } from "@shared/constants";
 import type {
   AuthState,
   AuthCaptcha,
@@ -13,6 +14,8 @@ import type {
   SystemStatus,
   TaskState
 } from "@shared/types";
+import * as authApi from "../services/authApi";
+import type { FeedbackPayload } from "../services/authApi";
 import { buildUserAgent } from "../services/config";
 import type { DraftConfigKey, PageKey } from "../types/app";
 import { ensureOk } from "../utils/api";
@@ -34,8 +37,13 @@ export function useAppState() {
   });
   const loginVisible = ref(false);
   const loginLoading = ref(false);
+  const feedbackVisible = ref(false);
+  const feedbackLoading = ref(false);
+  const imageManagerVisible = ref(false);
   const registerLoading = ref(false);
   const captchaLoading = ref(false);
+  const emailCodeLoading = ref(false);
+  const registerEmailUuid = ref("");
   const authCaptcha = ref<AuthCaptcha | null>(null);
   const status = ref<SystemStatus>({
     time: "-",
@@ -106,19 +114,21 @@ export function useAppState() {
   let refreshing = false;
 
   function isPacketLog(message: string) {
+    if (message.startsWith("渲染控制台:")) {
+      return false;
+    }
+
     return [
       "MITM",
       "HTTPS",
       "TLS",
       "抓包",
-      "code",
-      "Code",
       "代理",
       "小程序",
       "微信",
       "JSESSIONID",
       "上游连接"
-    ].some((keyword) => message.includes(keyword));
+    ].some((keyword) => message.includes(keyword)) || /(^|[^a-zA-Z])code([^a-zA-Z]|$)/.test(message);
   }
 
   function pushLog(entry: LogEntry) {
@@ -188,15 +198,30 @@ export function useAppState() {
   }
 
   function openLoginIfLoggedOut() {
-    if (authState.value.loggedIn) return;
+    if (authState.value.loggedIn) {
+      return;
+    }
+
     loginVisible.value = true;
+  }
+
+  function openFeedback() {
+    if (!authState.value.loggedIn || !authState.value.token) {
+      loginVisible.value = true;
+      Toast.warning("请先登录后再发送反馈");
+      return;
+    }
+
+    feedbackVisible.value = true;
   }
 
   async function login(payload: LoginPayload) {
     loginLoading.value = true;
     try {
       await runAction(async () => {
-        const state = ensureOk(await window.signSignIn.auth.login(payload));
+        const session = await authApi.login(payload);
+        const user = await authApi.me(session.token, session.tokenName);
+        const state = ensureOk(await window.signSignIn.auth.saveLogin({ ...session, user }));
         authState.value = state;
         loginVisible.value = false;
       }, "登录成功");
@@ -209,19 +234,46 @@ export function useAppState() {
     captchaLoading.value = true;
     try {
       await runAction(async () => {
-        authCaptcha.value = ensureOk(await window.signSignIn.auth.captcha());
+        authCaptcha.value = await authApi.captcha();
       });
     } finally {
       captchaLoading.value = false;
     }
   }
 
+  async function sendEmailCode(email: string) {
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail) {
+      Toast.warning("请先填写邮箱");
+      return;
+    }
+
+    emailCodeLoading.value = true;
+    try {
+      await runAction(async () => {
+        registerEmailUuid.value = await authApi.sendEmailCode(trimmedEmail);
+      }, "邮箱验证码已发送");
+    } finally {
+      emailCodeLoading.value = false;
+    }
+  }
+
+  function clearRegisterEmailCode() {
+    registerEmailUuid.value = "";
+  }
+
   async function register(payload: RegisterPayload) {
+    if (!payload.email.trim() || !payload.emailCode.trim() || !payload.emailUuid.trim()) {
+      Toast.warning("请填写邮箱并完成邮箱验证码验证");
+      return;
+    }
+
     registerLoading.value = true;
     try {
       await runAction(async () => {
-        ensureOk(await window.signSignIn.auth.register(payload));
+        await authApi.register(payload);
       }, "注册成功，请登录");
+      registerEmailUuid.value = "";
       await loadCaptcha();
     } finally {
       registerLoading.value = false;
@@ -233,6 +285,47 @@ export function useAppState() {
       authState.value = ensureOk(await window.signSignIn.auth.offline());
       loginVisible.value = false;
     }, "已进入离线模式");
+  }
+
+  async function logout() {
+    await runAction(async () => {
+      const token = authState.value.token || "";
+      if (token) {
+        try {
+          await authApi.logout(token, authState.value.tokenName || "Xyb-Token");
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          pushLocalLog(`远程登出失败，已清理本地登录态：${message}`, "warn");
+        }
+      }
+      authState.value = ensureOk(await window.signSignIn.auth.logout());
+      loginVisible.value = true;
+    }, "已退出登录");
+  }
+
+  async function submitFeedback(payload: FeedbackPayload) {
+    if (!payload.title || !payload.content) {
+      Toast.warning("请填写反馈标题和内容");
+      return;
+    }
+
+    const token = authState.value.token || "";
+    const tokenName = authState.value.tokenName || "Xyb-Token";
+    if (!token) {
+      loginVisible.value = true;
+      Toast.warning("请先登录后再发送反馈");
+      return;
+    }
+
+    feedbackLoading.value = true;
+    try {
+      await runAction(async () => {
+        await authApi.submitFeedback(payload, token, tokenName);
+        feedbackVisible.value = false;
+      }, "反馈提交成功，感谢支持");
+    } finally {
+      feedbackLoading.value = false;
+    }
   }
 
   async function loadConfig() {
@@ -303,20 +396,53 @@ export function useAppState() {
   }
 
   async function importImage() {
-    await runAction(async () => {
+    return runAction(async () => {
       const item = ensureOk(await window.signSignIn.image.import());
       selectedImage.value = item.path;
       await refreshAll();
+      return item;
     }, "图片已导入");
+  }
+
+  function openImageManager() {
+    imageManagerVisible.value = true;
+    void refreshAll();
+  }
+
+  async function renameImage(path: string, name: string) {
+    return runAction(async () => {
+      const item = ensureOk(await window.signSignIn.image.rename(path, name));
+      if (selectedImage.value === path) selectedImage.value = item.path;
+      await refreshAll();
+      return item;
+    }, "图片已重命名");
+  }
+
+  async function replaceImage(path: string) {
+    return runAction(async () => {
+      const item = ensureOk(await window.signSignIn.image.replace(path));
+      if (selectedImage.value === path) selectedImage.value = item.path;
+      await refreshAll();
+      return item;
+    }, "图片已替换");
+  }
+
+  async function deleteImage(path: string) {
+    return runAction(async () => {
+      ensureOk(await window.signSignIn.image.delete(path));
+      if (selectedImage.value === path) selectedImage.value = "";
+      await refreshAll();
+      return true;
+    }, "图片已删除");
   }
 
   async function deleteSelectedImage() {
     if (!selectedImage.value) return;
-    await runAction(async () => {
-      ensureOk(await window.signSignIn.image.delete(selectedImage.value));
-      selectedImage.value = "";
-      await refreshAll();
-    }, "图片已删除");
+    await deleteImage(selectedImage.value);
+  }
+
+  async function openImageDir() {
+    await runAction(async () => ensureOk(await window.signSignIn.image.openDir()));
   }
 
   function regenerateUserAgent() {
@@ -412,7 +538,7 @@ export function useAppState() {
   }
 
   async function copyQQGroup() {
-    await navigator.clipboard?.writeText("859098272");
+    await navigator.clipboard?.writeText(QQ_GROUP);
     Toast.success("QQ群号已复制");
   }
 
@@ -478,6 +604,7 @@ export function useAppState() {
     captchaLoading,
     capture,
     changeInput,
+    clearRegisterEmailCode,
     clearLogs,
     clearPacketSnapshot,
     copyLogs,
@@ -486,18 +613,26 @@ export function useAppState() {
     deleteSelectedImage,
     draft,
     images,
+    imageManagerVisible,
     importImage,
     enterOfflineMode,
+    emailCodeLoading,
+    feedbackLoading,
+    feedbackVisible,
     isPhotoAction,
     login,
     loginLoading,
     loginVisible,
+    logout,
     loading,
     logPanelWidth,
     logs,
     noticeContent,
     offlineMode,
     openCertManager,
+    openFeedback,
+    openImageDir,
+    openImageManager,
     openLoginIfLoggedOut,
     openProxySettings,
     packetLogs,
@@ -505,9 +640,13 @@ export function useAppState() {
     manualRefreshAll,
     refreshAll,
     regenerateUserAgent,
+    registerEmailUuid,
+    renameImage,
+    replaceImage,
     register,
     registerLoading,
     loadCaptcha,
+    sendEmailCode,
     saveConfig,
     selectedAction,
     selectedImage,
@@ -518,6 +657,8 @@ export function useAppState() {
     statusItems,
     stopCapture,
     stopTask,
+    submitFeedback,
+    deleteImage,
     task
   };
 }

@@ -18,10 +18,10 @@ import {
   IconPlay,
   IconRefresh,
   IconShieldStroked,
-  IconStop,
-  IconUpload
+  IconStop
 } from "@kousum/semi-icons-vue";
 import { computed } from "vue";
+import { PROJECT_NAME, QQ_GROUP } from "@shared/constants";
 import type { CaptureState, ImageItem, SignOption, SystemStatus, TaskState } from "@shared/types";
 import MainActionButton from "../components/MainActionButton.vue";
 import SectionTitle from "../components/SectionTitle.vue";
@@ -49,8 +49,9 @@ const emit = defineEmits<{
   (event: "changeSelectedImage", value: string): void;
   (event: "copyQQGroup"): void;
   (event: "deleteSelectedImage"): void;
-  (event: "importImage"): void;
+  (event: "openImageManager"): void;
   (event: "openCertManager"): void;
+  (event: "openFeedback"): void;
   (event: "openProxySettings"): void;
   (event: "refreshAll"): void;
   (event: "startCapture"): void;
@@ -64,8 +65,8 @@ const toolButtons = computed(() => [
   { label: "证书管理", icon: IconLockStroked, action: () => emit("openCertManager") },
   { label: "编辑配置", icon: IconFile, action: () => emit("changePage", "config") },
   { label: "刷新状态", icon: IconRefresh, action: () => emit("refreshAll") },
-  { label: "发送反馈", icon: IconShieldStroked, disabled: true },
-  { label: "图片管理", icon: IconImage, action: () => emit("importImage") },
+  { label: "发送反馈", icon: IconShieldStroked, action: () => emit("openFeedback") },
+  { label: "图片管理", icon: IconImage, action: () => emit("openImageManager") },
   { label: "更新中心", icon: IconShieldStroked, disabled: true },
   { label: "AI 与周记", icon: IconApps, disabled: true },
   { label: "定时打卡", icon: IconClock, disabled: true }
@@ -81,7 +82,7 @@ function clickTool(tool: (typeof toolButtons.value)[number]) {
   <section class="home-panel">
     <header class="title-row">
       <div class="title-pair">
-        <TypographyTitle :heading="3">Sign sign in</TypographyTitle>
+        <TypographyTitle :heading="3">{{ PROJECT_NAME }}</TypographyTitle>
         <span>自动化实习签到系统</span>
       </div>
       <Space>
@@ -94,7 +95,7 @@ function clickTool(tool: (typeof toolButtons.value)[number]) {
       <span class="qq-badge">QQ</span>
       <span class="qq-label">交流群</span>
       <span class="qq-divider">/</span>
-      <span class="qq-number">859098272</span>
+      <span class="qq-number">{{ QQ_GROUP }}</span>
       <span class="qq-hint">点击复制</span>
     </Button>
 
@@ -142,7 +143,7 @@ function clickTool(tool: (typeof toolButtons.value)[number]) {
         :option-list="images.map((image) => ({ value: image.path, label: image.name }))"
         @change="(value: any) => emit('changeSelectedImage', String(value || ''))"
       />
-      <Button theme="light" :icon="renderIcon(IconUpload)" @click="emit('importImage')">导入</Button>
+      <Button theme="light" :icon="renderIcon(IconImage)" @click="emit('openImageManager')">图片管理</Button>
       <Button
         theme="light"
         type="danger"

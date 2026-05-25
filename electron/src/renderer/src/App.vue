@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import AppRail from "./components/AppRail.vue";
+import FeedbackDialog from "./components/FeedbackDialog.vue";
+import ImageManagerDialog from "./components/ImageManagerDialog.vue";
 import LoginDialog from "./components/LoginDialog.vue";
 import LogPanel from "./components/LogPanel.vue";
 import NoticeBanner from "./components/NoticeBanner.vue";
 import { useAppState } from "./composables/useAppState";
 import ConfigPage from "./pages/ConfigPage.vue";
 import DashboardPage from "./pages/DashboardPage.vue";
+import JieLongPage from "./pages/JieLongPage.vue";
 
 const app = useAppState();
 </script>
@@ -19,6 +22,7 @@ const app = useAppState();
         :offline="app.offlineMode.value"
         @change-page="(nextPage) => (app.page.value = nextPage)"
         @open-login="app.openLoginIfLoggedOut"
+        @logout="app.logout"
       />
 
       <section class="workspace">
@@ -47,7 +51,8 @@ const app = useAppState();
                 @change-selected-image="(value) => (app.selectedImage.value = value)"
                 @copy-q-q-group="app.copyQQGroup"
                 @delete-selected-image="app.deleteSelectedImage"
-                @import-image="app.importImage"
+                @open-image-manager="app.openImageManager"
+                @open-feedback="app.openFeedback"
                 @open-cert-manager="app.openCertManager"
                 @open-proxy-settings="app.openProxySettings"
                 @refresh-all="app.manualRefreshAll"
@@ -55,6 +60,12 @@ const app = useAppState();
                 @start-task="app.startTask"
                 @stop-capture="app.stopCapture"
                 @stop-task="app.stopTask"
+              />
+
+              <JieLongPage
+                v-else-if="app.page.value === 'jielong'"
+                :images="app.images.value"
+                @open-image-manager="app.openImageManager"
               />
 
               <ConfigPage
@@ -85,11 +96,36 @@ const app = useAppState();
         :loading="app.loginLoading.value"
         :register-loading="app.registerLoading.value"
         :captcha-loading="app.captchaLoading.value"
+        :email-code-loading="app.emailCodeLoading.value"
+        :email-uuid="app.registerEmailUuid.value"
         :captcha="app.authCaptcha.value"
         @login="app.login"
         @register="app.register"
         @load-captcha="app.loadCaptcha"
+        @send-email-code="app.sendEmailCode"
+        @clear-email-code="app.clearRegisterEmailCode"
         @offline="app.enterOfflineMode"
+      />
+
+      <FeedbackDialog
+        :visible="app.feedbackVisible.value"
+        :loading="app.feedbackLoading.value"
+        @close="app.feedbackVisible.value = false"
+        @submit="app.submitFeedback"
+      />
+
+      <ImageManagerDialog
+        :visible="app.imageManagerVisible.value"
+        :images="app.images.value"
+        :selected-image="app.selectedImage.value"
+        @close="app.imageManagerVisible.value = false"
+        @select="(path) => (app.selectedImage.value = path)"
+        @import="app.importImage"
+        @rename="app.renameImage"
+        @replace="app.replaceImage"
+        @delete="app.deleteImage"
+        @refresh="app.refreshAll"
+        @open-dir="app.openImageDir"
       />
     </section>
   </main>

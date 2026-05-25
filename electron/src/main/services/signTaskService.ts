@@ -2,14 +2,20 @@ import type { SignConfig, SignOption, TaskState } from "@shared/types";
 import { configStore } from "./configStore";
 import { logger } from "./logger";
 import { codeCaptureService } from "./codeCaptureService";
-import { xybClient } from "./xybClient";
+import * as xybApi from "../api/xybClient";
 
 function jitterLocation(input: SignConfig["input"]): void {
   const lon = Number(input.location.longitude);
   const lat = Number(input.location.latitude);
-  if (!Number.isFinite(lon) || !Number.isFinite(lat)) return;
+  if (!Number.isFinite(lon) || !Number.isFinite(lat)) {
+    return;
+  }
+
   let radius = Number(input.locationJitterMeters ?? 100);
-  if (!Number.isFinite(radius)) radius = 100;
+  if (!Number.isFinite(radius)) {
+    radius = 100;
+  }
+
   radius = Math.max(0, Math.min(radius, 500));
   if (radius <= 0) {
     logger.info("位置抖动已禁用，使用原始坐标提交签到");
@@ -50,7 +56,10 @@ export class SignTaskService {
   }
 
   async start(option: SignOption): Promise<TaskState> {
-    if (this.state.running) throw new Error("已有任务正在执行");
+    if (this.state.running) {
+      throw new Error("已有任务正在执行");
+    }
+
     this.abortController = new AbortController();
     this.state = {
       running: true,
@@ -71,7 +80,10 @@ export class SignTaskService {
   }
 
   async refreshSessionFromCapturedCode(): Promise<TaskState> {
-    if (this.state.running) throw new Error("已有任务正在执行");
+    if (this.state.running) {
+      throw new Error("已有任务正在执行");
+    }
+
     this.abortController = new AbortController();
     this.state = {
       running: true,
@@ -85,7 +97,9 @@ export class SignTaskService {
   }
 
   private checkStop(signal: AbortSignal): void {
-    if (signal.aborted) throw new Error("用户停止执行");
+    if (signal.aborted) {
+      throw new Error("用户停止执行");
+    }
   }
 
   private async run(option: SignOption, signal: AbortSignal): Promise<void> {
@@ -100,15 +114,17 @@ export class SignTaskService {
         input.code = capturedCode;
       }
 
-      const args = await xybClient.login(input, true);
+      const args = await xybApi.login(input, true);
       this.checkStop(signal);
-      const plan = await xybClient.getPlan(input, args);
+      const plan = await xybApi.getPlan(input, args);
       this.checkStop(signal);
-      const geo = await xybClient.regeo(input);
+      const geo = await xybApi.regeo(input);
       this.checkStop(signal);
 
       const traineeId = String(plan?.[0]?.dateList?.[0]?.traineeId || args.traineeId || "");
-      if (!traineeId) throw new Error("未获取到 traineeId");
+      if (!traineeId) {
+        throw new Error("未获取到 traineeId");
+      }
 
       if (option.action === "普通签到签退") {
         const steps = option.steps?.length
@@ -116,15 +132,15 @@ export class SignTaskService {
           : [
               { action: "普通签到", code: "2" },
               { action: "普通签退", code: "1" }
-            ];
+          ];
         for (const step of steps) {
           this.checkStop(signal);
-          await xybClient.simpleSignInOrOut(args, input, geo, traineeId, step as SignOption);
+          await xybApi.simpleSignInOrOut(args, input, geo, traineeId, step as SignOption);
         }
       } else if (option.action === "拍照签到" || option.action === "拍照签退") {
-        await xybClient.photoSignInOrOut(args, input, geo, traineeId, option);
+        await xybApi.photoSignInOrOut(args, input, geo, traineeId, option);
       } else {
-        await xybClient.simpleSignInOrOut(args, input, geo, traineeId, option);
+        await xybApi.simpleSignInOrOut(args, input, geo, traineeId, option);
       }
 
       this.state = {
@@ -161,7 +177,7 @@ export class SignTaskService {
         input.code = capturedCode;
       }
       this.checkStop(signal);
-      await xybClient.login(input, false);
+      await xybApi.login(input, false);
       this.state = {
         running: false,
         source: "",

@@ -32,6 +32,10 @@ export function getRuntimeAuthPath(): string {
   return join(getUserRoot(), "cache", "auth_cache.json");
 }
 
+export function getRuntimeJieLongDraftsPath(): string {
+  return join(getUserRoot(), "cache", "jielong_form_drafts.json");
+}
+
 export function getRuntimeImageDir(): string {
   return join(getUserRoot(), "img");
 }

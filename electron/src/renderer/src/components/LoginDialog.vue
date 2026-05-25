@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import Button from "@kousum/semi-ui-vue/dist/button";
 import Input from "@kousum/semi-ui-vue/dist/input";
-import { IconKey, IconUser, IconVerify } from "@kousum/semi-icons-vue";
+import { IconKey, IconMail, IconUser, IconVerify } from "@kousum/semi-icons-vue";
 import { reactive, ref, watch } from "vue";
 import type { AuthCaptcha, LoginPayload, RegisterPayload } from "@shared/types";
 import logoUrl from "../assets/lingdong-logo.png";
@@ -12,6 +12,8 @@ const props = defineProps<{
   loading: boolean;
   registerLoading: boolean;
   captchaLoading: boolean;
+  emailCodeLoading: boolean;
+  emailUuid: string;
   captcha: AuthCaptcha | null;
 }>();
 
@@ -19,6 +21,8 @@ const emit = defineEmits<{
   (event: "login", payload: LoginPayload): void;
   (event: "register", payload: RegisterPayload): void;
   (event: "loadCaptcha"): void;
+  (event: "sendEmailCode", email: string): void;
+  (event: "clearEmailCode"): void;
   (event: "offline"): void;
 }>();
 
@@ -27,6 +31,8 @@ const form = reactive({
   username: "",
   password: "",
   confirmPassword: "",
+  email: "",
+  emailCode: "",
   code: ""
 });
 
@@ -49,6 +55,9 @@ function submit() {
       username: form.username,
       password: form.password,
       confirmPassword: form.confirmPassword,
+      email: form.email,
+      emailCode: form.emailCode,
+      emailUuid: props.emailUuid,
       code: form.code,
       uuid: props.captcha?.uuid || ""
     });
@@ -62,6 +71,10 @@ function submit() {
 
 function switchMode(next: "login" | "register") {
   mode.value = next;
+}
+
+function sendEmailCode() {
+  emit("sendEmailCode", form.email);
 }
 </script>
 
@@ -90,7 +103,7 @@ function switchMode(next: "login" | "register") {
               <span>账号</span>
               <Input
                 :value="form.username"
-                size="large"
+                size="default"
                 placeholder="请输入账号"
                 :prefix="renderIcon(IconUser)"
                 :disabled="loading"
@@ -103,7 +116,7 @@ function switchMode(next: "login" | "register") {
               <Input
                 :value="form.password"
                 mode="password"
-                size="large"
+                size="default"
                 placeholder="请输入密码"
                 :prefix="renderIcon(IconKey)"
                 :disabled="loading || registerLoading"
@@ -116,7 +129,7 @@ function switchMode(next: "login" | "register") {
               <Input
                 :value="form.confirmPassword"
                 mode="password"
-                size="large"
+                size="default"
                 placeholder="请再次输入密码"
                 :prefix="renderIcon(IconKey)"
                 :disabled="registerLoading"
@@ -125,11 +138,46 @@ function switchMode(next: "login" | "register") {
               />
             </label>
             <label v-if="mode === 'register'" class="login-field">
+              <span>邮箱</span>
+              <Input
+                :value="form.email"
+                size="default"
+                placeholder="请输入邮箱"
+                :prefix="renderIcon(IconMail)"
+                :disabled="registerLoading"
+                @change="(value: string) => { form.email = value; emit('clearEmailCode'); }"
+                @enter-press="sendEmailCode"
+              />
+            </label>
+            <label v-if="mode === 'register'" class="login-field">
               <span>验证码</span>
+              <div class="email-code-row">
+                <Input
+                  :value="form.emailCode"
+                  size="default"
+                  placeholder="请输入邮箱验证码"
+                  :prefix="renderIcon(IconVerify)"
+                  :disabled="registerLoading"
+                  @change="(value: string) => (form.emailCode = value)"
+                  @enter-press="submit"
+                />
+                <Button
+                  class-name="send-code-button"
+                  type="tertiary"
+                  :loading="emailCodeLoading"
+                  :disabled="registerLoading"
+                  @click="sendEmailCode"
+                >
+                  发送验证码
+                </Button>
+              </div>
+            </label>
+            <label v-if="mode === 'register'" class="login-field">
+              <span>图形码</span>
               <div class="captcha-row">
                 <Input
                   :value="form.code"
-                  size="large"
+                  size="default"
                   placeholder="请输入验证码"
                   :prefix="renderIcon(IconVerify)"
                   :disabled="registerLoading"
