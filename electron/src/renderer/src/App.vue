@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import Layout from "@kousum/semi-ui-vue/dist/layout";
 import AppRail from "./components/AppRail.vue";
 import FeedbackDialog from "./components/FeedbackDialog.vue";
 import ImageManagerDialog from "./components/ImageManagerDialog.vue";
@@ -14,8 +15,9 @@ const app = useAppState();
 </script>
 
 <template>
-  <main class="app-shell">
-    <section class="layout" :style="{ '--log-panel-width': `${app.logPanelWidth.value}px` }">
+  <div class="app-shell">
+    <Layout>
+      <Layout.Sider :style="{ width: '56px' }" class="app-sider">
       <AppRail
         :page="app.page.value"
         :user="app.authState.value.user"
@@ -24,13 +26,14 @@ const app = useAppState();
         @open-login="app.openLoginIfLoggedOut"
         @logout="app.logout"
       />
+    </Layout.Sider>
 
-      <section class="workspace">
-        <div class="banner-stack">
-          <NoticeBanner :boot-error="app.bootError.value" :notice-content="app.noticeContent" />
-        </div>
+    <section class="workspace">
+      <div class="banner-stack">
+        <NoticeBanner :boot-error="app.bootError.value" :notice-content="app.noticeContent" />
+      </div>
 
-        <section class="workspace-body">
+      <section class="workspace-body" :style="{ '--log-panel-width': `${app.logPanelWidth.value}px` }">
           <section class="main-panel">
             <button v-if="app.offlineMode.value" class="offline-banner" type="button" @click="app.openLoginIfLoggedOut">离线模式</button>
             <div class="main-content-pad">
@@ -89,7 +92,6 @@ const app = useAppState();
             @clear-packet-snapshot="app.clearPacketSnapshot"
           />
         </section>
-      </section>
 
       <LoginDialog
         :visible="app.loginVisible.value"
@@ -128,5 +130,6 @@ const app = useAppState();
         @open-dir="app.openImageDir"
       />
     </section>
-  </main>
+  </Layout>
+</div>
 </template>

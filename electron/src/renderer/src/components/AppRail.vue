@@ -1,6 +1,7 @@
 <script setup lang="ts">
+import Nav from "@kousum/semi-ui-vue/dist/navigation";
 import Button from "@kousum/semi-ui-vue/dist/button";
-import { IconHome, IconHomeStroked, IconList, IconOrderedListStroked, IconSetting, IconSettingStroked, IconUser } from "@kousum/semi-icons-vue";
+import { IconHome, IconList, IconSetting, IconUser } from "@kousum/semi-icons-vue";
 import { computed } from "vue";
 import type { AuthUser } from "@shared/types";
 import type { PageKey } from "../types/app";
@@ -26,6 +27,12 @@ const displayName = computed(() => {
 
 const accountName = computed(() => props.user?.username || props.user?.xybUserName || "");
 const avatarSrc = computed(() => props.user?.avatar || (props.user ? defaultAvatar : ""));
+
+const selectedKeys = computed(() => [props.page]);
+
+function handleSelect(data: any) {
+  emit("changePage", data.selectedKeys[0] as PageKey);
+}
 </script>
 
 <template>
@@ -45,33 +52,28 @@ const avatarSrc = computed(() => props.user?.avatar || (props.user ? defaultAvat
     </div>
 
     <div class="rail-nav-shell">
-      <div :class="['rail-item', { 'is-active': page === 'dashboard' }]" data-label="首页">
-        <Button
-          class-name="rail-nav-button"
-          theme="borderless"
-          type="tertiary"
-          :icon="renderIcon(page === 'dashboard' ? IconHome : IconHomeStroked, 'default')"
-          @click="emit('changePage', 'dashboard')"
+      <Nav
+        mode="vertical"
+        :selected-keys="selectedKeys"
+        :is-collapsed="true"
+        @select="handleSelect"
+      >
+        <Nav.Item
+          item-key="dashboard"
+          :icon="renderIcon(IconHome, 'default')"
+          text="首页"
         />
-      </div>
-      <div :class="['rail-item', { 'is-active': page === 'jielong' }]" data-label="接龙">
-        <Button
-          class-name="rail-nav-button"
-          theme="borderless"
-          type="tertiary"
-          :icon="renderIcon(page === 'jielong' ? IconList : IconOrderedListStroked, 'default')"
-          @click="emit('changePage', 'jielong')"
+        <Nav.Item
+          item-key="jielong"
+          :icon="renderIcon(IconList, 'default')"
+          text="接龙"
         />
-      </div>
-      <div :class="['rail-item', { 'is-active': page === 'config' }]" data-label="配置">
-        <Button
-          class-name="rail-nav-button"
-          theme="borderless"
-          type="tertiary"
-          :icon="renderIcon(page === 'config' ? IconSetting : IconSettingStroked, 'default')"
-          @click="emit('changePage', 'config')"
+        <Nav.Item
+          item-key="config"
+          :icon="renderIcon(IconSetting, 'default')"
+          text="配置"
         />
-      </div>
+      </Nav>
     </div>
     <div class="rail-spacer" />
   </aside>
