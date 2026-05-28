@@ -15,19 +15,19 @@ import { renderIcon } from "../utils/icons";
 
 const props = defineProps<{
   visible: boolean; loading: boolean; registerLoading: boolean;
-  captchaLoading: boolean; emailCodeLoading: boolean;
+  captchaLoading: boolean; loginCaptchaLoading: boolean; emailCodeLoading: boolean;
   emailUuid: string; registerSuccessTick: number;
-  captcha: AuthCaptcha | null;
+  captcha: AuthCaptcha | null; loginCaptcha: AuthCaptcha | null;
 }>();
 
 const emit = defineEmits<{
   (e: "login", p: LoginPayload): void; (e: "register", p: RegisterPayload): void;
-  (e: "loadCaptcha"): void; (e: "sendEmailCode", email: string): void;
+  (e: "loadCaptcha"): void; (e: "loadLoginCaptcha"): void; (e: "sendEmailCode", email: string): void;
   (e: "clearEmailCode"): void; (e: "offline"): void;
 }>();
 
 const mode = ref<"login" | "register">("login");
-const form = reactive({ username: "", password: "", confirmPassword: "", email: "", emailCode: "", code: "" });
+const form = reactive({ username: "", password: "", confirmPassword: "", email: "", emailCode: "", code: "", loginCode: "" });
 const authTabs = [
   { tab: "登录", itemKey: "login" },
   { tab: "注册", itemKey: "register" }
@@ -75,6 +75,7 @@ function isValidEmail(email: string) {
 function validateLogin() {
   if (!form.username.trim()) return "请输入账号";
   if (!form.password) return "请输入密码";
+  if (!form.loginCode.trim()) return "请输入图形验证码";
   return "";
 }
 
@@ -115,7 +116,7 @@ function submit() {
   if (mode.value === "register")
     emit("register", { username: form.username, password: form.password, confirmPassword: form.confirmPassword, email: form.email, emailCode: form.emailCode, emailUuid: props.emailUuid, code: form.code, uuid: props.captcha?.uuid || "" });
   else
-    emit("login", { username: form.username, password: form.password });
+    emit("login", { username: form.username, password: form.password, code: form.loginCode, uuid: props.loginCaptcha?.uuid || "" });
 }
 </script>
 
@@ -141,6 +142,15 @@ function submit() {
       <Space vertical spacing="medium" class-name="login-form-stack">
         <Input :value="form.username" placeholder="请输入账号" :inset-label="'账号'" :prefix="renderIcon(IconUser)" :disabled="loading" @change="(v: string) => form.username = v" @enter-press="submit" />
         <Input :value="form.password" mode="password" placeholder="请输入密码" :inset-label="'密码'" :prefix="renderIcon(IconKey)" :disabled="loading || registerLoading" @change="(v: string) => form.password = v" @enter-press="submit" />
+        <template v-if="mode === 'login'">
+          <Space align="center" spacing="tight" class-name="login-inline-control">
+            <Input :value="form.loginCode" placeholder="请输入验证码" :inset-label="'验证码'" :prefix="renderIcon(IconVerify)" :disabled="loading" @change="(v: string) => form.loginCode = v" @enter-press="submit" />
+            <Button theme="light" class-name="captcha-button" :loading="loginCaptchaLoading" @click="emit('loadLoginCaptcha')">
+              <img v-if="loginCaptcha?.img" :src="loginCaptcha.img" alt="验证码" />
+              <span v-else>刷新</span>
+            </Button>
+          </Space>
+        </template>
         <template v-if="mode === 'register'">
           <Input :value="form.confirmPassword" mode="password" placeholder="请再次输入密码" :inset-label="'确认密码'" :prefix="renderIcon(IconKey)" :disabled="registerLoading" @change="(v: string) => form.confirmPassword = v" @enter-press="submit" />
           <Input :value="form.email" placeholder="请输入邮箱" :inset-label="'邮箱'" :prefix="renderIcon(IconMail)" :disabled="registerLoading" @change="(v: string) => { form.email = v; emit('clearEmailCode'); }" @enter-press="sendEmailCode" />

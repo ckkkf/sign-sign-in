@@ -128,6 +128,8 @@ export interface AuthLoginResult {
 export interface LoginPayload {
   username: string;
   password: string;
+  code: string;
+  uuid: string;
 }
 
 export interface RegisterPayload extends LoginPayload {

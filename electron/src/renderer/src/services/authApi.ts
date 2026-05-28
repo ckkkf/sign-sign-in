@@ -55,7 +55,9 @@ export async function login(payload: LoginPayload): Promise<AuthLoginResult> {
     },
     body: JSON.stringify({
       username: payload.username,
-      password: payload.password
+      password: payload.password,
+      code: payload.code,
+      uuid: payload.uuid
     })
   });
   const body = (await response.json()) as AjaxResult<string>;
@@ -89,6 +91,21 @@ export async function logout(token: string, tokenName = "Xyb-Token"): Promise<vo
     }
   });
   await readJson<unknown>(response, "退出登录失败");
+}
+
+/** 获取登录验证码。 */
+export async function loginCaptcha(): Promise<AuthCaptcha> {
+  const response = await fetch(`${AUTH_BASE_URL}/xyb/auth/login-captcha`);
+  const authCaptcha = await readJson<AuthCaptcha>(response, "获取验证码失败");
+
+  if (!authCaptcha?.uuid || !authCaptcha.img) {
+    throw new Error("获取验证码失败：后端返回为空");
+  }
+
+  return {
+    uuid: authCaptcha.uuid,
+    img: authCaptcha.img.startsWith("data:") ? authCaptcha.img : `data:image/png;base64,${authCaptcha.img}`
+  };
 }
 
 /** 获取注册验证码。 */

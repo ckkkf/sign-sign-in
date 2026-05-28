@@ -42,10 +42,12 @@ export function useAppState() {
   const imageManagerVisible = ref(false);
   const registerLoading = ref(false);
   const captchaLoading = ref(false);
+  const loginCaptchaLoading = ref(false);
   const emailCodeLoading = ref(false);
   const registerEmailUuid = ref("");
   const registerSuccessTick = ref(0);
   const authCaptcha = ref<AuthCaptcha | null>(null);
+  const loginAuthCaptcha = ref<AuthCaptcha | null>(null);
   const status = ref<SystemStatus>({
     time: "-",
     pid: 0,
@@ -194,6 +196,8 @@ export function useAppState() {
       loginVisible.value = !state.loggedIn && !state.offline;
       if (state.loggedIn) {
         Toast.success("登录成功");
+      } else {
+        await loadLoginCaptcha();
       }
     });
   }
@@ -204,6 +208,7 @@ export function useAppState() {
     }
 
     loginVisible.value = true;
+    void loadLoginCaptcha();
   }
 
   function openFeedback() {
@@ -228,6 +233,7 @@ export function useAppState() {
       }, "登录成功");
     } finally {
       loginLoading.value = false;
+      await loadLoginCaptcha();
     }
   }
 
@@ -239,6 +245,17 @@ export function useAppState() {
       });
     } finally {
       captchaLoading.value = false;
+    }
+  }
+
+  async function loadLoginCaptcha() {
+    loginCaptchaLoading.value = true;
+    try {
+      await runAction(async () => {
+        loginAuthCaptcha.value = await authApi.loginCaptcha();
+      });
+    } finally {
+      loginCaptchaLoading.value = false;
     }
   }
 
@@ -306,6 +323,7 @@ export function useAppState() {
       }
       authState.value = ensureOk(await window.signSignIn.auth.logout());
       loginVisible.value = true;
+      await loadLoginCaptcha();
     }, "已退出登录");
   }
 
@@ -606,8 +624,10 @@ export function useAppState() {
     actionOptions,
     authState,
     authCaptcha,
+    loginAuthCaptcha,
     bootError,
     captchaLoading,
+    loginCaptchaLoading,
     capture,
     changeInput,
     clearRegisterEmailCode,
@@ -653,6 +673,7 @@ export function useAppState() {
     register,
     registerLoading,
     loadCaptcha,
+    loadLoginCaptcha,
     sendEmailCode,
     saveConfig,
     selectedAction,

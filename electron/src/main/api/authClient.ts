@@ -28,9 +28,9 @@ function normalizeUser(user: AuthUser): AuthUser {
 }
 
 /** 登录桌面端账号并返回后端 token。 */
-export async function login(username: string, password: string): Promise<string> {
+export async function login(username: string, password: string, code: string, uuid: string): Promise<string> {
   // 登录接口返回 token 字符串。
-  const response = await authHttp.post<AjaxResult<string>>("/xyb/auth/login", { username, password });
+  const response = await authHttp.post<AjaxResult<string>>("/xyb/auth/login", { username, password, code, uuid });
   requireSuccess(response.data, "登录失败");
   const result = String(response.data.data || response.data.token || "").trim();
 
@@ -39,6 +39,22 @@ export async function login(username: string, password: string): Promise<string>
   }
 
   return result;
+}
+
+/** 获取登录验证码。 */
+export async function loginCaptcha(): Promise<AuthCaptcha> {
+  // 后端返回 base64 图片和验证码 uuid。
+  const response = await authHttp.get<AjaxResult<AuthCaptcha>>("/xyb/auth/login-captcha");
+  const authCaptcha = requireSuccess(response.data, "获取验证码失败");
+
+  if (!authCaptcha?.uuid || !authCaptcha.img) {
+    throw new Error("获取验证码失败：后端返回为空");
+  }
+
+  return {
+    uuid: authCaptcha.uuid,
+    img: authCaptcha.img.startsWith("data:") ? authCaptcha.img : `data:image/png;base64,${authCaptcha.img}`
+  };
 }
 
 /** 获取注册验证码。 */
