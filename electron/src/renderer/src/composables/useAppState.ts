@@ -44,6 +44,7 @@ export function useAppState() {
   const captchaLoading = ref(false);
   const emailCodeLoading = ref(false);
   const registerEmailUuid = ref("");
+  const registerSuccessTick = ref(0);
   const authCaptcha = ref<AuthCaptcha | null>(null);
   const status = ref<SystemStatus>({
     time: "-",
@@ -270,10 +271,15 @@ export function useAppState() {
 
     registerLoading.value = true;
     try {
-      await runAction(async () => {
+      const success = await runAction(async () => {
         await authApi.register(payload);
+        return true;
       }, "注册成功，请登录");
-      registerEmailUuid.value = "";
+
+      if (success) {
+        registerEmailUuid.value = "";
+        registerSuccessTick.value += 1;
+      }
       await loadCaptcha();
     } finally {
       registerLoading.value = false;
@@ -641,6 +647,7 @@ export function useAppState() {
     refreshAll,
     regenerateUserAgent,
     registerEmailUuid,
+    registerSuccessTick,
     renameImage,
     replaceImage,
     register,

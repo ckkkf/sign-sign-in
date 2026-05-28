@@ -4,10 +4,11 @@ import Input from "@kousum/semi-ui-vue/dist/input";
 import Modal from "@kousum/semi-ui-vue/dist/modal";
 import Space from "@kousum/semi-ui-vue/dist/space";
 import Tabs from "@kousum/semi-ui-vue/dist/tabs";
+import Toast from "@kousum/semi-ui-vue/dist/toast";
 import TypographyText from "@kousum/semi-ui-vue/dist/typography/text";
 import TypographyTitle from "@kousum/semi-ui-vue/dist/typography/title";
 import { IconKey, IconMail, IconUser, IconVerify } from "@kousum/semi-icons-vue";
-import { reactive, ref, watch, type VNode } from "vue";
+import { computed, onUnmounted, reactive, ref, watch, type VNode } from "vue";
 import type { AuthCaptcha, LoginPayload, RegisterPayload } from "@shared/types";
 import logoUrl from "../assets/lingdong-logo.png";
 import { renderIcon } from "../utils/icons";
@@ -15,7 +16,8 @@ import { renderIcon } from "../utils/icons";
 const props = defineProps<{
   visible: boolean; loading: boolean; registerLoading: boolean;
   captchaLoading: boolean; emailCodeLoading: boolean;
-  emailUuid: string; captcha: AuthCaptcha | null;
+  emailUuid: string; registerSuccessTick: number;
+  captcha: AuthCaptcha | null;
 }>();
 
 const emit = defineEmits<{
@@ -31,11 +33,85 @@ const authTabs = [
   { tab: "注册", itemKey: "register" }
 ];
 const emptyFooter = () => "" as unknown as VNode;
+const emailCodeCountdown = ref(0);
+let emailCodeTimer: ReturnType<typeof setInterval> | null = null;
+
+const emailCodeButtonText = computed(() => (emailCodeCountdown.value > 0 ? `${emailCodeCountdown.value}s 后重发` : "发送验证码"));
 
 watch(() => props.visible, (v) => { if (v) mode.value = "login"; });
 watch(mode, (n) => { if (n === "register" && !props.captcha) emit("loadCaptcha"); });
+watch(() => props.registerSuccessTick, (tick) => { if (tick > 0) mode.value = "login"; });
+watch(() => props.emailUuid, (uuid) => {
+  if (uuid) {
+    startEmailCodeCountdown();
+  } else {
+    stopEmailCodeCountdown();
+  }
+});
+
+onUnmounted(stopEmailCodeCountdown);
+
+function startEmailCodeCountdown() {
+  stopEmailCodeCountdown();
+  emailCodeCountdown.value = 60;
+  emailCodeTimer = setInterval(() => {
+    emailCodeCountdown.value -= 1;
+    if (emailCodeCountdown.value <= 0) stopEmailCodeCountdown();
+  }, 1000);
+}
+
+function stopEmailCodeCountdown() {
+  if (emailCodeTimer) {
+    clearInterval(emailCodeTimer);
+    emailCodeTimer = null;
+  }
+  emailCodeCountdown.value = 0;
+}
+
+function isValidEmail(email: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+function validateLogin() {
+  if (!form.username.trim()) return "请输入账号";
+  if (!form.password) return "请输入密码";
+  return "";
+}
+
+function validateRegister() {
+  const loginError = validateLogin();
+  if (loginError) return loginError;
+  if (!form.confirmPassword) return "请再次输入密码";
+  if (form.password !== form.confirmPassword) return "两次输入的密码不一致";
+  if (!form.email.trim()) return "请输入邮箱";
+  if (!isValidEmail(form.email.trim())) return "请输入正确的邮箱";
+  if (!form.emailCode.trim()) return "请输入邮箱验证码";
+  if (!form.code.trim()) return "请输入图形码";
+  return "";
+}
+
+function sendEmailCode() {
+  if (emailCodeCountdown.value > 0) return;
+
+  const email = form.email.trim();
+  if (!email) {
+    Toast.warning("请先输入邮箱");
+    return;
+  }
+  if (!isValidEmail(email)) {
+    Toast.warning("请输入正确的邮箱");
+    return;
+  }
+  emit("sendEmailCode", email);
+}
 
 function submit() {
+  const error = mode.value === "register" ? validateRegister() : validateLogin();
+  if (error) {
+    Toast.warning(error);
+    return;
+  }
+
   if (mode.value === "register")
     emit("register", { username: form.username, password: form.password, confirmPassword: form.confirmPassword, email: form.email, emailCode: form.emailCode, emailUuid: props.emailUuid, code: form.code, uuid: props.captcha?.uuid || "" });
   else
@@ -67,10 +143,10 @@ function submit() {
         <Input :value="form.password" mode="password" placeholder="请输入密码" :inset-label="'密码'" :prefix="renderIcon(IconKey)" :disabled="loading || registerLoading" @change="(v: string) => form.password = v" @enter-press="submit" />
         <template v-if="mode === 'register'">
           <Input :value="form.confirmPassword" mode="password" placeholder="请再次输入密码" :inset-label="'确认密码'" :prefix="renderIcon(IconKey)" :disabled="registerLoading" @change="(v: string) => form.confirmPassword = v" @enter-press="submit" />
-          <Input :value="form.email" placeholder="请输入邮箱" :inset-label="'邮箱'" :prefix="renderIcon(IconMail)" :disabled="registerLoading" @change="(v: string) => { form.email = v; emit('clearEmailCode'); }" @enter-press="() => emit('sendEmailCode', form.email)" />
+          <Input :value="form.email" placeholder="请输入邮箱" :inset-label="'邮箱'" :prefix="renderIcon(IconMail)" :disabled="registerLoading" @change="(v: string) => { form.email = v; emit('clearEmailCode'); }" @enter-press="sendEmailCode" />
           <Space align="center" spacing="tight" class-name="login-inline-control">
             <Input :value="form.emailCode" placeholder="请输入邮箱验证码" :inset-label="'验证码'" :prefix="renderIcon(IconVerify)" :disabled="registerLoading" @change="(v: string) => form.emailCode = v" @enter-press="submit" />
-            <Button theme="light" :loading="emailCodeLoading" :disabled="registerLoading" @click="() => emit('sendEmailCode', form.email)">发送验证码</Button>
+            <Button theme="light" :loading="emailCodeLoading" :disabled="registerLoading || emailCodeCountdown > 0" @click="sendEmailCode">{{ emailCodeButtonText }}</Button>
           </Space>
           <Space align="center" spacing="tight" class-name="login-inline-control">
             <Input :value="form.code" placeholder="请输入验证码" :inset-label="'图形码'" :prefix="renderIcon(IconVerify)" :disabled="registerLoading" @change="(v: string) => form.code = v" @enter-press="submit" />

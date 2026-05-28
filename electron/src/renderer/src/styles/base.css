@@ -48,7 +48,16 @@ body {
   background: var(--bg);
 }
 
+.app-shell > .semi-layout {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .app-sider {
+  height: 100%;
+  min-height: 0;
   background: linear-gradient(180deg, var(--left-top), var(--left-bottom));
 }
 
@@ -120,15 +129,11 @@ body {
 }
 
 .rail-brand {
-  width: 34px;
-  height: 34px;
-  overflow: hidden;
+  width: 38px;
+  height: 38px;
   display: grid;
   place-items: center;
   color: #f4f7ff;
-  background: linear-gradient(135deg, rgba(87, 118, 255, 1), rgba(42, 179, 212, 0.96));
-  border: 1px solid rgba(165, 210, 255, 0.42);
-  border-radius: 5px;
 }
 
 .rail-brand img {
@@ -228,6 +233,8 @@ body {
   flex: 1 1 0;
   min-width: 0;
   min-height: 0;
+  height: 100%;
+  overflow: hidden;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   background: linear-gradient(180deg, var(--left-top), var(--left-bottom));
@@ -236,6 +243,7 @@ body {
 .workspace-body {
   min-width: 0;
   min-height: 0;
+  height: 100%;
   overflow: hidden;
   display: grid;
   grid-template-rows: minmax(0, 1fr);
@@ -462,21 +470,21 @@ body {
   white-space: nowrap;
 }
 
-.feedback-form {
-  display: grid;
-  gap: 12px;
+.feedback-form-stack,
+.feedback-field,
+.feedback-select-row {
+  width: 100%;
 }
 
-.feedback-row {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+.feedback-field .semi-input-wrapper,
+.feedback-field .semi-select,
+.feedback-field .semi-input-textarea-wrapper {
+  width: 100%;
 }
 
-.feedback-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
+.feedback-select-row > .semi-space-item {
+  flex: 1 1 0;
+  min-width: 0;
 }
 
 .login-dialog-stack,
@@ -507,13 +515,11 @@ body {
 }
 
 .login-mark {
-  width: 36px;
-  height: 36px;
+  width: 40px;
+  height: 40px;
   flex: 0 0 auto;
   display: grid;
   place-items: center;
-  overflow: hidden;
-  border-radius: 13px;
 }
 
 .login-mark img {
@@ -1081,25 +1087,26 @@ body {
 .log-panel {
   min-width: 0;
   min-height: 0;
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) 208px;
   overflow: hidden;
   background: var(--right);
 }
 
 .terminal {
   min-height: 0;
-  flex: 1 1 0;
   overflow: hidden;
   display: grid;
+  grid-template-rows: 36px minmax(0, 1fr);
 }
 
 .terminal-main {
-  grid-template-rows: 38px minmax(0, 1fr);
+  min-height: 0;
 }
 
 .packet-terminal {
-  grid-template-rows: 35px minmax(0, 1fr);
+  min-height: 0;
+  border-top: 1px solid #171923;
 }
 
 .terminal-head {

@@ -100,6 +100,7 @@ const app = useAppState();
         :captcha-loading="app.captchaLoading.value"
         :email-code-loading="app.emailCodeLoading.value"
         :email-uuid="app.registerEmailUuid.value"
+        :register-success-tick="app.registerSuccessTick.value"
         :captcha="app.authCaptcha.value"
         @login="app.login"
         @register="app.register"
