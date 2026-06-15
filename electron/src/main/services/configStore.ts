@@ -29,8 +29,13 @@ const fallbackConfig: SignConfig = {
       enabled: false,
       poll_seconds: 30,
       random_minutes: 0,
-      tasks: []
+      tasks: [
+        { time: "08:55", mode: "in" },
+        { time: "18:05", mode: "out" }
+      ]
     },
+    notifications_enabled: false,
+    notifications: [],
     pushplus: {
       token: ""
     },

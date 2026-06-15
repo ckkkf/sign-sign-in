@@ -14,17 +14,18 @@ class AuthService {
       return { loggedIn: false, offline: false };
     }
 
+    const cachedState = authStore.toState(cache);
     try {
       const user = await me(cache.token, cache.tokenName);
       return authStore.save(cache.token, user, cache.tokenName);
     } catch (error) {
       if (isAuthExpiredError(error)) {
-        authStore.clear();
-        return { loggedIn: false, offline: false };
+        logger.warn(`登录态远程校验提示失效，暂保留本地缓存：${error instanceof Error ? error.message : String(error)}`);
+        return cachedState;
       }
 
       logger.warn(`登录态校验失败，保留本地登录缓存：${error instanceof Error ? error.message : String(error)}`);
-      return authStore.toState(cache);
+      return cachedState;
     }
   }
 

@@ -2,6 +2,7 @@ import { execFile, exec } from "node:child_process";
 import { promisify } from "node:util";
 import { networkInterfaces } from "node:os";
 import { shell } from "electron";
+import { getRuntimeConfigPath, getUserRoot } from "./paths";
 
 const execFileAsync = promisify(execFile);
 const execAsync = promisify(exec);
@@ -36,6 +37,53 @@ export async function openCertManager(): Promise<boolean> {
     return true;
   }
   return false;
+}
+
+export async function openUserDataDir(): Promise<boolean> {
+  await shell.openPath(getUserRoot());
+  return true;
+}
+
+export async function openConfigFile(): Promise<boolean> {
+  await shell.openPath(getRuntimeConfigPath());
+  return true;
+}
+
+export async function openTerminal(): Promise<boolean> {
+  if (isWindows()) {
+    execFile("cmd.exe", ["/K", "cd", "/d", getUserRoot()], { windowsHide: false });
+    return true;
+  }
+  if (isMacos()) {
+    await execFileAsync("open", ["-a", "Terminal", getUserRoot()]);
+    return true;
+  }
+  execFile("x-terminal-emulator", [], { cwd: getUserRoot() }).on("error", () => {
+    execFile("gnome-terminal", [], { cwd: getUserRoot() });
+  });
+  return true;
+}
+
+export async function flushDnsCache(): Promise<boolean> {
+  if (isWindows()) {
+    await execFileAsync("ipconfig", ["/flushdns"]);
+    return true;
+  }
+  if (isMacos()) {
+    await execFileAsync("dscacheutil", ["-flushcache"]);
+    await execFileAsync("killall", ["-HUP", "mDNSResponder"]).catch(() => undefined);
+    return true;
+  }
+  return false;
+}
+
+export async function openExternalUrl(url: string): Promise<boolean> {
+  const target = String(url || "").trim();
+  if (!/^https?:\/\//i.test(target)) {
+    throw new Error("仅支持打开 http/https 链接");
+  }
+  await shell.openExternal(target);
+  return true;
 }
 
 export function getLocalIp(): string {

@@ -887,6 +887,475 @@ body {
   grid-column: 1 / -1;
 }
 
+.auto-clock-editor,
+.update-center,
+.journal-dialog {
+  min-width: 0;
+  color: #eef2ff;
+}
+
+.compact-tool-modal .semi-modal-content {
+  max-height: min(82vh, 720px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #151a27;
+  border: 1px solid #30384f;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.48);
+}
+
+.compact-tool-modal .semi-modal-header {
+  flex: 0 0 auto;
+  padding: 14px 18px 8px;
+  border-bottom: 1px solid rgba(65, 75, 107, 0.58);
+}
+
+.compact-tool-modal .semi-modal-title {
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.compact-tool-modal .semi-modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 12px 18px 16px;
+  font-size: 12px;
+}
+
+.compact-tool-modal :where(.semi-typography, .semi-button, .semi-input-wrapper, .semi-input, .semi-select, .semi-select-selection, .semi-tabs-tab) {
+  font-size: 12px;
+}
+
+.compact-tool-modal .semi-button {
+  height: 28px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+.auto-clock-editor {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.editor-head,
+.update-head,
+.release-main,
+.download-meta {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.editor-head strong,
+.update-head strong,
+.release-main strong,
+.download-meta strong,
+.journal-item strong {
+  min-width: 0;
+  overflow: hidden;
+  color: #ffffff;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-row {
+  display: grid;
+  grid-template-columns: 96px 140px minmax(0, 1fr) auto auto;
+  gap: 8px;
+}
+
+.notice-row {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr) auto auto;
+  gap: 8px;
+}
+
+.dialog-empty {
+  padding: 14px;
+  color: #7784ad;
+  background: rgba(12, 17, 30, 0.72);
+  border: 1px dashed rgba(91, 105, 153, 0.48);
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.update-center {
+  display: grid;
+  gap: 10px;
+  font-size: 12px;
+}
+
+.update-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  background: #0f1421;
+  border: 1px solid #28304a;
+  border-radius: 8px;
+}
+
+.update-hero > div,
+.chat-panel-head > div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.update-hero strong,
+.chat-panel-head strong {
+  color: #f5f7ff;
+  font-size: 14px;
+  line-height: 1.25;
+}
+
+.update-head span,
+.update-hero span,
+.release-main span,
+.download-meta span,
+.journal-item span {
+  color: #8590b8;
+  font-size: 12px;
+}
+
+.update-head > div,
+.download-meta {
+  display: grid;
+  justify-items: start;
+  gap: 4px;
+}
+
+.update-settings {
+  display: grid;
+  grid-template-columns: 132px minmax(0, 1fr) 58px 72px;
+  gap: 8px;
+  align-items: end;
+  padding: 10px;
+  background: #111725;
+  border: 1px solid #252d44;
+  border-radius: 8px;
+}
+
+.update-settings.has-custom-source {
+  grid-template-columns: 120px minmax(120px, 0.8fr) minmax(0, 1fr) 58px 72px;
+}
+
+.update-settings label {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+}
+
+.update-settings label > span {
+  color: #8c98c0;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.update-empty-state {
+  display: grid;
+  gap: 5px;
+  padding: 22px 14px;
+  color: #8d99c1;
+  background: #0c111d;
+  border: 1px dashed #33405d;
+  border-radius: 8px;
+  text-align: center;
+}
+
+.update-empty-state strong {
+  color: #e9eeff;
+  font-size: 13px;
+}
+
+.release-card,
+.download-panel,
+.journal-item {
+  display: grid;
+  gap: 7px;
+  padding: 8px;
+  background: #101522;
+  border: 1px solid #242b43;
+  border-radius: 8px;
+}
+
+.latest-card {
+  border-color: rgba(94, 234, 171, 0.36);
+}
+
+.history-list,
+.journal-list,
+.journal-submit,
+.journal-compose,
+.journal-field {
+  display: grid;
+  gap: 10px;
+}
+
+.history-title,
+.journal-field span {
+  color: #8f99c4;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.journal-dialog {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
+  gap: 14px;
+}
+
+.journal-dialog.chat-mode {
+  grid-template-columns: minmax(0, 1fr) 260px;
+  gap: 12px;
+  height: min(52vh, 390px);
+  min-height: 0;
+  align-items: stretch;
+  overflow: hidden;
+}
+
+.chat-panel {
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  max-height: 100%;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 8px;
+  padding: 10px;
+  background: #0f1421;
+  border: 1px solid #252d44;
+  border-radius: 8px;
+}
+
+.chat-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.chat-body {
+  min-height: 0;
+  overflow: auto;
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  padding: 10px;
+  background: #090e19;
+  border: 1px solid #242b43;
+  border-radius: 8px;
+}
+
+.chat-empty {
+  align-self: stretch;
+  min-height: 128px;
+  display: grid;
+  place-content: center;
+  gap: 6px;
+  padding: 14px;
+  color: #8792bd;
+  border: 1px dashed #33405d;
+  border-radius: 8px;
+  text-align: center;
+}
+
+.chat-empty strong {
+  color: #e7ecff;
+  font-size: 13px;
+}
+
+.chat-message {
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.chat-message.user {
+  justify-content: flex-end;
+}
+
+.ai-mark {
+  width: 26px;
+  height: 26px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  color: #0d111a;
+  background: #7fdbff;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.chat-bubble {
+  position: relative;
+  max-width: min(550px, 82%);
+  padding: 7px 9px;
+  background: #151826;
+  border: 1px solid #2a3150;
+  border-radius: 12px;
+}
+
+.chat-message.user .chat-bubble {
+  color: #ffffff;
+  background: #315dff;
+  border-color: #5c7cff;
+  border-bottom-right-radius: 4px;
+}
+
+.chat-message.ai .chat-bubble {
+  border-bottom-left-radius: 4px;
+}
+
+.chat-bubble p,
+.journal-detail p {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.65;
+  font-size: 12px;
+}
+
+.bubble-actions {
+  position: absolute;
+  top: 100%;
+  right: 8px;
+  z-index: 5;
+  display: flex;
+  gap: 6px;
+  padding-top: 4px;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-2px);
+  transition: opacity 120ms ease, transform 120ms ease;
+}
+
+.chat-message.ai .bubble-actions {
+  left: 8px;
+  right: auto;
+}
+
+.chat-bubble:hover .bubble-actions,
+.bubble-actions:hover {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+.chat-input-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 70px;
+  gap: 8px;
+  align-items: end;
+}
+
+.journal-side {
+  min-width: 0;
+  height: 100%;
+  max-height: 100%;
+  overflow: hidden;
+  padding: 10px;
+  background: #101522;
+  border: 1px solid #252d44;
+  border-radius: 8px;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 10px;
+}
+
+.journal-list {
+  min-height: 0;
+  max-height: 100%;
+  overflow: auto;
+}
+
+.journal-side-section {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 8px;
+}
+
+.submitted-section {
+  max-height: 132px;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+.journal-side-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-bottom: 7px;
+  border-bottom: 1px solid #2a324a;
+}
+
+.journal-side-title strong {
+  color: #f2f5ff;
+  font-size: 13px;
+}
+
+.journal-side-title span {
+  color: #8490ba;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.journal-pager {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 6px;
+  align-items: center;
+}
+
+.journal-item p {
+  max-height: 110px;
+  margin: 0;
+  overflow: hidden;
+  color: #cbd5ff;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.journal-item.compact {
+  min-height: 68px;
+}
+
+.page-chip {
+  align-self: center;
+  color: #9aa6d0;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.journal-submit-modal {
+  display: grid;
+  gap: 10px;
+}
+
+.journal-detail {
+  display: grid;
+  gap: 12px;
+  color: #dce4ff;
+}
+
+.journal-detail span {
+  color: #8792bd;
+  font-size: 12px;
+  font-weight: 800;
+}
+
 .jielong-panel {
   display: grid;
   align-content: start;

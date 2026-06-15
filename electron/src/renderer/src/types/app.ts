@@ -17,6 +17,10 @@ export type DraftConfigKey =
   | "systemVersion"
   | "platform"
   | "userAgent"
-  | "pushplusToken";
+  | "pushplusToken"
+  | "autoClockEnabled"
+  | "autoClockPollSeconds"
+  | "autoClockRandomMinutes"
+  | "notificationsEnabled";
 
 export type LocalLogLevel = LogEntry["level"];

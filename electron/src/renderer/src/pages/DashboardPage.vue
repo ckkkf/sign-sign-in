@@ -22,7 +22,7 @@ import {
 } from "@kousum/semi-icons-vue";
 import { computed } from "vue";
 import { PROJECT_NAME, QQ_GROUP } from "@shared/constants";
-import type { CaptureState, ImageItem, SignOption, SystemStatus, TaskState } from "@shared/types";
+import type { AutoClockState, CaptureState, ImageItem, SignOption, SystemStatus, TaskState } from "@shared/types";
 import MainActionButton from "../components/MainActionButton.vue";
 import SectionTitle from "../components/SectionTitle.vue";
 import StatusGrid from "../components/StatusGrid.vue";
@@ -30,8 +30,9 @@ import ToolButton from "../components/ToolButton.vue";
 import type { PageKey, StatusItem } from "../types/app";
 import { renderIcon } from "../utils/icons";
 
-defineProps<{
+const props = defineProps<{
   actionOptions: Array<{ label: SignOption["action"]; value: SignOption["action"] }>;
+  autoClock: AutoClockState;
   capture: CaptureState;
   images: ImageItem[];
   isPhotoAction: boolean;
@@ -53,27 +54,35 @@ const emit = defineEmits<{
   (event: "openCertManager"): void;
   (event: "openFeedback"): void;
   (event: "openProxySettings"): void;
+  (event: "openUserDataDir"): void;
+  (event: "openConfigFile"): void;
+  (event: "openTerminal"): void;
+  (event: "flushDns"): void;
+  (event: "openUpdateCenter"): void;
+  (event: "openWeeklyJournal"): void;
+  (event: "openExternal", url: string): void;
   (event: "refreshAll"): void;
   (event: "startCapture"): void;
   (event: "startTask"): void;
   (event: "stopCapture"): void;
   (event: "stopTask"): void;
+  (event: "toggleAutoClock"): void;
 }>();
 
 const toolButtons = computed(() => [
   { label: "系统代理", icon: IconLink, action: () => emit("openProxySettings") },
   { label: "证书管理", icon: IconLockStroked, action: () => emit("openCertManager") },
   { label: "编辑配置", icon: IconFile, action: () => emit("changePage", "config") },
-  { label: "刷新状态", icon: IconRefresh, action: () => emit("refreshAll") },
+  { label: "刷新DNS", icon: IconRefresh, action: () => emit("flushDns") },
   { label: "发送反馈", icon: IconShieldStroked, action: () => emit("openFeedback") },
+  { label: "打开终端", icon: IconCodeStroked, action: () => emit("openTerminal") },
   { label: "图片管理", icon: IconImage, action: () => emit("openImageManager") },
-  { label: "更新中心", icon: IconShieldStroked, disabled: true },
-  { label: "AI 与周记", icon: IconApps, disabled: true },
-  { label: "定时打卡", icon: IconClock, disabled: true }
+  { label: "更新中心", icon: IconShieldStroked, action: () => emit("openUpdateCenter") },
+  { label: "AI 与周记", icon: IconApps, action: () => emit("openWeeklyJournal") },
+  { label: props.autoClock.enabled ? "停止定时" : "定时打卡", icon: IconClock, action: () => emit("changePage", "config") }
 ]);
 
 function clickTool(tool: (typeof toolButtons.value)[number]) {
-  if (tool.disabled) return;
   tool.action?.();
 }
 </script>
@@ -117,7 +126,6 @@ function clickTool(tool: (typeof toolButtons.value)[number]) {
         :key="tool.label"
         :label="tool.label"
         :icon="tool.icon"
-        :disabled="tool.disabled"
         @click="clickTool(tool)"
       />
     </section>

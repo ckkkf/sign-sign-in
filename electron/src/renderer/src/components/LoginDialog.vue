@@ -127,7 +127,7 @@ function submit() {
         <div class="login-mark"><img :src="logoUrl" alt="SignSignIn" /></div>
         <Space vertical align="start" spacing="tight">
           <TypographyTitle :heading="5" class-name="login-title">{{ mode === "login" ? "Sign Sign In" : "注册账号" }}</TypographyTitle>
-          <TypographyText type="tertiary">{{ mode === "login" ? "登录校友邦客户端账号后继续使用" : "创建校友邦客户端账号后即可登录" }}</TypographyText>
+          <TypographyText type="tertiary">{{ mode === "login" ? "登录SignSignIn(校友邦)账号后继续使用" : "创建校友邦客户端账号后即可登录" }}</TypographyText>
         </Space>
       </Space>
 

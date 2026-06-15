@@ -2,7 +2,10 @@ import type { SignConfig, SignOption, TaskState } from "@shared/types";
 import { configStore } from "./configStore";
 import { logger } from "./logger";
 import { codeCaptureService } from "./codeCaptureService";
+import { authStore } from "./authStore";
+import { submitClientLog } from "../api/authClient";
 import * as xybApi from "../api/xybClient";
+import { getDeviceCode } from "./xybToken";
 
 function jitterLocation(input: SignConfig["input"]): void {
   const lon = Number(input.location.longitude);
@@ -42,8 +45,42 @@ function jitterLocation(input: SignConfig["input"]): void {
   logger.info(`已应用位置抖动，半径约 ${Math.round(radius)}m，坐标更新为 ${input.location.longitude}, ${input.location.latitude}`);
 }
 
+function buildSafeClientRequestParam(input: SignConfig["input"], option: SignOption | { action: string; code?: string }): string {
+  const device = input.device;
+  const rawDeviceCode = getDeviceCode(String(input.openId || ""), device);
+  const deviceCodeFingerprint = rawDeviceCode
+    ? `${rawDeviceCode.slice(0, 10)}...${rawDeviceCode.slice(-8)}`
+    : "";
+
+  return JSON.stringify({
+    action: option.action,
+    code: "code" in option ? option.code || "" : "",
+    location: {
+      longitude: input.location.longitude,
+      latitude: input.location.latitude,
+      jitterMeters: input.locationJitterMeters ?? 100
+    },
+    device: {
+      brand: device.brand,
+      model: device.model,
+      system: device.system,
+      platform: device.platform
+    },
+    risk: {
+      deviceName: device.model,
+      deviceCodeFingerprint,
+      userAgent: input.userAgent,
+      hasCode: Boolean(input.code),
+      hasOpenId: Boolean(input.openId),
+      hasUnionId: Boolean(input.unionId),
+      hasImage: Boolean("imagePath" in option && option.imagePath)
+    }
+  });
+}
+
 export class SignTaskService {
   private abortController: AbortController | null = null;
+  private activeTask: Promise<void> | null = null;
   private state: TaskState = {
     running: false,
     source: "",
@@ -68,7 +105,9 @@ export class SignTaskService {
       message: "任务启动",
       startedAt: Date.now()
     };
-    void this.run(option, this.abortController.signal);
+    this.activeTask = this.run(option, this.abortController.signal).finally(() => {
+      this.activeTask = null;
+    });
     return this.getState();
   }
 
@@ -76,6 +115,18 @@ export class SignTaskService {
     this.abortController?.abort();
     this.state.message = "正在停止任务";
     logger.warn("正在停止任务");
+    return this.getState();
+  }
+
+  async startAuto(option: SignOption): Promise<TaskState> {
+    await this.start(option);
+    this.state = { ...this.state, source: "auto" };
+    await this.waitForIdle();
+    return this.getState();
+  }
+
+  async waitForIdle(): Promise<TaskState> {
+    await this.activeTask?.catch(() => undefined);
     return this.getState();
   }
 
@@ -92,7 +143,9 @@ export class SignTaskService {
       message: "正在刷新 JSESSIONID",
       startedAt: Date.now()
     };
-    void this.runRefreshSession(this.abortController.signal);
+    this.activeTask = this.runRefreshSession(this.abortController.signal).finally(() => {
+      this.activeTask = null;
+    });
     return this.getState();
   }
 
@@ -103,9 +156,15 @@ export class SignTaskService {
   }
 
   private async run(option: SignOption, signal: AbortSignal): Promise<void> {
+    const startTime = Date.now();
+    let logInput: SignConfig["input"] | null = null;
+    let status = "1";
+    let summary = "";
+    let errorMsg = "";
     try {
       const config = configStore.read();
       const input = structuredClone(config.input);
+      logInput = input;
       jitterLocation(input);
       this.checkStop(signal);
 
@@ -115,6 +174,8 @@ export class SignTaskService {
       }
 
       const args = await xybApi.login(input, true);
+      input.openId = args.openId;
+      input.unionId = args.unionId;
       this.checkStop(signal);
       const plan = await xybApi.getPlan(input, args);
       this.checkStop(signal);
@@ -149,9 +210,12 @@ export class SignTaskService {
         action: option.action,
         message: "执行完毕"
       };
+      status = "0";
+      summary = "执行完毕";
       logger.info("执行完毕");
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      errorMsg = message;
       this.state = {
         running: false,
         source: "",
@@ -164,29 +228,51 @@ export class SignTaskService {
         logger.error(`任务失败：${message}`);
       }
     } finally {
+      if (logInput) {
+        await this.reportClientOperLog({
+          input: logInput,
+          option,
+          status,
+          title: status === "0" ? `${option.action}成功` : `${option.action}失败`,
+          responseSummary: summary || this.state.message,
+          errorMsg,
+          costTime: Date.now() - startTime
+        });
+      }
       this.abortController = null;
     }
   }
 
   private async runRefreshSession(signal: AbortSignal): Promise<void> {
+    const startTime = Date.now();
+    let logInput: SignConfig["input"] | null = null;
+    let status = "1";
+    let summary = "";
+    let errorMsg = "";
     try {
       const config = configStore.read();
       const input = structuredClone(config.input);
+      logInput = input;
       const capturedCode = codeCaptureService.consumeCode();
       if (capturedCode) {
         input.code = capturedCode;
       }
       this.checkStop(signal);
-      await xybApi.login(input, false);
+      const args = await xybApi.login(input, false);
+      input.openId = args.openId;
+      input.unionId = args.unionId;
       this.state = {
         running: false,
         source: "",
         action: "获取code",
         message: "JSESSIONID 已更新"
       };
+      status = "0";
+      summary = "JSESSIONID 已更新";
       logger.info("JSESSIONID 已更新");
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      errorMsg = message;
       this.state = {
         running: false,
         source: "",
@@ -199,7 +285,60 @@ export class SignTaskService {
         logger.error(`获取code失败：${message}`);
       }
     } finally {
+      if (logInput) {
+        await this.reportClientOperLog({
+          input: logInput,
+          option: { action: "刷新JSESSIONID" },
+          status,
+          title: status === "0" ? "刷新JSESSIONID成功" : "刷新JSESSIONID失败",
+          responseSummary: summary || this.state.message,
+          errorMsg,
+          costTime: Date.now() - startTime
+        });
+      }
       this.abortController = null;
+    }
+  }
+
+  private async reportClientOperLog(args: {
+    input: SignConfig["input"];
+    option: SignOption | { action: string; code?: string };
+    status: string;
+    title: string;
+    responseSummary: string;
+    errorMsg: string;
+    costTime: number;
+  }): Promise<void> {
+    const cache = authStore.read();
+    if (!cache?.token) {
+      return;
+    }
+
+    const { input, option } = args;
+    try {
+      const safeParam = buildSafeClientRequestParam(input, option);
+      await submitClientLog(
+        {
+          operType: "XYB_SIGN",
+          status: args.status,
+          title: args.title,
+          requestUrl: "xyb://student/clock",
+          requestParam: safeParam,
+          responseSummary: args.responseSummary,
+          errorMsg: args.errorMsg,
+          costTime: args.costTime,
+          userAgent: input.userAgent,
+          deviceBrand: input.device.brand,
+          deviceModel: input.device.model,
+          deviceSystem: input.device.system,
+          devicePlatform: input.device.platform,
+          riskParams: safeParam
+        },
+        cache.token,
+        cache.tokenName
+      );
+    } catch (error) {
+      logger.warn(`上报客户端日志失败：${error instanceof Error ? error.message : String(error)}`);
     }
   }
 }

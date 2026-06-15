@@ -1,5 +1,13 @@
 import { AUTH_BASE_URL } from "@shared/constants";
-import type { AuthCaptcha, AuthEmailCode, AuthLoginResult, AuthUser, LoginPayload, RegisterPayload } from "@shared/types";
+import type {
+  AuthCaptcha,
+  AuthEmailCode,
+  AuthLoginResult,
+  AuthUser,
+  ClientEnvPayload,
+  LoginPayload,
+  RegisterPayload
+} from "@shared/types";
 
 interface AjaxResult<T> {
   code: string | number;
@@ -15,6 +23,28 @@ export interface FeedbackPayload {
   priority: string;
   contact: string;
   content: string;
+}
+
+function clientEnvHeaders(clientEnv?: ClientEnvPayload): Record<string, string> {
+  if (!clientEnv) {
+    return {};
+  }
+
+  const headers: Record<string, string> = {};
+  const assign = (key: string, value?: string) => {
+    const text = String(value || "").trim();
+    if (text) {
+      headers[key] = encodeURIComponent(text);
+    }
+  };
+
+  assign("X-Xyb-User-Agent", clientEnv.userAgent);
+  assign("X-Xyb-Device-Brand", clientEnv.deviceBrand);
+  assign("X-Xyb-Device-Model", clientEnv.deviceModel);
+  assign("X-Xyb-Device-System", clientEnv.deviceSystem);
+  assign("X-Xyb-Device-Platform", clientEnv.devicePlatform);
+  assign("X-Xyb-Risk-Params", clientEnv.riskParams);
+  return headers;
 }
 
 /** 校验后端 AjaxResult 是否成功。 */
@@ -47,17 +77,19 @@ async function readJson<T>(response: Response, fallback: string): Promise<T> {
 }
 
 /** 发起桌面账号登录请求，Network 面板可直接看到。 */
-export async function login(payload: LoginPayload): Promise<AuthLoginResult> {
+export async function login(payload: LoginPayload, clientEnv?: ClientEnvPayload): Promise<AuthLoginResult> {
   const response = await fetch(`${AUTH_BASE_URL}/xyb/auth/login`, {
     method: "POST",
     headers: {
-      "Content-Type": "application/json"
+      "Content-Type": "application/json",
+      ...clientEnvHeaders(clientEnv)
     },
     body: JSON.stringify({
       username: payload.username,
       password: payload.password,
       code: payload.code,
-      uuid: payload.uuid
+      uuid: payload.uuid,
+      ...clientEnv
     })
   });
   const body = (await response.json()) as AjaxResult<string>;
@@ -83,12 +115,15 @@ export async function me(token: string, tokenName = "Xyb-Token"): Promise<AuthUs
 }
 
 /** 退出桌面账号登录。 */
-export async function logout(token: string, tokenName = "Xyb-Token"): Promise<void> {
+export async function logout(token: string, tokenName = "Xyb-Token", clientEnv?: ClientEnvPayload): Promise<void> {
   const response = await fetch(`${AUTH_BASE_URL}/xyb/auth/logout`, {
     method: "POST",
     headers: {
+      "Content-Type": "application/json",
+      ...clientEnvHeaders(clientEnv),
       [tokenName]: token
-    }
+    },
+    body: JSON.stringify(clientEnv || {})
   });
   await readJson<unknown>(response, "退出登录失败");
 }
@@ -143,11 +178,12 @@ export async function sendEmailCode(email: string): Promise<string> {
 }
 
 /** 注册桌面账号。 */
-export async function register(payload: RegisterPayload): Promise<void> {
+export async function register(payload: RegisterPayload, clientEnv?: ClientEnvPayload): Promise<void> {
   const response = await fetch(`${AUTH_BASE_URL}/xyb/auth/register`, {
     method: "POST",
     headers: {
-      "Content-Type": "application/json"
+      "Content-Type": "application/json",
+      ...clientEnvHeaders(clientEnv)
     },
     body: JSON.stringify({
       username: payload.username,
@@ -156,7 +192,8 @@ export async function register(payload: RegisterPayload): Promise<void> {
       emailCode: payload.emailCode,
       emailUuid: payload.emailUuid,
       code: payload.code,
-      uuid: payload.uuid
+      uuid: payload.uuid,
+      ...clientEnv
     })
   });
   await readJson<unknown>(response, "注册失败");

@@ -1,13 +1,16 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type {
   AuthSessionPayload,
+  AutoClockNotificationConfig,
   JieLongFieldAnswer,
   JieLongFormBundle,
   JieLongSettings,
   JieLongSubmitPayload,
   LogEntry,
   SignConfig,
-  SignOption
+  SignOption,
+  UpdateSettings,
+  WeeklyJournalSubmitPayload
 } from "@shared/types";
 import type { SignSignInApi } from "@shared/ipc";
 
@@ -28,6 +31,38 @@ const api: SignSignInApi = {
     getState: () => ipcRenderer.invoke("task:getState"),
     refreshSessionFromCode: () => ipcRenderer.invoke("task:refreshSessionFromCode")
   },
+  autoClock: {
+    getState: () => ipcRenderer.invoke("autoClock:getState"),
+    start: () => ipcRenderer.invoke("autoClock:start"),
+    stop: () => ipcRenderer.invoke("autoClock:stop"),
+    reload: () => ipcRenderer.invoke("autoClock:reload"),
+    testNotification: (channel: AutoClockNotificationConfig) => ipcRenderer.invoke("autoClock:testNotification", channel)
+  },
+  update: {
+    check: () => ipcRenderer.invoke("update:check"),
+    loadMoreHistory: (cursor: { start: number }, excludeTag?: string) => ipcRenderer.invoke("update:loadMoreHistory", cursor, excludeTag),
+    getSettings: () => ipcRenderer.invoke("update:getSettings"),
+    saveSettings: (settings: Partial<UpdateSettings>) => ipcRenderer.invoke("update:saveSettings", settings),
+    browseDownloadDir: () => ipcRenderer.invoke("update:browseDownloadDir"),
+    download: (tag: string) => ipcRenderer.invoke("update:download", tag),
+    getDownloadState: () => ipcRenderer.invoke("update:getDownloadState"),
+    pause: () => ipcRenderer.invoke("update:pause"),
+    resume: () => ipcRenderer.invoke("update:resume"),
+    stop: () => ipcRenderer.invoke("update:stop"),
+    openDownloadDir: () => ipcRenderer.invoke("update:openDownloadDir"),
+    openRelease: (tag: string) => ipcRenderer.invoke("update:openRelease", tag),
+    openCompare: (tag: string) => ipcRenderer.invoke("update:openCompare", tag),
+    install: (tag: string) => ipcRenderer.invoke("update:install", tag),
+    deletePackage: (tag: string) => ipcRenderer.invoke("update:deletePackage", tag)
+  },
+  weeklyJournal: {
+    init: () => ipcRenderer.invoke("weeklyJournal:init"),
+    loadYears: () => ipcRenderer.invoke("weeklyJournal:loadYears"),
+    loadWeeks: (year: string, month: string) => ipcRenderer.invoke("weeklyJournal:loadWeeks", year, month),
+    loadBlogs: (page: number) => ipcRenderer.invoke("weeklyJournal:loadBlogs", page),
+    generate: (prompt: string) => ipcRenderer.invoke("weeklyJournal:generate", prompt),
+    submit: (payload: WeeklyJournalSubmitPayload) => ipcRenderer.invoke("weeklyJournal:submit", payload)
+  },
   code: {
     startCapture: () => ipcRenderer.invoke("code:startCapture"),
     stopCapture: () => ipcRenderer.invoke("code:stopCapture"),
@@ -42,7 +77,12 @@ const api: SignSignInApi = {
   system: {
     getStatus: () => ipcRenderer.invoke("system:getStatus"),
     openProxySettings: () => ipcRenderer.invoke("system:openProxySettings"),
-    openCertManager: () => ipcRenderer.invoke("system:openCertManager")
+    openCertManager: () => ipcRenderer.invoke("system:openCertManager"),
+    openUserDataDir: () => ipcRenderer.invoke("system:openUserDataDir"),
+    openConfigFile: () => ipcRenderer.invoke("system:openConfigFile"),
+    openTerminal: () => ipcRenderer.invoke("system:openTerminal"),
+    flushDns: () => ipcRenderer.invoke("system:flushDns"),
+    openExternal: (url: string) => ipcRenderer.invoke("system:openExternal", url)
   },
   image: {
     list: () => ipcRenderer.invoke("image:list"),

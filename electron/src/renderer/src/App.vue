@@ -6,6 +6,8 @@ import ImageManagerDialog from "./components/ImageManagerDialog.vue";
 import LoginDialog from "./components/LoginDialog.vue";
 import LogPanel from "./components/LogPanel.vue";
 import NoticeBanner from "./components/NoticeBanner.vue";
+import UpdateCenterDialog from "./components/UpdateCenterDialog.vue";
+import WeeklyJournalDialog from "./components/WeeklyJournalDialog.vue";
 import { useAppState } from "./composables/useAppState";
 import ConfigPage from "./pages/ConfigPage.vue";
 import DashboardPage from "./pages/DashboardPage.vue";
@@ -40,6 +42,7 @@ const app = useAppState();
               <DashboardPage
                 v-if="app.page.value === 'dashboard'"
                 :action-options="app.actionOptions"
+                :auto-clock="app.autoClock.value"
                 :capture="app.capture.value"
                 :images="app.images.value"
                 :is-photo-action="app.isPhotoAction.value"
@@ -57,12 +60,20 @@ const app = useAppState();
                 @open-image-manager="app.openImageManager"
                 @open-feedback="app.openFeedback"
                 @open-cert-manager="app.openCertManager"
+                @open-config-file="app.openConfigFile"
+                @open-external="app.openExternal"
+                @open-terminal="app.openTerminal"
+                @open-update-center="app.openUpdateCenter"
+                @open-weekly-journal="app.openWeeklyJournal"
                 @open-proxy-settings="app.openProxySettings"
+                @open-user-data-dir="app.openUserDataDir"
+                @flush-dns="app.flushDns"
                 @refresh-all="app.manualRefreshAll"
                 @start-capture="app.startCapture"
                 @start-task="app.startTask"
                 @stop-capture="app.stopCapture"
                 @stop-task="app.stopTask"
+                @toggle-auto-clock="app.toggleAutoClock"
               />
 
               <JieLongPage
@@ -75,6 +86,10 @@ const app = useAppState();
                 v-else
                 :draft="app.draft"
                 @change-input="app.changeInput"
+                @update-tasks="(tasks) => (app.draft.autoClockTasks = tasks)"
+                @update-notifications="(notifications) => (app.draft.notifications = notifications)"
+                @import-image-for-task="app.importImageForTask"
+                @test-notification="app.testNotification"
                 @regenerate-user-agent="app.regenerateUserAgent"
                 @save-config="app.saveConfig"
               />
@@ -132,6 +147,16 @@ const app = useAppState();
         @delete="app.deleteImage"
         @refresh="app.refreshAll"
         @open-dir="app.openImageDir"
+      />
+
+      <UpdateCenterDialog
+        :visible="app.updateCenterVisible.value"
+        @close="app.updateCenterVisible.value = false"
+      />
+
+      <WeeklyJournalDialog
+        :visible="app.weeklyJournalVisible.value"
+        @close="app.weeklyJournalVisible.value = false"
       />
     </section>
   </Layout>

@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { registerIpc } from "./ipc/registerIpc";
 import { logger } from "./services/logger";
 import { codeCaptureService } from "./services/codeCaptureService";
+import { autoClockService } from "./services/autoClockService";
 
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
@@ -108,6 +109,9 @@ app.whenReady().then(() => {
       if (!win.isDestroyed()) win.webContents.send("code:captured", code);
     }
   });
+  if (autoClockService.getState().enabled) {
+    autoClockService.start();
+  }
   logger.info("Electron 主进程已启动");
 });
 
@@ -118,5 +122,6 @@ app.on("activate", () => {
 
 app.on("before-quit", async () => {
   isQuitting = true;
+  autoClockService.shutdown();
   await codeCaptureService.stop().catch(() => undefined);
 });

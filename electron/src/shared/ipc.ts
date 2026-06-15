@@ -1,5 +1,7 @@
 import type {
   ApiResult,
+  AutoClockNotificationConfig,
+  AutoClockState,
   AuthState,
   AuthSessionPayload,
   CaptureState,
@@ -15,7 +17,17 @@ import type {
   SignConfig,
   SignOption,
   SystemStatus,
-  TaskState
+  TaskState,
+  UpdateCheckResult,
+  UpdateDownloadState,
+  UpdateRelease,
+  UpdateSettings,
+  WeeklyJournalBlogList,
+  WeeklyJournalHistoryItem,
+  WeeklyJournalInit,
+  WeeklyJournalSubmitPayload,
+  WeeklyJournalWeek,
+  WeeklyJournalYear
 } from "./types";
 
 export interface SignSignInApi {
@@ -35,6 +47,38 @@ export interface SignSignInApi {
     getState: () => Promise<ApiResult<TaskState>>;
     refreshSessionFromCode: () => Promise<ApiResult<TaskState>>;
   };
+  autoClock: {
+    getState: () => Promise<ApiResult<AutoClockState>>;
+    start: () => Promise<ApiResult<AutoClockState>>;
+    stop: () => Promise<ApiResult<AutoClockState>>;
+    reload: () => Promise<ApiResult<AutoClockState>>;
+    testNotification: (channel: AutoClockNotificationConfig) => Promise<ApiResult<boolean>>;
+  };
+  update: {
+    check: () => Promise<ApiResult<UpdateCheckResult>>;
+    loadMoreHistory: (cursor: { start: number }, excludeTag?: string) => Promise<ApiResult<{ releases: UpdateRelease[]; historyCursor: { start: number } | null }>>;
+    getSettings: () => Promise<ApiResult<UpdateSettings>>;
+    saveSettings: (settings: Partial<UpdateSettings>) => Promise<ApiResult<UpdateSettings>>;
+    browseDownloadDir: () => Promise<ApiResult<UpdateSettings>>;
+    download: (tag: string) => Promise<ApiResult<UpdateDownloadState>>;
+    getDownloadState: () => Promise<ApiResult<UpdateDownloadState>>;
+    pause: () => Promise<ApiResult<UpdateDownloadState>>;
+    resume: () => Promise<ApiResult<UpdateDownloadState>>;
+    stop: () => Promise<ApiResult<UpdateDownloadState>>;
+    openDownloadDir: () => Promise<ApiResult<boolean>>;
+    openRelease: (tag: string) => Promise<ApiResult<boolean>>;
+    openCompare: (tag: string) => Promise<ApiResult<boolean>>;
+    install: (tag: string) => Promise<ApiResult<boolean>>;
+    deletePackage: (tag: string) => Promise<ApiResult<boolean>>;
+  };
+  weeklyJournal: {
+    init: () => Promise<ApiResult<WeeklyJournalInit>>;
+    loadYears: () => Promise<ApiResult<WeeklyJournalYear[]>>;
+    loadWeeks: (year: string, month: string) => Promise<ApiResult<WeeklyJournalWeek[]>>;
+    loadBlogs: (page: number) => Promise<ApiResult<WeeklyJournalBlogList>>;
+    generate: (prompt: string) => Promise<ApiResult<WeeklyJournalHistoryItem>>;
+    submit: (payload: WeeklyJournalSubmitPayload) => Promise<ApiResult<Record<string, any>>>;
+  };
   code: {
     startCapture: () => Promise<ApiResult<CaptureState>>;
     stopCapture: () => Promise<ApiResult<CaptureState>>;
@@ -46,6 +90,11 @@ export interface SignSignInApi {
     getStatus: () => Promise<ApiResult<SystemStatus>>;
     openProxySettings: () => Promise<ApiResult<boolean>>;
     openCertManager: () => Promise<ApiResult<boolean>>;
+    openUserDataDir: () => Promise<ApiResult<boolean>>;
+    openConfigFile: () => Promise<ApiResult<boolean>>;
+    openTerminal: () => Promise<ApiResult<boolean>>;
+    flushDns: () => Promise<ApiResult<boolean>>;
+    openExternal: (url: string) => Promise<ApiResult<boolean>>;
   };
   image: {
     list: () => Promise<ApiResult<ImageItem[]>>;

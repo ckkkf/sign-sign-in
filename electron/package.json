@@ -60,10 +60,5 @@
         "zip"
       ]
     }
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "electron"
-    ]
   }
 }

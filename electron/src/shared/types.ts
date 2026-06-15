@@ -29,13 +29,128 @@ export interface SignConfig {
       enabled?: boolean;
       poll_seconds?: number;
       random_minutes?: number;
-      tasks?: unknown[];
+      tasks?: AutoClockTaskConfig[];
     };
+    notifications_enabled?: boolean;
+    notifications?: AutoClockNotificationConfig[];
     pushplus?: {
       token?: string;
     };
     jielong?: Record<string, any>;
   };
+}
+
+export interface AutoClockTaskConfig {
+  time: string;
+  mode: "in" | "out" | "photo_in" | "photo_out" | string;
+  image_path?: string;
+  imagePath?: string;
+}
+
+export interface AutoClockNotificationConfig {
+  type: "pushplus" | "tray" | string;
+  token?: string;
+}
+
+export interface UpdateSourceOption {
+  key: string;
+  label: string;
+  value: string;
+}
+
+export interface UpdateSettings {
+  source: string;
+  customSource: string;
+  downloadDir: string;
+  sources?: {
+    custom?: string;
+  };
+  download_dir?: string;
+}
+
+export interface UpdateRelease {
+  tag: string;
+  name: string;
+  body: string;
+  publishedAt: string;
+  htmlUrl: string;
+  compareUrl: string;
+  downloadUrl: string;
+  rawDownloadUrl: string;
+  downloadName: string;
+  downloadedPath?: string;
+  assetAvailable?: boolean;
+  installKind?: string;
+  installSupported?: boolean;
+}
+
+export interface UpdateCheckResult {
+  currentVersion: string;
+  latestVersion: string;
+  hasUpdate: boolean;
+  latestRelease?: UpdateRelease;
+  historyReleases: UpdateRelease[];
+  historyCursor?: { start: number } | null;
+  settings: UpdateSettings;
+  sources: UpdateSourceOption[];
+}
+
+export interface UpdateDownloadState {
+  running: boolean;
+  paused: boolean;
+  tag: string;
+  fileName: string;
+  filePath: string;
+  receivedBytes: number;
+  totalBytes: number;
+  percent: number;
+  speedText: string;
+  etaText: string;
+  message: string;
+}
+
+export interface WeeklyJournalInit {
+  traineeId: string;
+  years: WeeklyJournalYear[];
+  weeks: WeeklyJournalWeek[];
+  history: WeeklyJournalHistoryItem[];
+  blogs: WeeklyJournalBlogList;
+}
+
+export interface WeeklyJournalYear {
+  year: string;
+  monthList: Array<string | number | Record<string, any>>;
+  [key: string]: any;
+}
+
+export interface WeeklyJournalWeek {
+  startDate: string;
+  endDate: string;
+  title?: string;
+  label?: string;
+  [key: string]: any;
+}
+
+export interface WeeklyJournalHistoryItem {
+  id: string;
+  prompt: string;
+  content: string;
+  createdAt: number;
+}
+
+export interface WeeklyJournalBlogList {
+  page: number;
+  raw: any;
+  items: any[];
+}
+
+export interface WeeklyJournalSubmitPayload {
+  blogTitle: string;
+  blogBody: string;
+  startDate: string;
+  endDate: string;
+  blogOpenType: "0" | "1" | "2" | string;
+  traineeId: string;
 }
 
 export interface SessionCache {
@@ -68,6 +183,15 @@ export interface TaskState {
   action: string;
   message: string;
   startedAt?: number;
+}
+
+export interface AutoClockState {
+  enabled: boolean;
+  running: boolean;
+  message: string;
+  nextRunAt?: number;
+  lastRunAt?: number;
+  taskCount?: number;
 }
 
 export interface CaptureState {
@@ -125,6 +249,15 @@ export interface AuthLoginResult {
   tokenName: string;
 }
 
+export interface ClientEnvPayload {
+  userAgent?: string;
+  deviceBrand?: string;
+  deviceModel?: string;
+  deviceSystem?: string;
+  devicePlatform?: string;
+  riskParams?: string;
+}
+
 export interface LoginPayload {
   username: string;
   password: string;
@@ -148,6 +281,23 @@ export interface AuthCaptcha {
 
 export interface AuthEmailCode {
   emailUuid: string;
+}
+
+export interface ClientOperLogPayload {
+  operType: string;
+  status: "0" | "1" | string;
+  title: string;
+  requestUrl?: string;
+  requestParam?: string;
+  responseSummary?: string;
+  errorMsg?: string;
+  costTime?: number;
+  userAgent?: string;
+  deviceBrand?: string;
+  deviceModel?: string;
+  deviceSystem?: string;
+  devicePlatform?: string;
+  riskParams?: string;
 }
 
 export interface JieLongSettings {

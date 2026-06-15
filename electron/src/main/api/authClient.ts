@@ -1,5 +1,5 @@
 import axios from "axios";
-import type { AuthCaptcha, AuthEmailCode, AuthUser, RegisterPayload } from "@shared/types";
+import type { AuthCaptcha, AuthEmailCode, AuthUser, ClientOperLogPayload, RegisterPayload } from "@shared/types";
 import { AUTH_BASE_URL } from "@shared/constants";
 import { authHttp } from "./httpClient";
 import type { AjaxResult } from "./types/authTypes";
@@ -110,6 +110,16 @@ export async function me(token: string, tokenName = "Xyb-Token"): Promise<AuthUs
     }
   });
   return normalizeUser(requireSuccess(response.data, "获取用户信息失败") || {});
+}
+
+/** 上报校友邦客户端业务日志。 */
+export async function submitClientLog(payload: ClientOperLogPayload, token: string, tokenName = "Xyb-Token"): Promise<void> {
+  const response = await authHttp.post<AjaxResult<unknown>>("/xyb/auth/client-log", payload, {
+    headers: {
+      [tokenName]: token
+    }
+  });
+  requireSuccess(response.data, "上报客户端日志失败");
 }
 
 /** 判断认证错误是否明确表示登录态已经失效。 */

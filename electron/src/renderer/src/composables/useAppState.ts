@@ -4,6 +4,10 @@ import { QQ_GROUP } from "@shared/constants";
 import type {
   AuthState,
   AuthCaptcha,
+  AutoClockNotificationConfig,
+  AutoClockState,
+  AutoClockTaskConfig,
+  ClientEnvPayload,
   CaptureState,
   ImageItem,
   LoginPayload,
@@ -40,6 +44,8 @@ export function useAppState() {
   const feedbackVisible = ref(false);
   const feedbackLoading = ref(false);
   const imageManagerVisible = ref(false);
+  const updateCenterVisible = ref(false);
+  const weeklyJournalVisible = ref(false);
   const registerLoading = ref(false);
   const captchaLoading = ref(false);
   const loginCaptchaLoading = ref(false);
@@ -65,6 +71,11 @@ export function useAppState() {
     action: "",
     message: "空闲"
   });
+  const autoClock = ref<AutoClockState>({
+    enabled: false,
+    running: false,
+    message: "未启动"
+  });
   const capture = ref<CaptureState>({
     running: false,
     host: "127.0.0.1",
@@ -82,7 +93,13 @@ export function useAppState() {
     systemVersion: "",
     platform: "android",
     userAgent: "",
-    pushplusToken: ""
+    pushplusToken: "",
+    autoClockEnabled: "false",
+    autoClockPollSeconds: "30",
+    autoClockRandomMinutes: "0",
+    notificationsEnabled: "false",
+    autoClockTasks: [] as AutoClockTaskConfig[],
+    notifications: [] as AutoClockNotificationConfig[]
   });
 
   const signActions = ["普通签到", "普通签退", "普通签到签退", "拍照签到", "拍照签退"] as const;
@@ -163,20 +180,50 @@ export function useAppState() {
     }
   }
 
+  function buildClientEnv(action: string): ClientEnvPayload {
+    const currentInput = config.value?.input;
+    const device = currentInput?.device;
+    const env: ClientEnvPayload = {
+      userAgent: draft.userAgent || currentInput?.userAgent || "",
+      deviceBrand: draft.brand || device?.brand || "",
+      deviceModel: draft.model || device?.model || "",
+      deviceSystem: draft.systemVersion ? `Android ${draft.systemVersion}` : device?.system || "",
+      devicePlatform: draft.platform || device?.platform || ""
+    };
+    env.riskParams = JSON.stringify({
+      action,
+      device: {
+        brand: env.deviceBrand,
+        model: env.deviceModel,
+        system: env.deviceSystem,
+        platform: env.devicePlatform
+      },
+      location: {
+        hasLongitude: Boolean(draft.longitude || currentInput?.location.longitude),
+        hasLatitude: Boolean(draft.latitude || currentInput?.location.latitude),
+        jitterMeters: draft.locationJitterMeters || currentInput?.locationJitterMeters || ""
+      },
+      userAgentPresent: Boolean(env.userAgent)
+    });
+    return env;
+  }
+
   async function refreshAll() {
     if (refreshing) return;
     refreshing = true;
     try {
       await runAction(async () => {
-        const [statusResult, taskResult, captureResult, imageResult] = await Promise.all([
+        const [statusResult, taskResult, captureResult, autoClockResult, imageResult] = await Promise.all([
           window.signSignIn.system.getStatus(),
           window.signSignIn.task.getState(),
           window.signSignIn.code.getState(),
+          window.signSignIn.autoClock.getState(),
           window.signSignIn.image.list()
         ]);
         status.value = ensureOk(statusResult);
         task.value = ensureOk(taskResult);
         capture.value = ensureOk(captureResult);
+        autoClock.value = ensureOk(autoClockResult);
         images.value = ensureOk(imageResult);
       });
     } finally {
@@ -187,6 +234,16 @@ export function useAppState() {
   async function manualRefreshAll() {
     await refreshAll();
     Toast.success("状态已刷新");
+  }
+
+  async function toggleAutoClock() {
+    const shouldStop = autoClock.value.enabled;
+    await runAction(async () => {
+      autoClock.value = ensureOk(
+        shouldStop ? await window.signSignIn.autoClock.stop() : await window.signSignIn.autoClock.start()
+      );
+      await refreshAll();
+    }, shouldStop ? "定时打卡已停止" : "定时打卡已启动");
   }
 
   async function loadAuthState() {
@@ -225,7 +282,7 @@ export function useAppState() {
     loginLoading.value = true;
     try {
       await runAction(async () => {
-        const session = await authApi.login(payload);
+        const session = await authApi.login(payload, buildClientEnv("AUTH_LOGIN"));
         const user = await authApi.me(session.token, session.tokenName);
         const state = ensureOk(await window.signSignIn.auth.saveLogin({ ...session, user }));
         authState.value = state;
@@ -289,7 +346,7 @@ export function useAppState() {
     registerLoading.value = true;
     try {
       const success = await runAction(async () => {
-        await authApi.register(payload);
+        await authApi.register(payload, buildClientEnv("AUTH_REGISTER"));
         return true;
       }, "注册成功，请登录");
 
@@ -315,7 +372,7 @@ export function useAppState() {
       const token = authState.value.token || "";
       if (token) {
         try {
-          await authApi.logout(token, authState.value.tokenName || "Xyb-Token");
+          await authApi.logout(token, authState.value.tokenName || "Xyb-Token", buildClientEnv("AUTH_LOGOUT"));
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           pushLocalLog(`远程登出失败，已清理本地登录态：${message}`, "warn");
@@ -365,6 +422,12 @@ export function useAppState() {
       draft.platform = String(loaded.input.device.platform || "android");
       draft.userAgent = loaded.input.userAgent;
       draft.pushplusToken = loaded.settings?.pushplus?.token || "";
+      draft.autoClockEnabled = String(Boolean(loaded.settings?.auto_clock?.enabled));
+      draft.autoClockPollSeconds = String(loaded.settings?.auto_clock?.poll_seconds ?? 30);
+      draft.autoClockRandomMinutes = String(loaded.settings?.auto_clock?.random_minutes ?? 0);
+      draft.autoClockTasks = [...(loaded.settings?.auto_clock?.tasks || [])];
+      draft.notificationsEnabled = String(Boolean(loaded.settings?.notifications_enabled));
+      draft.notifications = [...(loaded.settings?.notifications || [])];
     });
   }
 
@@ -428,6 +491,19 @@ export function useAppState() {
     }, "图片已导入");
   }
 
+  async function importImageForTask(index: number) {
+    const item = await importImage();
+    if (!item) return;
+    const tasks = [...draft.autoClockTasks];
+    if (!tasks[index]) return;
+    tasks[index] = { ...tasks[index], image_path: item.path };
+    draft.autoClockTasks = tasks;
+  }
+
+  async function testNotification(channel: AutoClockNotificationConfig) {
+    await runAction(async () => ensureOk(await window.signSignIn.autoClock.testNotification(channel)), "测试通知已发送");
+  }
+
   function openImageManager() {
     imageManagerVisible.value = true;
     void refreshAll();
@@ -481,6 +557,8 @@ export function useAppState() {
   async function saveConfig() {
     const current = config.value;
     if (!current) return;
+    const autoClockTasks = draft.autoClockTasks;
+    const notifications = draft.notifications;
     const next: SignConfig = {
       ...current,
       input: {
@@ -500,6 +578,15 @@ export function useAppState() {
       },
       settings: {
         ...current.settings,
+        auto_clock: {
+          ...current.settings?.auto_clock,
+          enabled: draft.autoClockEnabled === "true",
+          poll_seconds: Math.max(10, Number(draft.autoClockPollSeconds || 30)),
+          random_minutes: Math.max(0, Math.min(120, Number(draft.autoClockRandomMinutes || 0))),
+          tasks: autoClockTasks
+        },
+        notifications_enabled: draft.notificationsEnabled === "true",
+        notifications,
         pushplus: {
           token: draft.pushplusToken
         }
@@ -507,7 +594,9 @@ export function useAppState() {
     };
     await runAction(async () => {
       config.value = ensureOk(await window.signSignIn.config.save(next));
+      autoClock.value = ensureOk(await window.signSignIn.autoClock.reload());
       await loadConfig();
+      await refreshAll();
     }, "配置已保存");
   }
 
@@ -559,6 +648,39 @@ export function useAppState() {
 
   async function openCertManager() {
     await runAction(async () => ensureOk(await window.signSignIn.system.openCertManager()));
+  }
+
+  async function openUserDataDir() {
+    await runAction(async () => ensureOk(await window.signSignIn.system.openUserDataDir()));
+  }
+
+  async function openConfigFile() {
+    await runAction(async () => ensureOk(await window.signSignIn.system.openConfigFile()));
+  }
+
+  async function openTerminal() {
+    await runAction(async () => ensureOk(await window.signSignIn.system.openTerminal()));
+  }
+
+  async function flushDns() {
+    const ok = await runAction(async () => ensureOk(await window.signSignIn.system.flushDns()));
+    if (!ok) {
+      Toast.warning("当前系统暂不支持自动刷新 DNS");
+    } else {
+      Toast.success("DNS 刷新成功");
+    }
+  }
+
+  async function openExternal(url: string) {
+    await runAction(async () => ensureOk(await window.signSignIn.system.openExternal(url)));
+  }
+
+  function openUpdateCenter() {
+    updateCenterVisible.value = true;
+  }
+
+  function openWeeklyJournal() {
+    weeklyJournalVisible.value = true;
   }
 
   async function copyQQGroup() {
@@ -624,6 +746,7 @@ export function useAppState() {
     actionOptions,
     authState,
     authCaptcha,
+    autoClock,
     loginAuthCaptcha,
     bootError,
     captchaLoading,
@@ -641,6 +764,7 @@ export function useAppState() {
     images,
     imageManagerVisible,
     importImage,
+    importImageForTask,
     enterOfflineMode,
     emailCodeLoading,
     feedbackLoading,
@@ -656,11 +780,17 @@ export function useAppState() {
     noticeContent,
     offlineMode,
     openCertManager,
+    openConfigFile,
+    openExternal,
     openFeedback,
     openImageDir,
     openImageManager,
     openLoginIfLoggedOut,
     openProxySettings,
+    openTerminal,
+    openUpdateCenter,
+    openUserDataDir,
+    openWeeklyJournal,
     packetLogs,
     page,
     manualRefreshAll,
@@ -686,7 +816,12 @@ export function useAppState() {
     stopCapture,
     stopTask,
     submitFeedback,
+    testNotification,
+    toggleAutoClock,
+    flushDns,
     deleteImage,
-    task
+    task,
+    updateCenterVisible,
+    weeklyJournalVisible
   };
 }
