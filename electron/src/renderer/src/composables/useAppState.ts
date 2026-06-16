@@ -45,6 +45,7 @@ export function useAppState() {
   const feedbackLoading = ref(false);
   const imageManagerVisible = ref(false);
   const updateCenterVisible = ref(false);
+  const autoClockDialogVisible = ref(false);
   const weeklyJournalVisible = ref(false);
   const registerLoading = ref(false);
   const captchaLoading = ref(false);
@@ -108,7 +109,8 @@ export function useAppState() {
     value: action
   }));
   const noticeText = "本软件完全免费，若您是付费获得，请及时退款并警惕倒卖。本项目仅支持个人学习，请勿用于商业活动。";
-  const noticeContent = noticeText;
+  const noticeContents = ref<string[]>([noticeText]);
+  const noticeContent = computed(() => noticeContents.value.length ? noticeContents.value : [noticeText]);
   const isPhotoAction = computed(() => selectedAction.value === "拍照签到" || selectedAction.value === "拍照签退");
   const statusItems = computed(() => {
     const mitmRunning = capture.value.running || status.value.proxyServerRunning;
@@ -121,8 +123,8 @@ export function useAppState() {
       { key: "证书", value: status.value.certInstalled ? "已就绪" : "未安装", tone: status.value.certInstalled ? "success" as const : "danger" as const },
       { key: "Mitm", value: capture.value.running ? "抓包中" : status.value.proxyServerRunning ? "代理运行" : "未启动", tone: mitmRunning ? "success" as const : "muted" as const },
       { key: "IP", value: status.value.ip, tone: "info" as const },
-      { key: "Session", value: status.value.sessionValid ? "JSESSIONID 有效" : "未缓存", tone: status.value.sessionValid ? "success" as const : "warning" as const },
-      { key: "Code", value: capture.value.lastCode || "未捕获", tone: capture.value.lastCode ? "success" as const : "muted" as const }
+      { key: "Code", value: capture.value.lastCode || "未捕获", tone: capture.value.lastCode ? "success" as const : "muted" as const },
+      { key: "Session", value: status.value.sessionValid ? "JSESSIONID 有效" : "未缓存", tone: status.value.sessionValid ? "success" as const : "warning" as const }
     ];
   });
   const offlineMode = computed(() => authState.value.offline);
@@ -257,6 +259,15 @@ export function useAppState() {
         await loadLoginCaptcha();
       }
     });
+  }
+
+  async function loadNoticeContent() {
+    try {
+      const notices = await authApi.listClientNotices();
+      noticeContents.value = notices.length ? notices : [noticeText];
+    } catch {
+      noticeContents.value = [noticeText];
+    }
   }
 
   function openLoginIfLoggedOut() {
@@ -679,7 +690,15 @@ export function useAppState() {
     updateCenterVisible.value = true;
   }
 
+  function openAutoClockDialog() {
+    autoClockDialogVisible.value = true;
+  }
+
   function openWeeklyJournal() {
+    if (!status.value.sessionValid) {
+      Toast.warning("Session 未缓存，请先获取或刷新 JSESSIONID");
+      return;
+    }
     weeklyJournalVisible.value = true;
   }
 
@@ -725,6 +744,7 @@ export function useAppState() {
       });
       await loadAuthState();
       await loadConfig();
+      await loadNoticeContent();
       await refreshAll();
       timer = window.setInterval(() => {
         refreshAll().catch(() => undefined);
@@ -746,6 +766,7 @@ export function useAppState() {
     actionOptions,
     authState,
     authCaptcha,
+    autoClockDialogVisible,
     autoClock,
     loginAuthCaptcha,
     bootError,
@@ -789,6 +810,7 @@ export function useAppState() {
     openProxySettings,
     openTerminal,
     openUpdateCenter,
+    openAutoClockDialog,
     openUserDataDir,
     openWeeklyJournal,
     packetLogs,

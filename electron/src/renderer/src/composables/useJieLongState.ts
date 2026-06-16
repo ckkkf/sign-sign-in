@@ -1,6 +1,6 @@
 import Modal from "@kousum/semi-ui-vue/dist/modal";
 import Toast from "@kousum/semi-ui-vue/dist/toast";
-import { computed, onMounted, onUnmounted, reactive, ref } from "vue";
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 import type { JieLongField, JieLongFieldAnswer, JieLongFileInfo, JieLongFormBundle, JieLongSettings, JieLongSubmitPayload } from "@shared/types";
 import { ensureOk } from "../utils/api";
 
@@ -318,6 +318,10 @@ export function useJieLongState() {
     qrVisible.value = false;
     stopPolling();
   }
+
+  watch(qrVisible, (visible) => {
+    if (!visible) stopPolling();
+  });
 
   async function loadForm() {
     loading.value = true;

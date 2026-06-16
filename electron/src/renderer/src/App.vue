@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import Layout from "@kousum/semi-ui-vue/dist/layout";
 import AppRail from "./components/AppRail.vue";
+import AutoClockDialog from "./components/AutoClockDialog.vue";
 import FeedbackDialog from "./components/FeedbackDialog.vue";
 import ImageManagerDialog from "./components/ImageManagerDialog.vue";
 import LoginDialog from "./components/LoginDialog.vue";
@@ -32,7 +33,7 @@ const app = useAppState();
 
     <section class="workspace">
       <div class="banner-stack">
-        <NoticeBanner :boot-error="app.bootError.value" :notice-content="app.noticeContent" />
+        <NoticeBanner :boot-error="app.bootError.value" :notice-content="app.noticeContent.value" />
       </div>
 
       <section class="workspace-body" :style="{ '--log-panel-width': `${app.logPanelWidth.value}px` }">
@@ -64,6 +65,7 @@ const app = useAppState();
                 @open-external="app.openExternal"
                 @open-terminal="app.openTerminal"
                 @open-update-center="app.openUpdateCenter"
+                @open-auto-clock="app.openAutoClockDialog"
                 @open-weekly-journal="app.openWeeklyJournal"
                 @open-proxy-settings="app.openProxySettings"
                 @open-user-data-dir="app.openUserDataDir"
@@ -86,10 +88,6 @@ const app = useAppState();
                 v-else
                 :draft="app.draft"
                 @change-input="app.changeInput"
-                @update-tasks="(tasks) => (app.draft.autoClockTasks = tasks)"
-                @update-notifications="(notifications) => (app.draft.notifications = notifications)"
-                @import-image-for-task="app.importImageForTask"
-                @test-notification="app.testNotification"
                 @regenerate-user-agent="app.regenerateUserAgent"
                 @save-config="app.saveConfig"
               />
@@ -152,6 +150,20 @@ const app = useAppState();
       <UpdateCenterDialog
         :visible="app.updateCenterVisible.value"
         @close="app.updateCenterVisible.value = false"
+      />
+
+      <AutoClockDialog
+        :visible="app.autoClockDialogVisible.value"
+        :auto-clock="app.autoClock.value"
+        :draft="app.draft"
+        @close="app.autoClockDialogVisible.value = false"
+        @change-input="app.changeInput"
+        @update-tasks="(tasks) => (app.draft.autoClockTasks = tasks)"
+        @update-notifications="(notifications) => (app.draft.notifications = notifications)"
+        @import-image-for-task="app.importImageForTask"
+        @test-notification="app.testNotification"
+        @save-config="app.saveConfig"
+        @toggle-auto-clock="app.toggleAutoClock"
       />
 
       <WeeklyJournalDialog

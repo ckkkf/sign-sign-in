@@ -59,6 +59,7 @@ const emit = defineEmits<{
   (event: "openTerminal"): void;
   (event: "flushDns"): void;
   (event: "openUpdateCenter"): void;
+  (event: "openAutoClock"): void;
   (event: "openWeeklyJournal"): void;
   (event: "openExternal", url: string): void;
   (event: "refreshAll"): void;
@@ -79,7 +80,7 @@ const toolButtons = computed(() => [
   { label: "图片管理", icon: IconImage, action: () => emit("openImageManager") },
   { label: "更新中心", icon: IconShieldStroked, action: () => emit("openUpdateCenter") },
   { label: "AI 与周记", icon: IconApps, action: () => emit("openWeeklyJournal") },
-  { label: props.autoClock.enabled ? "停止定时" : "定时打卡", icon: IconClock, action: () => emit("changePage", "config") }
+  { label: props.autoClock.enabled ? "定时打卡" : "定时打卡", icon: IconClock, action: () => emit("openAutoClock") }
 ]);
 
 function clickTool(tool: (typeof toolButtons.value)[number]) {

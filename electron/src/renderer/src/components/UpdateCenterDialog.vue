@@ -2,14 +2,21 @@
 import Button from "@kousum/semi-ui-vue/dist/button";
 import Input from "@kousum/semi-ui-vue/dist/input";
 import Modal from "@kousum/semi-ui-vue/dist/modal";
-import Progress from "@kousum/semi-ui-vue/dist/progress";
 import Select from "@kousum/semi-ui-vue/dist/select";
-import Space from "@kousum/semi-ui-vue/dist/space";
 import Spin from "@kousum/semi-ui-vue/dist/spin";
 import Tag from "@kousum/semi-ui-vue/dist/tag";
 import TextArea from "@kousum/semi-ui-vue/dist/input/textArea";
 import Toast from "@kousum/semi-ui-vue/dist/toast";
-import { IconDeleteStroked, IconDownload, IconExternalOpen, IconFolderOpen, IconPlay, IconRefresh, IconStop } from "@kousum/semi-icons-vue";
+import {
+  IconChevronDown,
+  IconChevronUp,
+  IconDeleteStroked,
+  IconDownload,
+  IconExternalOpen,
+  IconFolderOpen,
+  IconRefresh,
+  IconStop
+} from "@kousum/semi-icons-vue";
 import { computed, onUnmounted, ref, watch } from "vue";
 import type { UpdateCheckResult, UpdateDownloadState, UpdateRelease, UpdateSettings } from "@shared/types";
 import { ensureOk } from "../utils/api";
@@ -24,6 +31,21 @@ const downloadState = ref<UpdateDownloadState | null>(null);
 const expanded = ref<Record<string, boolean>>({});
 const downloadedTags = ref<Record<string, boolean>>({});
 const loadingMore = ref(false);
+const historyCollapsed = ref(true);
+const downloadDetailVisible = ref(false);
+const floatPosition = ref({ x: 28, y: 120 });
+const dragging = ref(false);
+const autoInstallTag = ref("");
+let dragStart:
+  | {
+      pointerId: number;
+      clientX: number;
+      clientY: number;
+      x: number;
+      y: number;
+      moved: boolean;
+    }
+  | null = null;
 let timer: number | undefined;
 
 const defaultSettings: UpdateSettings = {
@@ -44,7 +66,14 @@ const sourceOptions = [
 const settings = ref<UpdateSettings>({ ...defaultSettings });
 const latest = computed(() => checkResult.value?.latestRelease);
 const releases = computed(() => [latest.value, ...(checkResult.value?.historyReleases || [])].filter(Boolean) as UpdateRelease[]);
-const hasDownloadState = computed(() => Boolean(downloadState.value?.tag || downloadState.value?.running || latest.value));
+const downloadPercent = computed(() => Math.max(0, Math.min(100, Math.round(Number(downloadState.value?.percent || 0)))));
+const hasDownloadTask = computed(() => Boolean(downloadState.value?.tag || downloadState.value?.running || downloadState.value?.paused || downloadPercent.value > 0));
+const updateStatusText = computed(() => {
+  if (!checkResult.value) return "未拉取版本信息";
+  return checkResult.value.hasUpdate ? "发现新版本" : "已是最新版本 ✅";
+});
+const versionSummary = computed(() => (checkResult.value ? `当前 ${checkResult.value.currentVersion} / 最新 ${checkResult.value.latestVersion}` : ""));
+const updateStatusClass = computed(() => (checkResult.value ? (checkResult.value.hasUpdate ? "has-update" : "up-to-date") : "idle"));
 
 watch(
   () => props.visible,
@@ -125,6 +154,13 @@ async function refreshDownloadState() {
     if (downloadState.value.message === "下载完成" && downloadState.value.tag) {
       downloadedTags.value = { ...downloadedTags.value, [downloadState.value.tag]: true };
       syncDownloadedPath(downloadState.value.tag, downloadState.value.filePath);
+      if (autoInstallTag.value === downloadState.value.tag) {
+        const release = releases.value.find((item) => item.tag === downloadState.value?.tag);
+        autoInstallTag.value = "";
+        if (release) {
+          await install({ ...release, downloadedPath: downloadState.value.filePath });
+        }
+      }
     }
     if (previous?.running && !downloadState.value.running) stopPolling();
     if (downloadState.value.running) startPolling();
@@ -143,11 +179,67 @@ function stopPolling() {
   timer = undefined;
 }
 
+function clampFloatPosition(x: number, y: number) {
+  const size = downloadDetailVisible.value ? { width: 360, height: 72 } : { width: 72, height: 72 };
+  const maxX = Math.max(8, window.innerWidth - size.width - 8);
+  const maxY = Math.max(8, window.innerHeight - size.height - 8);
+  return {
+    x: Math.min(Math.max(8, x), maxX),
+    y: Math.min(Math.max(8, y), maxY)
+  };
+}
+
+function onFloatPointerDown(event: PointerEvent) {
+  const target = event.currentTarget as HTMLElement;
+  target.setPointerCapture(event.pointerId);
+  dragging.value = true;
+  dragStart = {
+    pointerId: event.pointerId,
+    clientX: event.clientX,
+    clientY: event.clientY,
+    x: floatPosition.value.x,
+    y: floatPosition.value.y,
+    moved: false
+  };
+}
+
+function onFloatPointerMove(event: PointerEvent) {
+  if (!dragStart || dragStart.pointerId !== event.pointerId) return;
+  const dx = event.clientX - dragStart.clientX;
+  const dy = event.clientY - dragStart.clientY;
+  if (Math.abs(dx) + Math.abs(dy) > 4) dragStart.moved = true;
+  floatPosition.value = clampFloatPosition(dragStart.x + dx, dragStart.y + dy);
+}
+
+function onFloatPointerUp(event: PointerEvent) {
+  const target = event.currentTarget as HTMLElement;
+  try {
+    if (dragStart?.pointerId === event.pointerId && target.hasPointerCapture(event.pointerId)) {
+      target.releasePointerCapture(event.pointerId);
+    }
+  } catch {
+    // Pointer capture release is best-effort; do not block click behavior.
+  }
+  dragStart = null;
+  dragging.value = false;
+}
+
 async function download(release: UpdateRelease) {
   await run(async () => {
+    autoInstallTag.value = release.tag;
     downloadState.value = ensureOk(await window.signSignIn.update.download(release.tag));
+    downloadDetailVisible.value = true;
     startPolling();
   });
+}
+
+function isReleaseDownloading(release: UpdateRelease) {
+  return Boolean(downloadState.value?.tag === release.tag && (downloadState.value.running || downloadState.value.paused));
+}
+
+function releasePercent(release: UpdateRelease) {
+  if (downloadState.value?.tag !== release.tag) return 0;
+  return Math.max(0, Math.min(100, Math.round(Number(downloadState.value.percent || 0))));
 }
 
 async function loadMoreHistory() {
@@ -155,7 +247,8 @@ async function loadMoreHistory() {
   loadingMore.value = true;
   try {
     await run(async () => {
-      const result = ensureOk(await window.signSignIn.update.loadMoreHistory(checkResult.value!.historyCursor!, latest.value?.tag));
+      const cursor = { start: Number(checkResult.value!.historyCursor!.start || 1) };
+      const result = ensureOk(await window.signSignIn.update.loadMoreHistory(cursor, latest.value?.tag));
       const seen = new Set(checkResult.value!.historyReleases.map((release) => release.tag));
       checkResult.value!.historyReleases = [
         ...checkResult.value!.historyReleases,
@@ -182,6 +275,23 @@ function canInstall(release: UpdateRelease) {
   return Boolean(release.downloadedPath || downloadedTags.value[release.tag]);
 }
 
+function installButtonText(release: UpdateRelease) {
+  if (isReleaseDownloading(release)) return "停止";
+  return canInstall(release) ? "安装" : "下载安装";
+}
+
+async function downloadOrInstall(release: UpdateRelease) {
+  if (isReleaseDownloading(release)) {
+    await stopDownload();
+    return;
+  }
+  if (canInstall(release)) {
+    await install(release);
+    return;
+  }
+  await download(release);
+}
+
 async function pauseOrResume() {
   await run(async () => {
     if (downloadState.value?.running) {
@@ -196,7 +306,18 @@ async function pauseOrResume() {
 async function stopDownload() {
   await run(async () => {
     downloadState.value = ensureOk(await window.signSignIn.update.stop());
+    autoInstallTag.value = "";
+    downloadDetailVisible.value = false;
   }, "下载已停止");
+}
+
+async function pauseOrResumeFromFloat() {
+  await pauseOrResume();
+  downloadDetailVisible.value = true;
+}
+
+async function stopDownloadFromFloat() {
+  await stopDownload();
 }
 
 async function openDownloadDir() {
@@ -205,10 +326,6 @@ async function openDownloadDir() {
 
 async function openRelease(release: UpdateRelease) {
   await run(async () => ensureOk(await window.signSignIn.update.openRelease(release.tag)));
-}
-
-async function openCompare(release: UpdateRelease) {
-  await run(async () => ensureOk(await window.signSignIn.update.openCompare(release.tag)));
 }
 
 async function install(release: UpdateRelease) {
@@ -225,14 +342,14 @@ async function deletePackage(release: UpdateRelease) {
 </script>
 
 <template>
-  <Modal className="compact-tool-modal update-modal" :visible="visible" title="更新中心" :width="780" footer="" @cancel="emit('close')">
+  <Modal className="compact-tool-modal update-modal" :visible="visible" title="更新中心" :width="720" footer="" @cancel="emit('close')">
     <section class="update-center">
-      <header class="update-hero">
+      <header :class="['update-hero', updateStatusClass]">
         <div>
-          <strong>{{ checkResult ? (checkResult.hasUpdate ? "发现新版本" : "已是最新版本") : "未拉取版本信息" }}</strong>
-          <span>{{ checkResult ? `当前 ${checkResult.currentVersion} / 最新 ${checkResult.latestVersion}` : "使用 GitHub 官方源检查项目发布版本" }}</span>
+          <strong>{{ updateStatusText }} <span v-if="versionSummary" class="version-inline">{{ versionSummary }}</span></strong>
+          <span v-if="!checkResult">使用 GitHub 官方源检查项目发布版本</span>
         </div>
-        <Button type="primary" :loading="loading" :icon="renderIcon(IconRefresh)" @click="checkUpdate">拉取</Button>
+        <Button type="primary" :loading="loading" :icon="renderIcon(IconRefresh)" @click="checkUpdate">检查更新</Button>
       </header>
 
       <section :class="['update-settings', { 'has-custom-source': settings.source === 'custom' }]">
@@ -256,72 +373,114 @@ async function deletePackage(release: UpdateRelease) {
           <span>下载目录</span>
           <Input className="download-dir-input" :value="settings.downloadDir || ''" readonly />
         </label>
-        <Button theme="light" @click="browseDir">浏览</Button>
-        <Button theme="light" :icon="renderIcon(IconFolderOpen)" @click="openDownloadDir">打开</Button>
+        <Button theme="light" @click="browseDir">选择目录</Button>
+        <Button theme="light" :icon="renderIcon(IconFolderOpen)" @click="openDownloadDir">打开目录</Button>
       </section>
 
       <Spin :spinning="loading">
         <section v-if="!checkResult" class="update-empty-state">
           <strong>还没有检查更新</strong>
-          <span>点击右上角“拉取”后显示最新版本、历史版本和下载操作。</span>
+          <span>点击右上角“检查更新”后显示最新版本、历史版本和下载操作。</span>
         </section>
 
         <section v-if="latest" class="release-card latest-card">
           <div class="release-main">
-            <div>
+            <div class="release-title-line">
               <strong>{{ latest.name || latest.tag }}</strong>
               <span>{{ latest.publishedAt ? new Date(latest.publishedAt).toLocaleString() : "-" }}</span>
+              <Button theme="borderless" size="small" :icon="renderIcon(IconExternalOpen)" @click="openRelease(latest)" />
             </div>
             <Tag :color="checkResult?.hasUpdate ? 'green' : 'grey'">Latest</Tag>
           </div>
           <div class="release-actions">
-            <Space wrap>
-              <Button theme="light" :icon="renderIcon(IconExternalOpen)" @click="openRelease(latest)">浏览器</Button>
-              <Button type="primary" :icon="renderIcon(IconDownload)" @click="download(latest)">下载</Button>
-              <Button theme="light" :disabled="!canInstall(latest)" :icon="renderIcon(IconPlay)" @click="install(latest)">安装</Button>
-              <Button theme="light" :icon="renderIcon(IconExternalOpen)" @click="openCompare(latest)">对比</Button>
-              <Button theme="light" @click="expanded[latest.tag] = !expanded[latest.tag]">{{ expanded[latest.tag] ? "收起说明" : "展开说明" }}</Button>
-            </Space>
+            <div class="release-actions-main">
+              <Button :type="isReleaseDownloading(latest) ? 'danger' : 'primary'" :icon="renderIcon(isReleaseDownloading(latest) ? IconStop : IconDownload)" @click="downloadOrInstall(latest)">{{ installButtonText(latest) }}</Button>
+              <Button theme="light" :icon="renderIcon(IconFolderOpen)" @click="openDownloadDir">打开目录</Button>
+            </div>
+            <Button className="release-icon-button" theme="borderless" :icon="renderIcon(expanded[latest.tag] ? IconChevronUp : IconChevronDown)" @click="expanded[latest.tag] = !expanded[latest.tag]" />
           </div>
-          <TextArea v-if="expanded[latest.tag]" :value="latest.body || '暂无更新说明'" readonly :autosize="{ minRows: 5, maxRows: 10 }" />
-        </section>
-
-        <section v-if="hasDownloadState" class="download-panel">
-          <div class="download-meta">
-            <strong>{{ downloadState?.message || "未下载" }}</strong>
-            <span>{{ downloadState?.fileName || "-" }} · {{ downloadState?.speedText || "-" }} · 剩余 {{ downloadState?.etaText || "-" }}</span>
+          <div v-if="isReleaseDownloading(latest)" class="release-inline-progress">
+            <span>{{ downloadState?.message || "下载中" }}</span>
+            <div class="release-progress-track"><i :style="{ width: `${releasePercent(latest)}%` }" /></div>
+            <strong>{{ releasePercent(latest) }}%</strong>
           </div>
-          <Progress :percent="downloadState?.percent || 0" :show-info="true" />
-          <Space wrap>
-            <Button theme="light" :disabled="!downloadState?.tag" @click="pauseOrResume">{{ downloadState?.running ? "暂停下载" : "继续下载" }}</Button>
-            <Button theme="light" type="danger" :disabled="!downloadState?.tag" :icon="renderIcon(IconStop)" @click="stopDownload">停止下载</Button>
-          </Space>
+          <TextArea v-if="expanded[latest.tag]" className="release-body-textarea" :value="latest.body || '暂无更新说明'" readonly :autosize="{ minRows: 5, maxRows: 10 }" />
         </section>
 
         <section v-if="checkResult" class="history-list">
-          <div class="history-title">历史版本 <span>说明默认折叠</span></div>
-          <article v-for="release in releases.slice(1)" :key="release.tag" class="release-card">
+          <button class="history-title history-toggle" type="button" @click="historyCollapsed = !historyCollapsed">
+            <span>历史版本</span>
+            <strong>{{ historyCollapsed ? "展开" : "收起" }}</strong>
+          </button>
+          <article v-for="release in historyCollapsed ? [] : releases.slice(1)" :key="release.tag" class="release-card">
             <div class="release-main">
-              <div>
+              <div class="release-title-line">
                 <strong>{{ release.name || release.tag }}</strong>
                 <span>{{ release.publishedAt ? new Date(release.publishedAt).toLocaleString() : "-" }}</span>
+                <Button theme="borderless" size="small" :icon="renderIcon(IconExternalOpen)" @click="openRelease(release)" />
               </div>
               <span>{{ release.downloadName || "未找到安装包" }}</span>
             </div>
-            <Space wrap>
-              <Button theme="light" :icon="renderIcon(IconExternalOpen)" @click="openRelease(release)">浏览器</Button>
-              <Button theme="light" :icon="renderIcon(IconDownload)" @click="download(release)">下载</Button>
-              <Button theme="light" :disabled="!canInstall(release)" :icon="renderIcon(IconPlay)" @click="install(release)">安装</Button>
-              <Button theme="light" :icon="renderIcon(IconExternalOpen)" @click="openCompare(release)">对比</Button>
+            <div class="release-actions">
+              <div class="release-actions-main">
+              <Button :theme="isReleaseDownloading(release) ? 'solid' : 'light'" :type="isReleaseDownloading(release) ? 'danger' : 'primary'" :icon="renderIcon(isReleaseDownloading(release) ? IconStop : IconDownload)" @click="downloadOrInstall(release)">{{ installButtonText(release) }}</Button>
+              <Button theme="light" :icon="renderIcon(IconFolderOpen)" @click="openDownloadDir">打开目录</Button>
               <Button theme="light" type="danger" :disabled="!canInstall(release)" :icon="renderIcon(IconDeleteStroked)" @click="deletePackage(release)">删除</Button>
-              <Button theme="light" @click="expanded[release.tag] = !expanded[release.tag]">{{ expanded[release.tag] ? "收起说明" : "展开说明" }}</Button>
-            </Space>
-            <TextArea v-if="expanded[release.tag]" :value="release.body || '暂无更新说明'" readonly :autosize="{ minRows: 4, maxRows: 8 }" />
+              </div>
+              <Button className="release-icon-button" theme="borderless" :icon="renderIcon(expanded[release.tag] ? IconChevronUp : IconChevronDown)" @click="expanded[release.tag] = !expanded[release.tag]" />
+            </div>
+            <div v-if="isReleaseDownloading(release)" class="release-inline-progress">
+              <span>{{ downloadState?.message || "下载中" }}</span>
+              <div class="release-progress-track"><i :style="{ width: `${releasePercent(release)}%` }" /></div>
+              <strong>{{ releasePercent(release) }}%</strong>
+            </div>
+            <TextArea v-if="expanded[release.tag]" className="release-body-textarea" :value="release.body || '暂无更新说明'" readonly :autosize="{ minRows: 4, maxRows: 8 }" />
           </article>
           <div v-if="checkResult && releases.length <= 1" class="dialog-empty">暂无历史版本</div>
-          <Button v-if="checkResult?.historyCursor" theme="light" :loading="loadingMore" @click="loadMoreHistory">加载更多</Button>
+          <Button v-if="!historyCollapsed && checkResult?.historyCursor" theme="light" :loading="loadingMore" @click="loadMoreHistory">加载更多</Button>
         </section>
       </Spin>
     </section>
   </Modal>
+
+  <div
+    v-if="hasDownloadTask"
+    :class="[
+      'download-float',
+      {
+        expanded: downloadDetailVisible,
+        dragging,
+        running: downloadState?.running,
+        paused: downloadState?.paused
+      }
+    ]"
+    :style="{ left: `${floatPosition.x}px`, top: `${floatPosition.y}px` }"
+  >
+    <div
+      class="download-orb"
+      :style="{ '--progress': downloadPercent }"
+      @pointerdown="onFloatPointerDown"
+      @pointermove="onFloatPointerMove"
+      @pointerup="onFloatPointerUp"
+      @pointercancel="onFloatPointerUp"
+      @click.stop="downloadDetailVisible = !downloadDetailVisible"
+    >
+      <svg viewBox="0 0 72 72" aria-hidden="true">
+        <circle class="download-orb-track" cx="36" cy="36" r="31" />
+        <circle class="download-orb-progress" cx="36" cy="36" r="31" />
+      </svg>
+      <strong>{{ downloadPercent }}%</strong>
+    </div>
+    <section v-if="downloadDetailVisible" class="download-float-detail">
+      <div class="download-meta">
+        <strong>{{ downloadState?.message || "下载中" }}</strong>
+        <span>{{ downloadState?.fileName || "-" }}</span>
+        <span>{{ downloadState?.speedText || "-" }} · 剩余 {{ downloadState?.etaText || "-" }}</span>
+      </div>
+      <div class="download-actions">
+        <Button theme="light" size="small" :disabled="!downloadState?.tag" @click.stop="pauseOrResumeFromFloat">{{ downloadState?.running ? "暂停" : "继续" }}</Button>
+        <Button theme="light" size="small" type="danger" :disabled="!downloadState?.tag" :icon="renderIcon(IconStop)" @click.stop="stopDownloadFromFloat">停止</Button>
+      </div>
+    </section>
+  </div>
 </template>

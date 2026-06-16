@@ -148,6 +148,10 @@ function installSupportedFor(kind: string): boolean {
   return ["zip", "exe", "dmg", "pkg", "app"].includes(kind);
 }
 
+function isPartFile(filePath: string): boolean {
+  return filePath.toLowerCase().endsWith(".part");
+}
+
 function stripHtml(value: string): string {
   return String(value || "")
     .replace(/<br\s*\/?>/gi, "\n")
@@ -365,6 +369,7 @@ export class UpdateService {
 
   async download(tag: string): Promise<UpdateDownloadState> {
     if (this.downloadState.running) throw new Error("已有下载任务正在进行");
+    const previousState = this.downloadState.tag === tag ? this.downloadState : null;
     const release = await this.ensureReleaseAsset(tag);
     const settings = this.getSettings();
     ensureDir(settings.downloadDir);
@@ -372,6 +377,8 @@ export class UpdateService {
     const filePath = join(settings.downloadDir, fileName);
     const partPath = `${filePath}.part`;
     const downloadedBytes = existsSync(partPath) ? statSync(partPath).size : 0;
+    const totalBytes = previousState && previousState.filePath === filePath ? previousState.totalBytes : 0;
+    const percent = totalBytes ? Math.min(100, (downloadedBytes / totalBytes) * 100) : 0;
     this.abortController = new AbortController();
     this.downloadState = {
       ...emptyDownloadState,
@@ -380,6 +387,8 @@ export class UpdateService {
       fileName,
       filePath,
       receivedBytes: downloadedBytes,
+      totalBytes,
+      percent,
       message: downloadedBytes ? "继续下载中" : "下载中"
     };
 
@@ -438,12 +447,17 @@ export class UpdateService {
     const file = this.downloadedFiles.get(tag);
     if (file && existsSync(file)) unlinkSync(file);
     this.downloadedFiles.delete(tag);
+    this.releases = this.releases.map((release) => (release.tag === tag ? { ...release, downloadedPath: undefined } : release));
     return true;
   }
 
   async install(tag: string): Promise<boolean> {
-    const filePath = this.downloadedFiles.get(tag) || this.findRelease(tag).downloadedPath;
-    if (!filePath || !existsSync(filePath)) throw new Error("请先下载该版本安装包");
+    const resolved = await this.resolveDownloadedPackage(tag);
+    if (!resolved.filePath) {
+      if (resolved.partPath) throw new Error("安装包仍在下载中，请等待下载完成后再安装");
+      throw new Error("请先下载该版本安装包");
+    }
+    const filePath = resolved.filePath;
     const ext = extname(filePath).toLowerCase();
     if ([".exe", ".dmg", ".pkg", ".app"].includes(ext)) {
       await shell.openPath(filePath);
@@ -503,8 +517,7 @@ export class UpdateService {
     });
 
     renameSync(partPath, filePath);
-    this.downloadedFiles.set(this.downloadState.tag, filePath);
-    this.releases = this.releases.map((release) => (release.tag === this.downloadState.tag ? { ...release, downloadedPath: filePath } : release));
+    this.markDownloadedFile(this.downloadState.tag, filePath);
     this.downloadState = {
       ...this.downloadState,
       running: false,
@@ -538,6 +551,96 @@ export class UpdateService {
   private writeAssetCache(cache: Record<string, Partial<UpdateRelease>>): void {
     ensureParent(assetCachePath());
     writeFileSync(assetCachePath(), JSON.stringify(cache, null, 2), "utf-8");
+  }
+
+  private existingFile(filePath?: string): boolean {
+    try {
+      return Boolean(filePath && existsSync(filePath) && statSync(filePath).isFile());
+    } catch {
+      return false;
+    }
+  }
+
+  private uniquePaths(paths: string[]): string[] {
+    const seen = new Set<string>();
+    return paths.filter((filePath) => {
+      if (!filePath || seen.has(filePath)) return false;
+      seen.add(filePath);
+      return true;
+    });
+  }
+
+  private expandPackageCandidates(filePath?: string): string[] {
+    if (!filePath) return [];
+    const candidates = [filePath];
+    const withoutPart = isPartFile(filePath) ? filePath.slice(0, -".part".length) : "";
+    if (withoutPart) candidates.push(withoutPart);
+    if (!isPartFile(filePath)) candidates.push(`${filePath}.part`);
+    const basePath = withoutPart || filePath;
+    if (!extname(basePath)) candidates.push(`${basePath}.zip`, `${basePath}.exe`, `${basePath}.dmg`, `${basePath}.pkg`);
+    if (extname(basePath).toLowerCase() !== ".zip") candidates.push(`${basePath}.zip`);
+    return this.uniquePaths(candidates);
+  }
+
+  private findExistingPackage(candidates: string[]): { filePath?: string; partPath?: string } {
+    let partPath = "";
+    for (const candidate of candidates) {
+      if (!this.existingFile(candidate)) continue;
+      if (isPartFile(candidate)) {
+        partPath ||= candidate;
+        continue;
+      }
+      return { filePath: candidate };
+    }
+    return partPath ? { partPath } : {};
+  }
+
+  private expectedDownloadPaths(release: UpdateRelease): string[] {
+    const downloadDir = this.getSettings().downloadDir;
+    const names = this.uniquePaths([release.downloadName, basename(release.rawDownloadUrl || "")].filter(Boolean) as string[]);
+    return names.map((name) => join(downloadDir, name));
+  }
+
+  private markDownloadedFile(tag: string, filePath: string): void {
+    this.downloadedFiles.set(tag, filePath);
+    this.releases = this.releases.map((release) => (release.tag === tag ? { ...release, downloadedPath: filePath } : release));
+  }
+
+  private async resolveDownloadedPackage(tag: string): Promise<{ filePath?: string; partPath?: string }> {
+    const mapped = this.findExistingPackage(this.expandPackageCandidates(this.downloadedFiles.get(tag)));
+    if (mapped.filePath) {
+      this.markDownloadedFile(tag, mapped.filePath);
+      return mapped;
+    }
+
+    let release = this.mergeCachedAsset(this.findRelease(tag));
+    const expected = this.findExistingPackage(this.expectedDownloadPaths(release));
+    if (expected.filePath) {
+      this.markDownloadedFile(tag, expected.filePath);
+      return expected;
+    }
+
+    const fallbackCandidates = [
+      ...this.expandPackageCandidates(release.downloadedPath),
+      ...(this.downloadState.tag === tag ? this.expandPackageCandidates(this.downloadState.filePath) : []),
+      ...this.expectedDownloadPaths(release).flatMap((filePath) => this.expandPackageCandidates(filePath))
+    ];
+    let fallback = this.findExistingPackage(fallbackCandidates);
+    if (fallback.filePath) {
+      this.markDownloadedFile(tag, fallback.filePath);
+      return fallback;
+    }
+
+    try {
+      release = await this.ensureReleaseAsset(tag);
+      const assetCandidates = this.expectedDownloadPaths(release).flatMap((filePath) => this.expandPackageCandidates(filePath));
+      fallback = this.findExistingPackage(assetCandidates);
+      if (fallback.filePath) this.markDownloadedFile(tag, fallback.filePath);
+    } catch {
+      // 安装入口只需要本地文件；资产解析失败时保留本地查找结果。
+    }
+
+    return fallback.filePath || fallback.partPath ? fallback : mapped.partPath ? mapped : expected.partPath ? expected : {};
   }
 
   private mergeCachedAsset(release: UpdateRelease): UpdateRelease {
@@ -638,7 +741,7 @@ export class UpdateService {
   private withSource(release: UpdateRelease, settings: UpdateSettings): UpdateRelease {
     const raw = release.rawDownloadUrl;
     const downloadUrl = this.applySourceToUrl(raw, settings);
-    return { ...release, downloadUrl, downloadedPath: this.downloadedFiles.get(release.tag) };
+    return { ...release, downloadUrl, downloadedPath: this.downloadedFiles.get(release.tag) || release.downloadedPath };
   }
 
   private applySourceToUrl(raw: string, settings: UpdateSettings): string {

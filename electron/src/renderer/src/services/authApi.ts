@@ -25,6 +25,14 @@ export interface FeedbackPayload {
   content: string;
 }
 
+export interface ClientNotice {
+  noticeId?: number | string;
+  noticeTitle?: string;
+  noticeContent?: string;
+  title?: string;
+  content?: string;
+}
+
 function clientEnvHeaders(clientEnv?: ClientEnvPayload): Record<string, string> {
   if (!clientEnv) {
     return {};
@@ -217,4 +225,13 @@ export async function submitFeedback(payload: FeedbackPayload, token: string, to
     })
   });
   await readJson<unknown>(response, "反馈提交失败");
+}
+
+/** 获取客户端公告；接口不可用时由调用方使用本地兜底公告。 */
+export async function listClientNotices(): Promise<string[]> {
+  const response = await fetch(`${AUTH_BASE_URL}/xyb/notice/client-list`);
+  const notices = await readJson<ClientNotice[]>(response, "获取公告失败");
+  return (notices || [])
+    .map((notice) => String(notice.noticeContent || notice.content || notice.noticeTitle || notice.title || "").trim())
+    .filter(Boolean);
 }

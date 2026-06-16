@@ -9,7 +9,7 @@ import Tag from "@kousum/semi-ui-vue/dist/tag";
 import TextArea from "@kousum/semi-ui-vue/dist/input/textArea";
 import TypographyText from "@kousum/semi-ui-vue/dist/typography/text";
 import TypographyTitle from "@kousum/semi-ui-vue/dist/typography/title";
-import { IconImage, IconLink, IconQrCode, IconRefresh, IconSend, IconTick } from "@kousum/semi-icons-vue";
+import { IconImage, IconLink, IconQrCode, IconRefresh, IconSend } from "@kousum/semi-icons-vue";
 import type { ImageItem } from "@shared/types";
 import SectionTitle from "../components/SectionTitle.vue";
 import { useJieLongState } from "../composables/useJieLongState";
@@ -29,7 +29,6 @@ const {
   loading,
   submitting,
   qrBusy,
-  qrPolling,
   qrVisible,
   qrImage,
   qrUuid,
@@ -206,7 +205,6 @@ const {
         <img v-if="qrImage" :src="qrImage" alt="接龙登录二维码" />
         <div v-else class="jielong-qr-placeholder">二维码将在这里显示</div>
         <Tag :color="loginStatus === '登录成功' ? 'green' : 'blue'">{{ loginStatus || "等待扫码" }}</Tag>
-        <Button v-if="qrPolling" theme="light" :icon="renderIcon(IconTick)" @click="closeQrModal">后台等待</Button>
       </div>
     </Modal>
   </section>

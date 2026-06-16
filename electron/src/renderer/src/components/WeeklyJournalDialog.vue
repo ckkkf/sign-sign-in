@@ -53,6 +53,7 @@ const years = computed(() => data.value?.years || []);
 const weeks = computed(() => data.value?.weeks || []);
 const history = computed(() => data.value?.history || []);
 const blogs = computed(() => data.value?.blogs);
+const blogList = computed(() => blogItems(blogs.value));
 const yearOptions = computed(() => years.value.map((item, index) => ({ value: String(index), label: `${item.year}年` })));
 const monthOptions = computed(() => monthList(years.value[Number(selectedYear.value)]).map((month) => ({ value: String(month), label: `${month}月` })));
 const weekOptions = computed(() =>
@@ -314,17 +315,17 @@ function blogDate(blog: any) {
               <Button theme="borderless" size="small" :icon="renderIcon(IconRefresh)" @click="loadBlogs(1)" />
             </div>
             <section class="journal-list submitted-list">
-              <article v-for="blog in blogItems(blogs)" :key="blog.id || blog.blogId || JSON.stringify(blog).slice(0, 40)" class="journal-item compact" @dblclick="showBlog(blog)">
+              <article v-for="blog in blogList" :key="blog.id || blog.blogId || JSON.stringify(blog).slice(0, 40)" class="journal-item compact" @dblclick="showBlog(blog)">
                 <strong>{{ blog.blogTitle || blog.title || "无标题" }}</strong>
                 <span>{{ blogDate(blog) }} · {{ blog.startDate || "" }}-{{ blog.endDate || "" }}</span>
                 <p>{{ blogBody(blog) }}</p>
               </article>
-              <div v-if="!blogItems(blogs).length" class="dialog-empty">暂无已提交周记</div>
+              <div v-if="!blogList.length" class="dialog-empty">暂无已提交周记</div>
             </section>
             <div class="journal-pager">
               <Button theme="light" size="small" :disabled="blogPage <= 1" @click="loadBlogs(Math.max(1, blogPage - 1))">上一页</Button>
               <span class="page-chip">第 {{ blogPage }} 页</span>
-              <Button theme="light" size="small" @click="loadBlogs(blogPage + 1)">下一页</Button>
+              <Button theme="light" size="small" :disabled="!blogList.length" @click="loadBlogs(blogPage + 1)">下一页</Button>
             </div>
           </section>
         </aside>
