@@ -53,6 +53,11 @@ def _normalize_map_provider(provider):
     return "amap"
 
 
+def _map_key(custom_key, default_key):
+    key = str(custom_key or "").strip()
+    return key or default_key
+
+
 def _normalize_tencent_regeo(result):
     address_component = result.get("address_component") or {}
     ad_info = result.get("ad_info") or {}
@@ -76,7 +81,7 @@ def _normalize_tencent_regeo(result):
     }
 
 
-def _regeo_tencent(userAgent, location):
+def _regeo_tencent(userAgent, location, key=None):
     url = "https://apis.map.qq.com/ws/geocoder/v1/"
     headers = {
         "xweb_xhr": "1",
@@ -85,7 +90,7 @@ def _regeo_tencent(userAgent, location):
     }
     params = {
         "location": f"{location['latitude']},{location['longitude']}",
-        "key": TENCENT_MAP_KEY,
+        "key": _map_key(key, TENCENT_MAP_KEY),
         "get_poi": "1",
     }
     try:
@@ -105,9 +110,10 @@ def _regeo_tencent(userAgent, location):
         raise e
 
 
-def regeo(userAgent, location, provider="amap"):
+def regeo(userAgent, location, provider="amap", map_keys=None):
+    map_keys = map_keys if isinstance(map_keys, dict) else {}
     if _normalize_map_provider(provider) == "tencent":
-        return _regeo_tencent(userAgent, location)
+        return _regeo_tencent(userAgent, location, map_keys.get("tencent"))
 
     logging.info('正在调用高德地图解析经纬度...')
     url = "https://restapi.amap.com/v3/geocode/regeo"
@@ -116,10 +122,11 @@ def regeo(userAgent, location, provider="amap"):
         "Referer": XYB_REFERER,
         "User-Agent": userAgent,
     }
+    amap_key = _map_key(map_keys.get("amap"), AMAP_WEB_KEY)
     params = {
         "s": "rsx", "platform": "WXJS", "logversion": "2.0", "extensions": "all",
-        "sdkversion": "1.2.0", "key": AMAP_WEB_KEY,
-        "appname": AMAP_WEB_KEY,
+        "sdkversion": "1.2.0", "key": amap_key,
+        "appname": amap_key,
         "location": f"{location['longitude']},{location['latitude']}",
     }
     try:

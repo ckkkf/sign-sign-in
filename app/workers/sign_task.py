@@ -203,7 +203,12 @@ class SignTaskThread(QThread):
         plan_data = get_plan(userAgent=config['userAgent'], args=args)
 
         self.check_stop()
-        geo = regeo(config['userAgent'], config['location'], config.get('mapProvider', 'amap'))
+        geo = regeo(
+            config['userAgent'],
+            config['location'],
+            config.get('mapProvider', 'amap'),
+            config.get('mapApiKeys', {}),
+        )
 
         self.check_stop()
 

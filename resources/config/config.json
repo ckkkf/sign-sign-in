@@ -5,6 +5,10 @@
             "latitude": "23"
         },
         "mapProvider": "tencent",
+        "mapApiKeys": {
+            "amap": "",
+            "tencent": ""
+        },
         "device": {
             "brand": "OnePlus",
             "model": "PHP110",

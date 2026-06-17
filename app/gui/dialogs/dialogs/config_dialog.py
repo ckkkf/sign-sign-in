@@ -147,6 +147,9 @@ class ConfigDialog(QDialog):
         input_conf = self.current_data.get('input', {})
         loc = input_conf.get('location', {})
         dev = input_conf.get('device', {})
+        map_api_keys = input_conf.get('mapApiKeys', {})
+        if not isinstance(map_api_keys, dict):
+            map_api_keys = {}
         system_ver = self.extract_android_version(dev.get('system', ''))
         model_conf = self.current_data.get('model', {})
 
@@ -215,6 +218,9 @@ class ConfigDialog(QDialog):
         map_provider_combo.currentIndexChanged.connect(lambda: setattr(self, 'is_modified', True))
         form.addRow("地图服务", map_provider_combo)
         self.inputs['mapProvider'] = map_provider_combo
+        self.add_row(form, "高德 API Key", "amapApiKey", map_api_keys.get('amap', ''))
+        self.add_row(form, "腾讯 API Key", "tencentApiKey", map_api_keys.get('tencent', ''))
+        self.add_tip(form, "提示：地图 Key 留空时使用内置默认 Key；填入后优先使用自定义 Key。")
         self.add_tip(form, "提示：安卓选 android，iPhone 选 ios。")
 
         ua_row = QHBoxLayout()
@@ -307,6 +313,15 @@ class ConfigDialog(QDialog):
             inp['userAgent'] = build_user_agent(device)
             inp['location'] = {'longitude': self.inputs['lng'].text(), 'latitude': self.inputs['lat'].text()}
             inp['mapProvider'] = self.get_input_value('mapProvider').lower() or 'amap'
+            map_api_keys = {
+                'amap': self.get_input_value('amapApiKey'),
+                'tencent': self.get_input_value('tencentApiKey')
+            }
+            map_api_keys = {key: value for key, value in map_api_keys.items() if value}
+            if map_api_keys:
+                inp['mapApiKeys'] = map_api_keys
+            else:
+                inp.pop('mapApiKeys', None)
             jitter_radius = self.inputs['locationJitterMeters'].text().strip()
             if jitter_radius:
                 inp['locationJitterMeters'] = jitter_radius

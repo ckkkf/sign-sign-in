@@ -104,6 +104,15 @@ def validate_config(data: dict):
     if map_provider not in ("amap", "tencent"):
         return "mapProvider must be amap or tencent."
 
+    map_api_keys = input_data.get("mapApiKeys")
+    if map_api_keys not in (None, ""):
+        if not isinstance(map_api_keys, dict):
+            return "mapApiKeys must be an object."
+        for key in ("amap", "tencent"):
+            value = map_api_keys.get(key)
+            if value is not None and not isinstance(value, str):
+                return f"mapApiKeys.{key} must be a string."
+
     jitter_radius = input_data.get("locationJitterMeters")
     if jitter_radius not in (None, ""):
         try:
