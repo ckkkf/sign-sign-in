@@ -10,6 +10,7 @@ const fallbackConfig: SignConfig = {
       longitude: "116.397128",
       latitude: "39.916527"
     },
+    mapProvider: "amap",
     device: {
       brand: "OnePlus",
       model: "PHP110",

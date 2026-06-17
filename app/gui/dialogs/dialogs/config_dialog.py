@@ -207,6 +207,14 @@ class ConfigDialog(QDialog):
         platform_combo.currentIndexChanged.connect(lambda: setattr(self, 'is_modified', True))
         form.addRow("平台", platform_combo)
         self.inputs['platform'] = platform_combo
+        map_provider_combo = NoWheelComboBox()
+        map_provider_combo.addItems(["amap", "tencent"])
+        map_provider = str(input_conf.get('mapProvider', 'amap')).strip().lower()
+        idx = map_provider_combo.findText(map_provider)
+        map_provider_combo.setCurrentIndex(idx if idx >= 0 else 0)
+        map_provider_combo.currentIndexChanged.connect(lambda: setattr(self, 'is_modified', True))
+        form.addRow("地图服务", map_provider_combo)
+        self.inputs['mapProvider'] = map_provider_combo
         self.add_tip(form, "提示：安卓选 android，iPhone 选 ios。")
 
         ua_row = QHBoxLayout()
@@ -298,6 +306,7 @@ class ConfigDialog(QDialog):
             }
             inp['userAgent'] = build_user_agent(device)
             inp['location'] = {'longitude': self.inputs['lng'].text(), 'latitude': self.inputs['lat'].text()}
+            inp['mapProvider'] = self.get_input_value('mapProvider').lower() or 'amap'
             jitter_radius = self.inputs['locationJitterMeters'].text().strip()
             if jitter_radius:
                 inp['locationJitterMeters'] = jitter_radius

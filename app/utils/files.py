@@ -100,6 +100,10 @@ def validate_config(data: dict):
     if not (-90 <= lat <= 90):
         return "纬度超出范围：应在 -90 到 90 之间。"
 
+    map_provider = str(input_data.get("mapProvider", "amap")).strip().lower()
+    if map_provider not in ("amap", "tencent"):
+        return "mapProvider must be amap or tencent."
+
     jitter_radius = input_data.get("locationJitterMeters")
     if jitter_radius not in (None, ""):
         try:

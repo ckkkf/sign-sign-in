@@ -2,7 +2,7 @@ import type { AxiosResponse } from "axios";
 import FormData from "form-data";
 import { createReadStream } from "node:fs";
 import { basename, extname } from "node:path";
-import { AMAP_WEB_KEY, XYB_REFERER, XYB_VERSION } from "@shared/constants";
+import { AMAP_WEB_KEY, TENCENT_MAP_KEY, XYB_REFERER, XYB_VERSION } from "@shared/constants";
 import type { SignConfig, SignOption } from "@shared/types";
 import { logger } from "../services/logger";
 import { sessionStore } from "../services/sessionStore";
@@ -26,6 +26,10 @@ function responseMessage(data: unknown): string {
 
 /** 调用高德逆地理编码接口，把经纬度解析为地址。 */
 export async function regeo(config: SignConfig["input"]): Promise<GeoResponse> {
+  if (String(config.mapProvider || "amap").toLowerCase() === "tencent") {
+    return regeoTencent(config);
+  }
+
   logger.info("正在调用高德地图解析经纬度...");
 
   // 按当前签到坐标请求高德逆地理编码。
@@ -60,6 +64,52 @@ export async function regeo(config: SignConfig["input"]): Promise<GeoResponse> {
   if (!geo.formatted_address) {
     geo.formatted_address = `${config.location.longitude},${config.location.latitude}`;
   }
+
+  logger.info(`解析位置: ${geo.formatted_address}`);
+  return geo;
+}
+
+async function regeoTencent(config: SignConfig["input"]): Promise<GeoResponse> {
+  logger.info("正在调用腾讯地图解析经纬度...");
+
+  const response = await http.get("https://apis.map.qq.com/ws/geocoder/v1/", {
+    headers: {
+      xweb_xhr: "1",
+      Referer: XYB_REFERER,
+      "User-Agent": config.userAgent
+    },
+    params: {
+      location: `${config.location.latitude},${config.location.longitude}`,
+      key: TENCENT_MAP_KEY,
+      get_poi: "1"
+    }
+  });
+
+  const data = response.data;
+  if (response.status !== 200 || data?.status !== 0 || !data?.result) {
+    throw new Error(`位置解析失败: ${JSON.stringify(data)}`);
+  }
+
+  const result = data.result;
+  const component = result.address_component || {};
+  const adInfo = result.ad_info || {};
+  const formatted = result.formatted_addresses || {};
+  const geo: GeoResponse = {
+    formatted_address:
+      formatted.recommend ||
+      formatted.rough ||
+      result.address ||
+      formatted.standard_address ||
+      `${config.location.longitude},${config.location.latitude}`,
+    addressComponent: {
+      province: component.province || "",
+      city: component.city || component.province || "",
+      district: component.district || "",
+      street: component.street || "",
+      streetNumber: component.street_number || "",
+      adcode: adInfo.adcode || ""
+    }
+  };
 
   logger.info(`解析位置: ${geo.formatted_address}`);
   return geo;

@@ -17,6 +17,9 @@ export function validateConfig(config: SignConfig): string | null {
   if (lng < -180 || lng > 180) return "经度超出范围：应在 -180 到 180 之间";
   if (lat < -90 || lat > 90) return "纬度超出范围：应在 -90 到 90 之间";
 
+  const mapProvider = String(config.input.mapProvider || "amap").toLowerCase();
+  if (!["amap", "tencent"].includes(mapProvider)) return "mapProvider must be amap or tencent";
+
   const jitter = config.input.locationJitterMeters;
   if (jitter !== undefined && jitter !== "") {
     const value = Number(jitter);

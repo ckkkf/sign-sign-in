@@ -8,6 +8,7 @@ export const XYB_APP_ID = "wx9f1c2e0bbc10673c";
 export const XYB_REFERER_ID = "560";
 export const XYB_REFERER = `https://servicewechat.com/${XYB_APP_ID}/${XYB_REFERER_ID}/page-frame.html`;
 export const AMAP_WEB_KEY = "c222383ff12d31b556c3ad6145bb95f4";
+export const TENCENT_MAP_KEY = "GOZBZ-E4L67-6WLXT-PSLBH-2WEZZ-LOFLE";
 export const MITM_HOST = "127.0.0.1";
 export const MITM_PORT = 13140;
 

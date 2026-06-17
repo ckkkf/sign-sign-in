@@ -94,6 +94,7 @@ export function useAppState() {
     model: "",
     systemVersion: "",
     platform: "android",
+    mapProvider: "amap",
     userAgent: "",
     pushplusToken: "",
     autoClockEnabled: "false",
@@ -135,6 +136,10 @@ export function useAppState() {
   let timer: number | undefined;
   let stopResize: (() => void) | undefined;
   let refreshing = false;
+
+  function toPlainJson<T>(value: T): T {
+    return JSON.parse(JSON.stringify(value)) as T;
+  }
 
   function isPacketLog(message: string) {
     if (message.startsWith("渲染控制台:")) {
@@ -459,6 +464,7 @@ export function useAppState() {
       draft.model = loaded.input.device.model;
       draft.systemVersion = loaded.input.device.system.replace(/^Android\s*/i, "");
       draft.platform = String(loaded.input.device.platform || "android");
+      draft.mapProvider = String(loaded.input.mapProvider || "amap");
       draft.userAgent = loaded.input.userAgent;
       draft.pushplusToken = loaded.settings?.pushplus?.token || "";
       draft.autoClockEnabled = String(Boolean(loaded.settings?.auto_clock?.enabled));
@@ -628,10 +634,11 @@ export function useAppState() {
   }
 
   async function saveConfig() {
-    const current = config.value;
-    if (!current) return;
-    const autoClockTasks = draft.autoClockTasks;
-    const notifications = draft.notifications;
+    const currentConfig = config.value;
+    if (!currentConfig) return;
+    const current = toPlainJson(currentConfig);
+    const autoClockTasks = toPlainJson(draft.autoClockTasks);
+    const notifications = toPlainJson(draft.notifications);
     const next: SignConfig = {
       ...current,
       input: {
@@ -640,6 +647,7 @@ export function useAppState() {
           longitude: draft.longitude,
           latitude: draft.latitude
         },
+        mapProvider: draft.mapProvider,
         locationJitterMeters: draft.locationJitterMeters,
         device: {
           brand: draft.brand,
@@ -666,7 +674,7 @@ export function useAppState() {
       }
     };
     await runAction(async () => {
-      config.value = ensureOk(await window.signSignIn.config.save(next));
+      config.value = ensureOk(await window.signSignIn.config.save(toPlainJson(next)));
       autoClock.value = ensureOk(await window.signSignIn.autoClock.reload());
       await loadConfig();
       await refreshAll();

@@ -4,6 +4,7 @@
             "longitude": "131",
             "latitude": "23"
         },
+        "mapProvider": "tencent",
         "device": {
             "brand": "OnePlus",
             "model": "PHP110",

@@ -16,6 +16,7 @@ export type DraftConfigKey =
   | "model"
   | "systemVersion"
   | "platform"
+  | "mapProvider"
   | "userAgent"
   | "pushplusToken"
   | "autoClockEnabled"

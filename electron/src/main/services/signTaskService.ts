@@ -58,7 +58,8 @@ function buildSafeClientRequestParam(input: SignConfig["input"], option: SignOpt
     location: {
       longitude: input.location.longitude,
       latitude: input.location.latitude,
-      jitterMeters: input.locationJitterMeters ?? 100
+      jitterMeters: input.locationJitterMeters ?? 100,
+      mapProvider: input.mapProvider || "amap"
     },
     device: {
       brand: device.brand,

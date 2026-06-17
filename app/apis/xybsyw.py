@@ -7,6 +7,8 @@ from app.utils.common import get_timestamp
 from app.utils.files import get_img_file, clear_session_cache
 from app.utils.params import get_header_token, get_device_code
 
+TENCENT_MAP_KEY = "GOZBZ-E4L67-6WLXT-PSLBH-2WEZZ-LOFLE"
+
 
 def _normalize_address_text(value):
     if value is None:
@@ -44,7 +46,69 @@ def handle_invalid_session():
     logging.warning('❌ JSESSIONID已失效，已清除缓存，请重新获取code')
 
 
-def regeo(userAgent, location):
+def _normalize_map_provider(provider):
+    provider = str(provider or "amap").strip().lower()
+    if provider in ("tencent", "qq", "qqmap"):
+        return "tencent"
+    return "amap"
+
+
+def _normalize_tencent_regeo(result):
+    address_component = result.get("address_component") or {}
+    ad_info = result.get("ad_info") or {}
+    formatted_addresses = result.get("formatted_addresses") or {}
+    formatted_address = _normalize_address_text(
+        formatted_addresses.get("recommend")
+        or formatted_addresses.get("rough")
+        or result.get("address")
+        or formatted_addresses.get("standard_address")
+    )
+    return {
+        "formatted_address": formatted_address,
+        "addressComponent": {
+            "province": address_component.get("province", ""),
+            "city": address_component.get("city") or address_component.get("province", ""),
+            "district": address_component.get("district", ""),
+            "street": address_component.get("street", ""),
+            "streetNumber": address_component.get("street_number", ""),
+            "adcode": ad_info.get("adcode", ""),
+        },
+    }
+
+
+def _regeo_tencent(userAgent, location):
+    url = "https://apis.map.qq.com/ws/geocoder/v1/"
+    headers = {
+        "xweb_xhr": "1",
+        "Referer": XYB_REFERER,
+        "User-Agent": userAgent,
+    }
+    params = {
+        "location": f"{location['latitude']},{location['longitude']}",
+        "key": TENCENT_MAP_KEY,
+        "get_poi": "1",
+    }
+    try:
+        logging.debug(f"馃洨锔?鍑嗗鍙戣捣璇锋眰銆倁rl:{url}, headers:{headers}, params:{params}")
+        response = requests.get(url, headers=headers, params=params, timeout=5)
+        logging.debug(f"馃摗 鏀跺埌鍝嶅簲:{response} {response.text}")
+        res = response.json()
+        if response.status_code == 200 and res.get("status") == 0 and res.get("result"):
+            regeocode = _normalize_tencent_regeo(res["result"])
+            if not regeocode["formatted_address"]:
+                regeocode["formatted_address"] = f"{location['longitude']},{location['latitude']}"
+            logging.info(f"馃搷 瑙ｆ瀽浣嶇疆: {regeocode['formatted_address']}")
+            return regeocode
+        raise RuntimeError(f"浣嶇疆瑙ｆ瀽澶辫触: {res}")
+    except Exception as e:
+        logging.error(f"鑵捐鍦板浘鎺ュ彛璇锋眰澶辫触: {e}")
+        raise e
+
+
+def regeo(userAgent, location, provider="amap"):
+    if _normalize_map_provider(provider) == "tencent":
+        return _regeo_tencent(userAgent, location)
+
     logging.info('正在调用高德地图解析经纬度...')
     url = "https://restapi.amap.com/v3/geocode/regeo"
     headers = {

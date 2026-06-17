@@ -11,6 +11,7 @@ export interface SignConfig {
       platform: "android" | "ios" | string;
     };
     userAgent: string;
+    mapProvider?: "amap" | "tencent" | string;
     locationJitterMeters?: string | number;
     code?: string;
     openId?: string;

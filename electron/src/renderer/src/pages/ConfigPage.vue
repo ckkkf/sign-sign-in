@@ -35,6 +35,10 @@ function updateDeviceField(key: DraftConfigKey, value: string) {
         <TypographyTitle :heading="3">配置</TypographyTitle>
         <span>位置、设备与 User-Agent</span>
       </div>
+      <Space>
+        <Button theme="light" :icon="renderIcon(IconRefresh)" @click="emit('regenerateUserAgent')">生成 UA</Button>
+        <Button type="primary" :icon="renderIcon(IconSave)" @click="emit('saveConfig')">保存配置</Button>
+      </Space>
     </header>
     <Card title="配置中心" :bordered="false" class-name="section-card">
       <div class="config-grid">
@@ -49,6 +53,14 @@ function updateDeviceField(key: DraftConfigKey, value: string) {
         <ConfigField>
           <template #label>抖动半径（米）</template>
           <Input :value="draft.locationJitterMeters" show-clear @change="(value: string) => emit('changeInput', 'locationJitterMeters', value)" />
+        </ConfigField>
+        <ConfigField>
+          <template #label>地图服务</template>
+          <Select
+            :value="draft.mapProvider"
+            :option-list="[{ value: 'amap', label: '高德' }, { value: 'tencent', label: '腾讯' }]"
+            @change="(value: any) => emit('changeInput', 'mapProvider', String(value))"
+          />
         </ConfigField>
         <ConfigField>
           <template #label>平台</template>
