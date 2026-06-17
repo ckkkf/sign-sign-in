@@ -5,6 +5,7 @@ import type {
   AuthState,
   AuthSessionPayload,
   CaptureState,
+  ClientOperLogPayload,
   ImageItem,
   JieLongFieldAnswer,
   JieLongFileInfo,
@@ -126,6 +127,9 @@ export interface SignSignInApi {
   log: {
     clear: () => Promise<ApiResult<boolean>>;
     subscribe: (callback: (entry: LogEntry) => void) => () => void;
+  };
+  analytics: {
+    track: (payload: ClientOperLogPayload) => Promise<ApiResult<boolean>>;
   };
 }
 

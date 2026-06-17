@@ -3,6 +3,7 @@ import Toast from "@kousum/semi-ui-vue/dist/toast";
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 import type { JieLongField, JieLongFieldAnswer, JieLongFileInfo, JieLongFormBundle, JieLongSettings, JieLongSubmitPayload } from "@shared/types";
 import { ensureOk } from "../utils/api";
+import { stringifyParam, trackClientEvent } from "../utils/analytics";
 
 function plain<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
@@ -268,6 +269,7 @@ export function useJieLongState() {
       qrUuid.value = qr.uuid;
       qrImage.value = qr.image;
       loginStatus.value = "等待扫码";
+      trackClientEvent({ operType: "JIELONG_QR_LOGIN_START", status: "0", title: "接龙扫码登录" });
       startPollingQr();
     });
     qrBusy.value = false;
@@ -296,6 +298,7 @@ export function useJieLongState() {
         if (saved) {
           Object.assign(settings, saved);
           loginStatus.value = "登录成功";
+          trackClientEvent({ operType: "JIELONG_QR_LOGIN_SUCCESS", status: "0", title: "接龙扫码登录成功" });
           closeQrModal();
         }
         qrBusy.value = false;
@@ -326,6 +329,7 @@ export function useJieLongState() {
   async function loadForm() {
     loading.value = true;
     status.value = "正在拉取";
+    const startedAt = Date.now();
     await run(async () => {
       await saveSettings();
       const loaded = ensureOk(await window.signSignIn.jielong.loadForm(settings.authorization, settings.thread_id));
@@ -336,6 +340,14 @@ export function useJieLongState() {
       Object.assign(answers, draft);
       applyFieldDefaults(loaded.fields);
       status.value = "拉取完毕";
+      trackClientEvent({
+        operType: "JIELONG_LOAD_FORM",
+        status: "0",
+        title: "接龙拉取表单",
+        requestParam: stringifyParam({ threadId: settings.thread_id }),
+        responseSummary: `fields=${loaded.fields?.length || 0}`,
+        costTime: Date.now() - startedAt
+      });
     }, "接龙表单加载成功");
     loading.value = false;
     if (status.value === "正在拉取") status.value = "拉取失败";
@@ -384,6 +396,7 @@ export function useJieLongState() {
   async function doSubmit(payload: JieLongSubmitPayload) {
     submitting.value = true;
     status.value = "正在提交";
+    const startedAt = Date.now();
     const result = await run(async () => ensureOk(await window.signSignIn.jielong.submit(settings.authorization, plain(payload))));
     submitting.value = false;
     if (result?.signatureMismatch) {
@@ -399,6 +412,14 @@ export function useJieLongState() {
     }
     if (result) {
       status.value = "提交成功";
+      trackClientEvent({
+        operType: "JIELONG_SUBMIT",
+        status: "0",
+        title: "接龙提交打卡",
+        requestParam: stringifyParam({ threadId: settings.thread_id }),
+        responseSummary: String(result.Description || "提交成功"),
+        costTime: Date.now() - startedAt
+      });
       Toast.success(String(result.Description || "提交成功"));
     } else {
       status.value = "提交失败";

@@ -22,6 +22,7 @@ import * as authApi from "../services/authApi";
 import type { FeedbackPayload } from "../services/authApi";
 import { buildUserAgent } from "../services/config";
 import type { DraftConfigKey, PageKey } from "../types/app";
+import { stringifyParam, trackClientEvent } from "../utils/analytics";
 import { ensureOk } from "../utils/api";
 
 export function useAppState() {
@@ -240,10 +241,18 @@ export function useAppState() {
 
   async function toggleAutoClock() {
     const shouldStop = autoClock.value.enabled;
+    const startedAt = Date.now();
     await runAction(async () => {
       autoClock.value = ensureOk(
         shouldStop ? await window.signSignIn.autoClock.stop() : await window.signSignIn.autoClock.start()
       );
+      trackClientEvent({
+        operType: shouldStop ? "AUTO_CLOCK_STOP" : "AUTO_CLOCK_START",
+        status: "0",
+        title: shouldStop ? "停止定时打卡" : "启动定时打卡",
+        responseSummary: autoClock.value.message,
+        costTime: Date.now() - startedAt
+      });
       await refreshAll();
     }, shouldStop ? "定时打卡已停止" : "定时打卡已启动");
   }
@@ -297,6 +306,12 @@ export function useAppState() {
         const user = await authApi.me(session.token, session.tokenName);
         const state = ensureOk(await window.signSignIn.auth.saveLogin({ ...session, user }));
         authState.value = state;
+        trackClientEvent({
+          operType: "AUTH_LOGIN",
+          status: "0",
+          title: "客户端登录",
+          requestParam: stringifyParam({ username: payload.username })
+        });
         loginVisible.value = false;
       }, "登录成功");
     } finally {
@@ -382,6 +397,13 @@ export function useAppState() {
     await runAction(async () => {
       const token = authState.value.token || "";
       if (token) {
+        await window.signSignIn.analytics
+          .track({
+            operType: "AUTH_LOGOUT",
+            status: "0",
+            title: "客户端退出登录"
+          })
+          .catch(() => undefined);
         try {
           await authApi.logout(token, authState.value.tokenName || "Xyb-Token", buildClientEnv("AUTH_LOGOUT"));
         } catch (error) {
@@ -413,6 +435,12 @@ export function useAppState() {
     try {
       await runAction(async () => {
         await authApi.submitFeedback(payload, token, tokenName);
+        trackClientEvent({
+          operType: "FEEDBACK_SUBMIT",
+          status: "0",
+          title: "提交问题反馈",
+          requestParam: stringifyParam({ title: payload.title, feedbackType: payload.feedbackType, priority: payload.priority })
+        });
         feedbackVisible.value = false;
       }, "反馈提交成功，感谢支持");
     } finally {
@@ -463,9 +491,19 @@ export function useAppState() {
 
   async function startTask() {
     loading.value = true;
+    const option = currentOption();
+    const startedAt = Date.now();
     try {
       await runAction(async () => {
-        task.value = ensureOk(await window.signSignIn.task.startSign(currentOption()));
+        task.value = ensureOk(await window.signSignIn.task.startSign(option));
+        trackClientEvent({
+          operType: "SIGN_TASK_START",
+          status: "0",
+          title: "开始执行签到",
+          requestParam: stringifyParam(option),
+          responseSummary: task.value.message,
+          costTime: Date.now() - startedAt
+        });
         await refreshAll();
       }, "任务已开始");
     } finally {
@@ -474,21 +512,45 @@ export function useAppState() {
   }
 
   async function stopTask() {
+    const startedAt = Date.now();
     await runAction(async () => {
       task.value = ensureOk(await window.signSignIn.task.stopSign());
+      trackClientEvent({
+        operType: "SIGN_TASK_STOP",
+        status: "0",
+        title: "停止执行签到",
+        responseSummary: task.value.message,
+        costTime: Date.now() - startedAt
+      });
     }, "任务已停止");
   }
 
   async function startCapture() {
+    const startedAt = Date.now();
     await runAction(async () => {
       capture.value = ensureOk(await window.signSignIn.code.startCapture());
+      trackClientEvent({
+        operType: "CODE_CAPTURE_START",
+        status: "0",
+        title: "启动抓包获取 code",
+        responseSummary: capture.value.message,
+        costTime: Date.now() - startedAt
+      });
       await refreshAll();
     }, "code 捕获已启动");
   }
 
   async function stopCapture() {
+    const startedAt = Date.now();
     await runAction(async () => {
       capture.value = ensureOk(await window.signSignIn.code.stopCapture());
+      trackClientEvent({
+        operType: "CODE_CAPTURE_STOP",
+        status: "0",
+        title: "停止抓包获取 code",
+        responseSummary: capture.value.message,
+        costTime: Date.now() - startedAt
+      });
       await refreshAll();
     }, "code 捕获已停止");
   }
@@ -688,10 +750,20 @@ export function useAppState() {
 
   function openUpdateCenter() {
     updateCenterVisible.value = true;
+    trackClientEvent({
+      operType: "UPDATE_CENTER_OPEN",
+      status: "0",
+      title: "打开更新中心"
+    });
   }
 
   function openAutoClockDialog() {
     autoClockDialogVisible.value = true;
+    trackClientEvent({
+      operType: "AUTO_CLOCK_DIALOG_OPEN",
+      status: "0",
+      title: "打开定时打卡配置"
+    });
   }
 
   function openWeeklyJournal() {
@@ -700,6 +772,11 @@ export function useAppState() {
       return;
     }
     weeklyJournalVisible.value = true;
+    trackClientEvent({
+      operType: "WEEKLY_JOURNAL_DIALOG_OPEN",
+      status: "0",
+      title: "打开 AI 与周记"
+    });
   }
 
   async function copyQQGroup() {

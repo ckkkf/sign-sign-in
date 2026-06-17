@@ -14,6 +14,7 @@ import type {
 } from "@shared/types";
 import { ensureDir, ensureParent, getProjectRoot, getUserRoot } from "./paths";
 import { logger } from "./logger";
+import { analyticsService } from "./analyticsService";
 
 const PROJECT_GITHUB = "https://github.com/ckkkf/sign-sign-in";
 const OWNER = "ckkkf";
@@ -169,6 +170,37 @@ export class UpdateService {
   private downloadedFiles = new Map<string, string>();
   private abortController: AbortController | null = null;
   private downloadState: UpdateDownloadState = { ...emptyDownloadState };
+
+  private trackDownload(payload: {
+    title: string;
+    status?: "0" | "1";
+    tag?: string;
+    fileName?: string;
+    filePath?: string;
+    receivedBytes?: number;
+    totalBytes?: number;
+    errorMsg?: string;
+    costTime?: number;
+  }): void {
+    analyticsService.track({
+      operType: "UPDATE_DOWNLOAD_TASK",
+      status: payload.status || "0",
+      title: payload.title,
+      requestUrl: "update://download",
+      requestParam: JSON.stringify({
+        tag: payload.tag || this.downloadState.tag,
+        fileName: payload.fileName || this.downloadState.fileName
+      }),
+      responseSummary: JSON.stringify({
+        filePath: payload.filePath || this.downloadState.filePath,
+        receivedBytes: payload.receivedBytes ?? this.downloadState.receivedBytes,
+        totalBytes: payload.totalBytes ?? this.downloadState.totalBytes,
+        percent: this.downloadState.percent
+      }),
+      errorMsg: payload.errorMsg,
+      costTime: payload.costTime
+    }).catch(() => undefined);
+  }
 
   getSettings(): UpdateSettings {
     try {
@@ -389,6 +421,8 @@ export class UpdateService {
       receivedBytes: downloadedBytes,
       totalBytes,
       percent,
+      speedText: previousState?.speedText || emptyDownloadState.speedText,
+      etaText: previousState?.etaText || emptyDownloadState.etaText,
       message: downloadedBytes ? "继续下载中" : "下载中"
     };
 
@@ -398,6 +432,14 @@ export class UpdateService {
       logger.error(`下载更新失败：${message}`);
       this.downloadState = { ...this.downloadState, running: false, paused: false, message };
       this.abortController = null;
+      this.trackDownload({
+        title: "更新包下载失败",
+        status: "1",
+        tag,
+        fileName,
+        filePath,
+        errorMsg: message
+      });
     });
 
     return this.getDownloadState();
@@ -408,6 +450,7 @@ export class UpdateService {
     this.abortController?.abort();
     this.downloadState = { ...this.downloadState, running: false, paused: true, message: "已暂停" };
     this.abortController = null;
+    this.trackDownload({ title: "暂停更新包下载" });
     return this.getDownloadState();
   }
 
@@ -424,6 +467,7 @@ export class UpdateService {
     const partPath = filePath ? `${filePath}.part` : "";
     if (partPath && existsSync(partPath)) unlinkSync(partPath);
     this.abortController = null;
+    this.trackDownload({ title: "停止更新包下载" });
     this.downloadState = { ...emptyDownloadState, message: "已停止" };
     return this.getDownloadState();
   }
@@ -518,6 +562,7 @@ export class UpdateService {
 
     renameSync(partPath, filePath);
     this.markDownloadedFile(this.downloadState.tag, filePath);
+    const tag = this.downloadState.tag;
     this.downloadState = {
       ...this.downloadState,
       running: false,
@@ -530,6 +575,14 @@ export class UpdateService {
       message: "下载完成"
     };
     this.abortController = null;
+    this.trackDownload({
+      title: "更新包下载完成",
+      tag,
+      filePath,
+      receivedBytes: totalBytes,
+      totalBytes,
+      costTime: Date.now() - startedAt
+    });
   }
 
   private findRelease(tag: string): UpdateRelease {

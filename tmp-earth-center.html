@@ -1,0 +1,9 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+html,body{margin:0;width:100%;height:100%;background:#020617;overflow:hidden}
+.screen-page{position:relative;min-height:calc(100vh - 84px);height:900px;padding:16px 18px;background:radial-gradient(circle at 50% 44%,rgba(14,165,233,.22),transparent 34%),linear-gradient(180deg,#020617,#071326 48%,#020617);overflow:hidden;color:#dbeafe;font-family:Arial}
+.earth-stage{position:absolute;inset:0;overflow:hidden;background:radial-gradient(circle at 50% 52%,rgba(56,189,248,.4),transparent 48%),rgba(5,12,28,.48)}
+.earth-canvas{position:absolute;top:50%;left:50%;z-index:1;width:min(118vw,1680px);height:min(116vh,1040px);transform:translate(-50%,-48%);outline:1px solid rgba(255,255,255,.25)}
+.earth{position:absolute;left:50%;top:50%;width:420px;height:420px;border-radius:50%;transform:translate(-50%,-50%);background:radial-gradient(circle at 35% 35%,#5bd8ff,#0b3151 55%,#020617 75%);box-shadow:0 0 80px rgba(56,189,248,.65)}
+.center-line{position:absolute;top:0;bottom:0;left:50%;width:1px;background:red;z-index:9}.earth-line{position:absolute;top:0;bottom:0;left:50%;width:1px;background:#22c55e;z-index:10}
+.screen-cockpit{position:relative;z-index:4;display:grid;grid-template-columns:minmax(250px,320px) 1fr minmax(250px,320px);gap:14px;min-height:640px;pointer-events:none}.left-stack{height:600px;background:rgba(8,18,37,.78)}.right-stack{grid-column:3;height:600px;background:rgba(8,18,37,.78)}
+</style></head><body><div class="screen-page"><section class="earth-stage"><div class="earth-canvas"><div class="earth"></div><div class="earth-line"></div></div></section><main class="screen-cockpit"><div class="left-stack"></div><div class="right-stack"></div></main><div class="center-line"></div></div></body></html>

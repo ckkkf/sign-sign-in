@@ -20,6 +20,7 @@ import {
 import { computed, onUnmounted, ref, watch } from "vue";
 import type { UpdateCheckResult, UpdateDownloadState, UpdateRelease, UpdateSettings } from "@shared/types";
 import { ensureOk } from "../utils/api";
+import { stringifyParam, trackClientEvent } from "../utils/analytics";
 import { renderIcon } from "../utils/icons";
 
 const props = defineProps<{ visible: boolean }>();
@@ -36,6 +37,8 @@ const downloadDetailVisible = ref(false);
 const floatPosition = ref({ x: 28, y: 120 });
 const dragging = ref(false);
 const autoInstallTag = ref("");
+const lastEtaText = ref("");
+const lastSpeedText = ref("");
 let dragStart:
   | {
       pointerId: number;
@@ -68,6 +71,8 @@ const latest = computed(() => checkResult.value?.latestRelease);
 const releases = computed(() => [latest.value, ...(checkResult.value?.historyReleases || [])].filter(Boolean) as UpdateRelease[]);
 const downloadPercent = computed(() => Math.max(0, Math.min(100, Math.round(Number(downloadState.value?.percent || 0)))));
 const hasDownloadTask = computed(() => Boolean(downloadState.value?.tag || downloadState.value?.running || downloadState.value?.paused || downloadPercent.value > 0));
+const downloadEtaText = computed(() => displayMetric(downloadState.value?.etaText, lastEtaText.value));
+const downloadSpeedText = computed(() => displayMetric(downloadState.value?.speedText, lastSpeedText.value));
 const updateStatusText = computed(() => {
   if (!checkResult.value) return "未拉取版本信息";
   return checkResult.value.hasUpdate ? "发现新版本" : "已是最新版本 ✅";
@@ -102,11 +107,19 @@ async function run<T>(action: () => Promise<T>, success?: string): Promise<T | u
 
 async function checkUpdate() {
   loading.value = true;
+  const startedAt = Date.now();
   try {
     await run(async () => {
       const result = ensureOk(await window.signSignIn.update.check());
       checkResult.value = result;
       settings.value = normalizeSettings(result.settings);
+      trackClientEvent({
+        operType: "UPDATE_CHECK",
+        status: "0",
+        title: "检查更新",
+        responseSummary: `current=${result.currentVersion}, latest=${result.latestVersion}, hasUpdate=${result.hasUpdate}`,
+        costTime: Date.now() - startedAt
+      });
     });
   } finally {
     loading.value = false;
@@ -151,6 +164,7 @@ async function refreshDownloadState() {
   await run(async () => {
     const previous = downloadState.value;
     downloadState.value = ensureOk(await window.signSignIn.update.getDownloadState());
+    cacheDownloadMetrics();
     if (downloadState.value.message === "下载完成" && downloadState.value.tag) {
       downloadedTags.value = { ...downloadedTags.value, [downloadState.value.tag]: true };
       syncDownloadedPath(downloadState.value.tag, downloadState.value.filePath);
@@ -180,7 +194,7 @@ function stopPolling() {
 }
 
 function clampFloatPosition(x: number, y: number) {
-  const size = downloadDetailVisible.value ? { width: 360, height: 72 } : { width: 72, height: 72 };
+  const size = downloadDetailVisible.value ? { width: 324, height: 72 } : { width: 72, height: 72 };
   const maxX = Math.max(8, window.innerWidth - size.width - 8);
   const maxY = Math.max(8, window.innerHeight - size.height - 8);
   return {
@@ -228,6 +242,13 @@ async function download(release: UpdateRelease) {
   await run(async () => {
     autoInstallTag.value = release.tag;
     downloadState.value = ensureOk(await window.signSignIn.update.download(release.tag));
+    cacheDownloadMetrics();
+    trackClientEvent({
+      operType: "UPDATE_DOWNLOAD",
+      status: "0",
+      title: "下载更新包",
+      requestParam: stringifyParam({ tag: release.tag, name: release.name })
+    });
     downloadDetailVisible.value = true;
     startPolling();
   });
@@ -300,12 +321,15 @@ async function pauseOrResume() {
       downloadState.value = ensureOk(await window.signSignIn.update.resume());
       startPolling();
     }
+    cacheDownloadMetrics();
   });
 }
 
 async function stopDownload() {
   await run(async () => {
     downloadState.value = ensureOk(await window.signSignIn.update.stop());
+    lastEtaText.value = "";
+    lastSpeedText.value = "";
     autoInstallTag.value = "";
     downloadDetailVisible.value = false;
   }, "下载已停止");
@@ -329,7 +353,15 @@ async function openRelease(release: UpdateRelease) {
 }
 
 async function install(release: UpdateRelease) {
-  await run(async () => ensureOk(await window.signSignIn.update.install(release.tag)));
+  await run(async () => {
+    ensureOk(await window.signSignIn.update.install(release.tag));
+    trackClientEvent({
+      operType: "UPDATE_INSTALL",
+      status: "0",
+      title: "安装更新包",
+      requestParam: stringifyParam({ tag: release.tag, name: release.name })
+    });
+  });
 }
 
 async function deletePackage(release: UpdateRelease) {
@@ -338,6 +370,26 @@ async function deletePackage(release: UpdateRelease) {
     downloadedTags.value = { ...downloadedTags.value, [release.tag]: false };
     syncDownloadedPath(release.tag, "");
   }, "下载包已删除");
+}
+
+function cacheDownloadMetrics() {
+  if (downloadState.value?.etaText && downloadState.value.etaText !== "-") lastEtaText.value = downloadState.value.etaText;
+  if (downloadState.value?.speedText && downloadState.value.speedText !== "-") lastSpeedText.value = downloadState.value.speedText;
+}
+
+function displayMetric(value: string | undefined, fallback: string) {
+  return value && value !== "-" ? value : fallback || "-";
+}
+
+function releaseTitleParts(release: UpdateRelease) {
+  const title = release.name || release.tag;
+  const match = title.match(/v?\d+(?:\.\d+){1,3}(?:[-+][0-9A-Za-z.-]+)?/);
+  if (!match || match.index === undefined) return { before: title, version: "", after: "" };
+  return {
+    before: title.slice(0, match.index),
+    version: match[0],
+    after: title.slice(match.index + match[0].length)
+  };
 }
 </script>
 
@@ -386,7 +438,9 @@ async function deletePackage(release: UpdateRelease) {
         <section v-if="latest" class="release-card latest-card">
           <div class="release-main">
             <div class="release-title-line">
-              <strong>{{ latest.name || latest.tag }}</strong>
+              <strong>
+                {{ releaseTitleParts(latest).before }}<span v-if="releaseTitleParts(latest).version" class="release-version-highlight">{{ releaseTitleParts(latest).version }}</span>{{ releaseTitleParts(latest).after }}
+              </strong>
               <span>{{ latest.publishedAt ? new Date(latest.publishedAt).toLocaleString() : "-" }}</span>
               <Button theme="borderless" size="small" :icon="renderIcon(IconExternalOpen)" @click="openRelease(latest)" />
             </div>
@@ -399,7 +453,7 @@ async function deletePackage(release: UpdateRelease) {
             </div>
             <Button className="release-icon-button" theme="borderless" :icon="renderIcon(expanded[latest.tag] ? IconChevronUp : IconChevronDown)" @click="expanded[latest.tag] = !expanded[latest.tag]" />
           </div>
-          <div v-if="isReleaseDownloading(latest)" class="release-inline-progress">
+          <div v-if="isReleaseDownloading(latest)" :class="['release-inline-progress', { running: downloadState?.running, paused: downloadState?.paused }]">
             <span>{{ downloadState?.message || "下载中" }}</span>
             <div class="release-progress-track"><i :style="{ width: `${releasePercent(latest)}%` }" /></div>
             <strong>{{ releasePercent(latest) }}%</strong>
@@ -415,7 +469,9 @@ async function deletePackage(release: UpdateRelease) {
           <article v-for="release in historyCollapsed ? [] : releases.slice(1)" :key="release.tag" class="release-card">
             <div class="release-main">
               <div class="release-title-line">
-                <strong>{{ release.name || release.tag }}</strong>
+                <strong>
+                  {{ releaseTitleParts(release).before }}<span v-if="releaseTitleParts(release).version" class="release-version-highlight">{{ releaseTitleParts(release).version }}</span>{{ releaseTitleParts(release).after }}
+                </strong>
                 <span>{{ release.publishedAt ? new Date(release.publishedAt).toLocaleString() : "-" }}</span>
                 <Button theme="borderless" size="small" :icon="renderIcon(IconExternalOpen)" @click="openRelease(release)" />
               </div>
@@ -429,7 +485,7 @@ async function deletePackage(release: UpdateRelease) {
               </div>
               <Button className="release-icon-button" theme="borderless" :icon="renderIcon(expanded[release.tag] ? IconChevronUp : IconChevronDown)" @click="expanded[release.tag] = !expanded[release.tag]" />
             </div>
-            <div v-if="isReleaseDownloading(release)" class="release-inline-progress">
+            <div v-if="isReleaseDownloading(release)" :class="['release-inline-progress', { running: downloadState?.running, paused: downloadState?.paused }]">
               <span>{{ downloadState?.message || "下载中" }}</span>
               <div class="release-progress-track"><i :style="{ width: `${releasePercent(release)}%` }" /></div>
               <strong>{{ releasePercent(release) }}%</strong>
@@ -475,7 +531,7 @@ async function deletePackage(release: UpdateRelease) {
       <div class="download-meta">
         <strong>{{ downloadState?.message || "下载中" }}</strong>
         <span>{{ downloadState?.fileName || "-" }}</span>
-        <span>{{ downloadState?.speedText || "-" }} · 剩余 {{ downloadState?.etaText || "-" }}</span>
+        <span>{{ downloadSpeedText }} · 剩余 {{ downloadEtaText }}</span>
       </div>
       <div class="download-actions">
         <Button theme="light" size="small" :disabled="!downloadState?.tag" @click.stop="pauseOrResumeFromFloat">{{ downloadState?.running ? "暂停" : "继续" }}</Button>

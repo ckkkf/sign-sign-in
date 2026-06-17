@@ -18,6 +18,7 @@ import type {
   WeeklyJournalYear
 } from "@shared/types";
 import { ensureOk } from "../utils/api";
+import { stringifyParam, trackClientEvent } from "../utils/analytics";
 import { renderIcon } from "../utils/icons";
 
 type ChatMessage = {
@@ -113,11 +114,19 @@ async function run<T>(action: () => Promise<T>, success?: string): Promise<T | u
 
 async function init() {
   loading.value = true;
+  const startedAt = Date.now();
   try {
     await run(async () => {
       const next = ensureOk(await window.signSignIn.weeklyJournal.init());
       data.value = next;
       pickDefaults(next);
+      trackClientEvent({
+        operType: "WEEKLY_JOURNAL_OPEN",
+        status: "0",
+        title: "打开 AI 与周记",
+        responseSummary: `history=${next.history?.length || 0}, blogs=${next.blogs?.items?.length || 0}`,
+        costTime: Date.now() - startedAt
+      });
     });
   } finally {
     loading.value = false;
@@ -141,16 +150,26 @@ async function loadWeeks() {
 }
 
 async function loadBlogs(page = blogPage.value) {
+  const startedAt = Date.now();
   await run(async () => {
     const next = ensureOk(await window.signSignIn.weeklyJournal.loadBlogs(page));
     blogPage.value = page;
     if (data.value) data.value.blogs = next;
+    trackClientEvent({
+      operType: "WEEKLY_JOURNAL_LOAD_BLOGS",
+      status: "0",
+      title: "刷新周记列表",
+      requestParam: stringifyParam({ page }),
+      responseSummary: `items=${next.items?.length || 0}`,
+      costTime: Date.now() - startedAt
+    });
   });
 }
 
 async function sendMessage() {
   const content = inputText.value.trim();
   if (!content || generating.value) return;
+  const startedAt = Date.now();
   const userMessage: ChatMessage = { id: `${Date.now()}-user`, role: "user", content };
   const aiMessage: ChatMessage = { id: `${Date.now()}-ai`, role: "ai", content: "正在思考...", pending: true };
   messages.value.push(userMessage, aiMessage);
@@ -167,6 +186,14 @@ async function sendMessage() {
       }
       aiMessage.pending = false;
       if (data.value) data.value.history = [item, ...data.value.history].slice(0, 50);
+      trackClientEvent({
+        operType: "WEEKLY_JOURNAL_GENERATE",
+        status: "0",
+        title: "AI 生成周记",
+        requestParam: stringifyParam({ length: content.length }),
+        responseSummary: `contentLength=${item.content?.length || 0}`,
+        costTime: Date.now() - startedAt
+      });
       scrollToBottom();
     });
   } finally {
@@ -183,6 +210,11 @@ function scrollToBottom() {
 
 function clearChat() {
   messages.value = [];
+  trackClientEvent({
+    operType: "WEEKLY_JOURNAL_NEW_CHAT",
+    status: "0",
+    title: "AI 周记新对话"
+  });
 }
 
 function useHistory(item: WeeklyJournalHistoryItem) {
@@ -211,6 +243,7 @@ async function submit() {
     return;
   }
   submitting.value = true;
+  const startedAt = Date.now();
   try {
     const payload: WeeklyJournalSubmitPayload = {
       blogTitle: blogTitle.value || "实习周记",
@@ -224,6 +257,14 @@ async function submit() {
       ensureOk(await window.signSignIn.weeklyJournal.submit(payload));
       submitVisible.value = false;
       await loadBlogs(1);
+      trackClientEvent({
+        operType: "WEEKLY_JOURNAL_SUBMIT",
+        status: "0",
+        title: "提交周记",
+        requestParam: stringifyParam({ blogTitle: payload.blogTitle, startDate: payload.startDate, endDate: payload.endDate }),
+        responseSummary: `contentLength=${payload.blogBody.length}`,
+        costTime: Date.now() - startedAt
+      });
     }, "周记提交成功");
   } finally {
     submitting.value = false;
@@ -251,15 +292,55 @@ function blogDate(blog: any) {
 </script>
 
 <template>
-  <Modal className="compact-tool-modal weekly-modal" :visible="visible" title="AI 与周记" :width="860" footer="" @cancel="emit('close')">
+  <Modal className="compact-tool-modal weekly-modal" :visible="visible" :width="940" footer="" @cancel="emit('close')">
+    <template #header>
+      <div class="weekly-modal-titlebar">
+        <div class="weekly-modal-title-copy">
+          <strong>AI 与周记</strong>
+          <span>输入要点后生成周记，可复制或提交到周记。</span>
+        </div>
+        <Button theme="borderless" size="small" :icon="renderIcon(IconRefresh)" @click="loadBlogs(1)" />
+      </div>
+    </template>
     <Spin :spinning="loading">
       <section class="journal-dialog chat-mode">
+        <aside class="journal-side">
+          <section class="journal-side-section">
+            <div class="journal-side-title">
+              <strong>生成历史</strong>
+              <Button type="primary" size="small" @click="clearChat">新对话</Button>
+            </div>
+            <span class="journal-count">{{ history.length }} 条</span>
+            <section class="journal-list">
+              <button v-for="item in history" :key="item.id" class="journal-nav-item" type="button" @click="useHistory(item)">
+                <strong>{{ new Date(item.createdAt).toLocaleString().slice(5, 16) }} · {{ item.content.slice(0, 18) }}...</strong>
+                <span>{{ item.content }}</span>
+              </button>
+              <div v-if="!history.length" class="dialog-empty">暂无生成历史</div>
+            </section>
+          </section>
+
+          <section class="journal-side-section submitted-section">
+            <div class="journal-side-title">
+              <strong>已提交</strong>
+              <span>第 {{ blogPage }} 页</span>
+            </div>
+            <section class="journal-list submitted-list">
+              <button v-for="blog in blogList" :key="blog.id || blog.blogId || JSON.stringify(blog).slice(0, 40)" class="journal-nav-item compact" type="button" @click="showBlog(blog)">
+                <strong>{{ blog.blogTitle || blog.title || "无标题" }}</strong>
+                <span>{{ blogDate(blog) }} · {{ blogBody(blog).slice(0, 36) }}</span>
+              </button>
+              <div v-if="!blogList.length" class="dialog-empty">暂无已提交周记</div>
+            </section>
+            <div class="journal-pager">
+              <Button theme="light" size="small" :disabled="blogPage <= 1" @click="loadBlogs(Math.max(1, blogPage - 1))">上一页</Button>
+              <Button theme="light" size="small" :disabled="!blogList.length" @click="loadBlogs(blogPage + 1)">下一页</Button>
+            </div>
+          </section>
+        </aside>
+
         <section class="chat-panel">
           <header class="chat-panel-head">
-            <div>
-              <strong>周记助手</strong>
-              <span>输入要点后生成周记，可复制或提交到周记。</span>
-            </div>
             <Button theme="light" size="small" @click="clearChat">清空</Button>
           </header>
           <div ref="chatBody" class="chat-body">
@@ -289,46 +370,6 @@ function blogDate(blog: any) {
             <Button type="primary" :loading="generating" :icon="renderIcon(IconSend)" @click="sendMessage">{{ generating ? "生成中..." : "发送" }}</Button>
           </div>
         </section>
-
-        <aside class="journal-side">
-          <section class="journal-side-section">
-            <div class="journal-side-title">
-              <strong>生成历史</strong>
-              <span>{{ history.length }} 条</span>
-            </div>
-            <section class="journal-list">
-              <article v-for="item in history" :key="item.id" class="journal-item" @dblclick="useHistory(item)">
-                <strong>{{ new Date(item.createdAt).toLocaleString().slice(5, 16) }} · {{ item.content.slice(0, 18) }}...</strong>
-                <p>{{ item.content }}</p>
-                <Space>
-                  <Button theme="light" size="small" @click="useHistory(item)">引用</Button>
-                  <Button theme="light" size="small" :icon="renderIcon(IconCopy)" @click="copyText(item.content)">复制</Button>
-                </Space>
-              </article>
-              <div v-if="!history.length" class="dialog-empty">暂无生成历史</div>
-            </section>
-          </section>
-
-          <section class="journal-side-section submitted-section">
-            <div class="journal-side-title">
-              <strong>已提交</strong>
-              <Button theme="borderless" size="small" :icon="renderIcon(IconRefresh)" @click="loadBlogs(1)" />
-            </div>
-            <section class="journal-list submitted-list">
-              <article v-for="blog in blogList" :key="blog.id || blog.blogId || JSON.stringify(blog).slice(0, 40)" class="journal-item compact" @dblclick="showBlog(blog)">
-                <strong>{{ blog.blogTitle || blog.title || "无标题" }}</strong>
-                <span>{{ blogDate(blog) }} · {{ blog.startDate || "" }}-{{ blog.endDate || "" }}</span>
-                <p>{{ blogBody(blog) }}</p>
-              </article>
-              <div v-if="!blogList.length" class="dialog-empty">暂无已提交周记</div>
-            </section>
-            <div class="journal-pager">
-              <Button theme="light" size="small" :disabled="blogPage <= 1" @click="loadBlogs(Math.max(1, blogPage - 1))">上一页</Button>
-              <span class="page-chip">第 {{ blogPage }} 页</span>
-              <Button theme="light" size="small" :disabled="!blogList.length" @click="loadBlogs(blogPage + 1)">下一页</Button>
-            </div>
-          </section>
-        </aside>
       </section>
     </Spin>
 

@@ -292,6 +292,7 @@ export interface ClientOperLogPayload {
   responseSummary?: string;
   errorMsg?: string;
   costTime?: number;
+  operTime?: string;
   userAgent?: string;
   deviceBrand?: string;
   deviceModel?: string;

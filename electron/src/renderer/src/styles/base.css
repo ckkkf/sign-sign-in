@@ -921,6 +921,34 @@ body {
   margin-top: 28px;
 }
 
+.update-modal .semi-modal-body {
+  scrollbar-width: none;
+}
+
+.update-modal .semi-modal-body * {
+  scrollbar-width: none;
+}
+
+.update-modal .semi-modal-body::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
+.update-modal .semi-modal-body *::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
+.compact-tool-modal.weekly-modal .semi-modal-header {
+  padding: 9px 14px 7px;
+}
+
+.compact-tool-modal.weekly-modal .semi-modal-body {
+  padding: 8px 14px 12px;
+}
+
 .compact-tool-modal .semi-modal-header {
   flex: 0 0 auto;
   padding: 14px 18px 8px;
@@ -949,6 +977,37 @@ body {
   height: 28px;
   padding: 0 10px;
   font-size: 12px;
+}
+
+.weekly-modal-titlebar {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.weekly-modal-title-copy {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.weekly-modal-title-copy strong {
+  color: #ffffff;
+  font-size: 16px;
+  font-weight: 900;
+}
+
+.weekly-modal-title-copy span {
+  min-width: 0;
+  overflow: hidden;
+  color: #9aa6c8;
+  font-size: 11px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .auto-clock-editor {
@@ -1108,11 +1167,14 @@ body {
   color: #ffe8bd;
 }
 
-.update-hero > div,
-.chat-panel-head > div {
+.update-hero > div {
   min-width: 0;
   display: grid;
   gap: 3px;
+}
+
+.chat-panel-head > div {
+  min-width: 0;
 }
 
 .update-hero strong,
@@ -1211,6 +1273,21 @@ body {
   min-width: 0;
 }
 
+.release-version-highlight {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  margin: 0 3px;
+  padding: 0 7px;
+  color: #dfffea;
+  background: rgba(55, 214, 122, 0.16);
+  border: 1px solid rgba(91, 234, 156, 0.42);
+  border-radius: 999px;
+  font-family: Consolas, "SFMono-Regular", monospace;
+  font-size: 12px;
+  font-weight: 900;
+}
+
 .release-title-line .semi-button {
   width: 24px;
   height: 24px;
@@ -1265,8 +1342,16 @@ body {
 .release-progress-track i {
   display: block;
   height: 100%;
-  background: #62a8ff;
+  background: #37d67a;
   border-radius: inherit;
+}
+
+.release-inline-progress.paused .release-progress-track i {
+  background: #ff5f57;
+}
+
+.release-inline-progress.running .release-progress-track i {
+  background: #37d67a;
 }
 
 .release-inline-progress strong {
@@ -1281,9 +1366,13 @@ body {
 .release-body-textarea,
 .release-body-textarea textarea,
 .release-body-textarea .semi-input-textarea {
-  color: #dce6ff;
+  color: #f0f5ff;
+  -webkit-text-fill-color: #f0f5ff;
   background: #141b2d;
-  border-color: #33415f;
+  border-color: #4b5f88;
+  font-weight: 600;
+  line-height: 1.65;
+  opacity: 1;
 }
 
 .release-body-textarea textarea::placeholder {
@@ -1345,7 +1434,7 @@ body {
 }
 
 .download-float.expanded {
-  width: 360px;
+  width: 324px;
   height: 72px;
   display: block;
   background: transparent;
@@ -1492,12 +1581,15 @@ body {
 }
 
 .journal-dialog.chat-mode {
-  grid-template-columns: minmax(0, 1fr) 260px;
-  gap: 12px;
-  height: min(52vh, 390px);
+  grid-template-columns: 222px minmax(0, 1fr);
+  gap: 0;
+  height: min(72vh, 620px);
   min-height: 0;
   align-items: stretch;
   overflow: hidden;
+  background: #0b0f19;
+  border: 1px solid #252d44;
+  border-radius: 10px;
 }
 
 .chat-panel {
@@ -1507,18 +1599,34 @@ body {
   max-height: 100%;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
-  gap: 8px;
-  padding: 10px;
+  gap: 0;
+  padding: 0;
   background: #0f1421;
-  border: 1px solid #252d44;
-  border-radius: 8px;
+  border: 0;
+  border-left: 1px solid #252d44;
+  border-radius: 0;
 }
 
 .chat-panel-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 10px;
+  min-height: 42px;
+  padding: 7px 12px;
+  border-bottom: 1px solid #252d44;
+}
+
+.chat-panel-head > div {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.chat-panel-head span {
+  color: #a9b4d6;
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .chat-body {
@@ -1526,29 +1634,31 @@ body {
   overflow: auto;
   display: grid;
   align-content: start;
-  gap: 8px;
-  padding: 10px;
-  background: #090e19;
-  border: 1px solid #242b43;
-  border-radius: 8px;
+  gap: 10px;
+  padding: 14px 20px 16px;
+  background: #0f1421;
+  border: 0;
+  border-radius: 0;
 }
 
 .chat-empty {
-  align-self: stretch;
-  min-height: 128px;
+  align-self: center;
+  justify-self: center;
+  width: min(520px, 100%);
+  min-height: 132px;
   display: grid;
   place-content: center;
   gap: 6px;
-  padding: 14px;
-  color: #8792bd;
+  padding: 18px;
+  color: #9faad0;
   border: 1px dashed #33405d;
-  border-radius: 8px;
+  border-radius: 10px;
   text-align: center;
 }
 
 .chat-empty strong {
   color: #e7ecff;
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .chat-message {
@@ -1556,6 +1666,9 @@ body {
   display: flex;
   align-items: flex-start;
   gap: 8px;
+  max-width: 760px;
+  width: 100%;
+  margin: 0 auto;
 }
 
 .chat-message.user {
@@ -1563,25 +1676,25 @@ body {
 }
 
 .ai-mark {
-  width: 26px;
-  height: 26px;
+  width: 22px;
+  height: 22px;
   flex: 0 0 auto;
   display: grid;
   place-items: center;
   color: #0d111a;
   background: #7fdbff;
   border-radius: 999px;
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 900;
 }
 
 .chat-bubble {
   position: relative;
   max-width: min(550px, 82%);
-  padding: 7px 9px;
+  padding: 8px 10px;
   background: #151826;
   border: 1px solid #2a3150;
-  border-radius: 12px;
+  border-radius: 14px;
 }
 
 .chat-message.user .chat-bubble {
@@ -1600,8 +1713,8 @@ body {
   margin: 0;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  line-height: 1.65;
-  font-size: 12px;
+  line-height: 1.6;
+  font-size: 11px;
 }
 
 .bubble-actions {
@@ -1632,9 +1745,12 @@ body {
 
 .chat-input-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 70px;
+  grid-template-columns: minmax(0, 1fr) 68px;
   gap: 8px;
   align-items: end;
+  padding: 10px 20px 12px;
+  background: linear-gradient(180deg, rgba(15, 20, 33, 0), #0f1421 24%);
+  border-top: 1px solid rgba(37, 45, 68, 0.72);
 }
 
 .journal-side {
@@ -1642,13 +1758,13 @@ body {
   height: 100%;
   max-height: 100%;
   overflow: hidden;
-  padding: 10px;
-  background: #101522;
-  border: 1px solid #252d44;
-  border-radius: 8px;
+  padding: 8px;
+  background: #090d16;
+  border: 0;
+  border-radius: 0;
   display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
-  gap: 10px;
+  grid-template-rows: minmax(0, 1fr) minmax(104px, 0.4fr);
+  gap: 8px;
 }
 
 .journal-list {
@@ -1661,11 +1777,10 @@ body {
   min-height: 0;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  gap: 8px;
+  gap: 5px;
 }
 
 .submitted-section {
-  max-height: 132px;
   grid-template-rows: auto minmax(0, 1fr) auto;
 }
 
@@ -1674,26 +1789,71 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding-bottom: 7px;
-  border-bottom: 1px solid #2a324a;
+  padding: 0 1px 4px;
+  border-bottom: 1px solid rgba(42, 50, 74, 0.9);
 }
 
 .journal-side-title strong {
   color: #f2f5ff;
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .journal-side-title span {
   color: #8490ba;
-  font-size: 11px;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.journal-count {
+  color: #7682a8;
+  font-size: 10px;
   font-weight: 800;
 }
 
 .journal-pager {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  gap: 6px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px;
   align-items: center;
+}
+
+.journal-nav-item {
+  width: 100%;
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+  padding: 6px 7px;
+  color: #d7def8;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.journal-nav-item:hover {
+  background: #111725;
+  border-color: #26324e;
+}
+
+.journal-nav-item strong,
+.journal-nav-item span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.journal-nav-item strong {
+  color: #eef2ff;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.journal-nav-item span {
+  color: #8e99bf;
+  font-size: 10px;
 }
 
 .journal-item p {

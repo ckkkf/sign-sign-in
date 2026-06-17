@@ -6,6 +6,7 @@ import { configStore } from "./configStore";
 import { logger } from "./logger";
 import { sessionStore } from "./sessionStore";
 import { signTaskService } from "./signTaskService";
+import { analyticsService } from "./analyticsService";
 
 const MIN_POLL_SECONDS = 10;
 const DEFAULT_WAIT_CODE_MS = 5 * 60 * 1000;
@@ -97,6 +98,32 @@ export class AutoClockService {
     running: false,
     message: "未启动"
   };
+
+  private track(payload: {
+    operType?: string;
+    title: string;
+    status?: "0" | "1";
+    task?: AutoClockTask;
+    action?: string;
+    message?: string;
+    costTime?: number;
+  }): void {
+    analyticsService.track({
+      operType: payload.operType || "AUTO_CLOCK_TASK",
+      status: payload.status || "0",
+      title: payload.title,
+      requestUrl: "auto-clock://task",
+      requestParam: JSON.stringify({
+        time: payload.task?.time,
+        mode: payload.task?.mode,
+        action: payload.action,
+        hasImage: Boolean(payload.task?.image_path || payload.task?.imagePath)
+      }),
+      responseSummary: payload.message,
+      errorMsg: payload.status === "1" ? payload.message : undefined,
+      costTime: payload.costTime
+    }).catch(() => undefined);
+  }
 
   getState(): AutoClockState {
     const config = configStore.read();
@@ -251,12 +278,20 @@ export class AutoClockService {
   }
 
   private async runTask(index: number, task: AutoClockTask, now: Date): Promise<void> {
+    const startedAt = Date.now();
     let option: SignOption;
     try {
       option = modeToOption(task);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       logger.warn(`Auto-clock config error, skipped this task: ${message}`);
+      this.track({
+        title: "定时打卡配置错误",
+        status: "1",
+        task,
+        message,
+        costTime: Date.now() - startedAt
+      });
       this.rescheduleTask(index, task, now);
       return;
     }
@@ -276,11 +311,26 @@ export class AutoClockService {
       }
       await this.runSignWithRecovery(option);
       this.state = { ...this.state, running: false, message: "定时打卡执行完成" };
+      this.track({
+        title: "定时打卡自动执行成功",
+        task,
+        action: option.action,
+        message: "执行完成",
+        costTime: Date.now() - startedAt
+      });
       await this.notifyResult(true, "定时打卡执行完成", option.action);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.state = { ...this.state, running: false, message };
       logger.error(`定时打卡失败：${message}`);
+      this.track({
+        title: "定时打卡自动执行失败",
+        status: "1",
+        task,
+        action: option.action,
+        message,
+        costTime: Date.now() - startedAt
+      });
       await this.notifyResult(false, message, option.action);
     } finally {
       this.rescheduleTask(index, task, now);
@@ -302,6 +352,13 @@ export class AutoClockService {
       return;
     }
     logger.warn("定时打卡检测到登录态失效，准备自动抓包续期");
+    this.track({
+      operType: "AUTO_CLOCK_SESSION_REFRESH",
+      title: "定时打卡检测到登录态失效",
+      status: "1",
+      action: option.action,
+      message: result.message
+    });
     sessionStore.clear();
     await this.refreshSessionFromCapturedCode();
     result = await signTaskService.startAuto(option);
@@ -311,15 +368,34 @@ export class AutoClockService {
   }
 
   private async refreshSessionFromCapturedCode(): Promise<void> {
+    const startedAt = Date.now();
     codeCaptureService.setManualCode("");
     const codePromise = this.waitForCapturedCode(DEFAULT_WAIT_CODE_MS);
     await codeCaptureService.start();
-    const code = await codePromise;
-    codeCaptureService.setManualCode(code);
-    await signTaskService.refreshSessionFromCapturedCode();
-    const result = await signTaskService.waitForIdle();
-    if (isSessionExpiredMessage(result.message)) {
-      throw new Error(result.message);
+    try {
+      const code = await codePromise;
+      codeCaptureService.setManualCode(code);
+      await signTaskService.refreshSessionFromCapturedCode();
+      const result = await signTaskService.waitForIdle();
+      if (isSessionExpiredMessage(result.message)) {
+        throw new Error(result.message);
+      }
+      this.track({
+        operType: "AUTO_CLOCK_SESSION_REFRESH",
+        title: "定时打卡自动抓包续期成功",
+        message: "续期完成",
+        costTime: Date.now() - startedAt
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.track({
+        operType: "AUTO_CLOCK_SESSION_REFRESH",
+        title: "定时打卡自动抓包续期失败",
+        status: "1",
+        message,
+        costTime: Date.now() - startedAt
+      });
+      throw error;
     }
   }
 
@@ -335,8 +411,14 @@ export class AutoClockService {
     for (const channel of channels) {
       if (channel.type === "tray") {
         this.notifyTray(title, message || title);
+        this.track({
+          operType: "AUTO_CLOCK_NOTIFY",
+          title: "发送系统通知",
+          action,
+          message: title
+        });
       } else if (channel.type === "pushplus" && channel.token) {
-        await this.notifyPushPlus(channel.token, title, content);
+        await this.notifyPushPlus(channel.token, title, content, action);
       }
     }
   }
@@ -346,7 +428,8 @@ export class AutoClockService {
     new Notification({ title, body }).show();
   }
 
-  private async notifyPushPlus(token: string, title: string, content: string): Promise<void> {
+  private async notifyPushPlus(token: string, title: string, content: string, action = ""): Promise<void> {
+    const startedAt = Date.now();
     try {
       await axios.post(
         "http://www.pushplus.plus/send",
@@ -354,8 +437,24 @@ export class AutoClockService {
         { timeout: 15000, headers: { "Content-Type": "application/json" } }
       );
       logger.info("PushPlus 推送成功");
+      this.track({
+        operType: "AUTO_CLOCK_NOTIFY",
+        title: "PushPlus 推送成功",
+        action,
+        message: title,
+        costTime: Date.now() - startedAt
+      });
     } catch (error) {
-      logger.warn(`PushPlus 推送失败：${error instanceof Error ? error.message : String(error)}`);
+      const message = error instanceof Error ? error.message : String(error);
+      logger.warn(`PushPlus 推送失败：${message}`);
+      this.track({
+        operType: "AUTO_CLOCK_NOTIFY",
+        title: "PushPlus 推送失败",
+        status: "1",
+        action,
+        message,
+        costTime: Date.now() - startedAt
+      });
     }
   }
 

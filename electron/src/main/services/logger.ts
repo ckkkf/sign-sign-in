@@ -6,6 +6,13 @@ export class AppLogger {
   private readonly emitter = new EventEmitter();
   private readonly entries: LogEntry[] = [];
   private windows = new Set<BrowserWindow>();
+  private readonly suppressedPatterns = [
+    /^\[AUTH\]/,
+    /^\[Analytics\]/,
+    /\/xyb\/auth\/client-log/,
+    /上报客户端日志/,
+    /上报失败/
+  ];
 
   attachWindow(window: BrowserWindow): void {
     this.windows.add(window);
@@ -42,6 +49,9 @@ export class AppLogger {
   }
 
   private push(level: LogEntry["level"], message: string): void {
+    if (this.shouldSuppress(message)) {
+      return;
+    }
     const entry: LogEntry = {
       level,
       message,
@@ -57,6 +67,10 @@ export class AppLogger {
         window.webContents.send("log:entry", entry);
       }
     }
+  }
+
+  private shouldSuppress(message: string): boolean {
+    return this.suppressedPatterns.some((pattern) => pattern.test(message));
   }
 }
 

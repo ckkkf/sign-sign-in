@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from "electron";
 import type {
   AuthSessionPayload,
   AutoClockNotificationConfig,
+  ClientOperLogPayload,
   JieLongFieldAnswer,
   JieLongFormBundle,
   JieLongSettings,
@@ -114,6 +115,9 @@ const api: SignSignInApi = {
       ipcRenderer.on("log:entry", listener);
       return () => ipcRenderer.off("log:entry", listener);
     }
+  },
+  analytics: {
+    track: (payload: ClientOperLogPayload) => ipcRenderer.invoke("analytics:track", payload)
   }
 };
 
