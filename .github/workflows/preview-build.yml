@@ -4,7 +4,11 @@ on:
   push:
     branches:
       - master
+    paths-ignore:
+      - 'electron/**'
   pull_request:
+    paths-ignore:
+      - 'electron/**'
 
 permissions:
   contents: read
