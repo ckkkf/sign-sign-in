@@ -54,6 +54,6 @@ tests
 /resources/config/mitm*.json
 */__pycache__
 
-wx9f1c2e0bbc10673c_unpacked
 /.pnpm-store
 doc/
+unpacked/
