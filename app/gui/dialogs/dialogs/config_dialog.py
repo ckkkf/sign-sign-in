@@ -162,22 +162,6 @@ class ConfigDialog(QDialog):
         service_combo.currentIndexChanged.connect(lambda: setattr(self, 'is_modified', True))
         self.inputs['serviceProvider'] = service_combo
 
-        service_row = QHBoxLayout()
-        service_row.setContentsMargins(0, 0, 0, 0)
-        service_row.setSpacing(12)
-        service_label = QLabel("????")
-        service_label.setMinimumWidth(72)
-        service_label.setStyleSheet("color: #9FB3D9; font-weight: bold;")
-        service_row.addWidget(service_label, 0)
-        service_row.addWidget(service_combo, 1)
-        service_switch_btn = QPushButton("??")
-        service_switch_btn.setObjectName("LinkBtn")
-        service_switch_btn.setCursor(Qt.PointingHandCursor)
-        service_switch_btn.clicked.connect(lambda: self._apply_service_provider_choice(service_combo.currentText()))
-        service_row.addWidget(service_switch_btn, 0)
-        form.addRow(service_row)
-        self.add_tip(form, "???xyb ?????laishixi ????/??????????")
-
         # ===========================================================
         pos_row = QHBoxLayout()
         lbl_pos = QLabel("位置")
@@ -321,22 +305,6 @@ class ConfigDialog(QDialog):
         tip.setObjectName("Tip")
         tip.setWordWrap(True)
         layout.addRow("", tip)
-
-    def _apply_service_provider_choice(self, provider: str):
-        provider = str(provider or '').strip().lower()
-        if provider not in ('xyb', 'laishixi'):
-            return
-        if self.inputs.get('serviceProvider') is not None:
-            self.inputs['serviceProvider'].setCurrentText(provider)
-        self.is_modified = True
-
-    def _apply_service_provider_choice(self, provider: str):
-        provider = str(provider or '').strip().lower()
-        if provider not in ('xyb', 'laishixi'):
-            return
-        if self.inputs.get('serviceProvider') is not None:
-            self.inputs['serviceProvider'].setCurrentText(provider)
-        self.is_modified = True
 
     def save_config(self):
         try:
