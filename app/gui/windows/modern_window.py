@@ -1332,9 +1332,28 @@ class ModernWindow(QMainWindow):
 
 
     def _update_session_display(self):
-        """更新JSESSIONID显示"""
-        from app.utils.files import load_session_cache
+        """Update current platform session display."""
+        from app.utils.files import load_session_cache, get_valid_laishixi_session_cache
         from datetime import datetime
+
+        service_provider = self._current_service_provider()
+        if service_provider == "laishixi":
+            cache = get_valid_laishixi_session_cache()
+            if cache and cache.get('openId'):
+                open_id = cache['openId']
+                masked_id = f"...{open_id[-4:]}" if len(open_id) >= 4 else open_id
+                timestamp = cache.get('timestamp', 0)
+                if timestamp:
+                    time_str = datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d %H:%M")
+                    self.lbls['session'].setText(
+                        f"🗝️ 莱实习 OPENID: <span style='color:#58D68D'>{masked_id}</span> "
+                        f"<span style='color:#58D68D'>({time_str})</span>"
+                    )
+                else:
+                    self.lbls['session'].setText(f"🗝️ 莱实习 OPENID: <span style='color:#58D68D'>{masked_id}</span>")
+            else:
+                self.lbls['session'].setText("🗝️ 莱实习 OPENID: <span style='color:#F4D03F'>未获取</span>")
+            return
 
         cache = load_session_cache()
         if cache and cache.get('sessionId'):
@@ -1352,6 +1371,13 @@ class ModernWindow(QMainWindow):
                 self.lbls['session'].setText(f"🗝️ SESSION: <span style='color:#58D68D'>{masked_id}</span>")
         else:
             self.lbls['session'].setText("🗝️ SESSION: <span style='color:#F4D03F'>未获取</span>")
+
+    def _current_service_provider(self) -> str:
+        try:
+            cfg = read_config(CONFIG_FILE)
+            return str((cfg.get("input") or {}).get("serviceProvider", "xyb")).strip().lower() or "xyb"
+        except Exception:
+            return "xyb"
 
     def _mode_to_option(self, mode: str, image_path: str = None) -> dict:
         mode_map = {
@@ -1495,19 +1521,27 @@ class ModernWindow(QMainWindow):
 
     def _can_start_sign_task(self) -> bool:
 
-        from app.utils.files import get_valid_session_cache
-
-        has_session = get_valid_session_cache() is not None
-        if not has_session:
-            ToastManager.instance().show("请先点击“获取code”获取有效 SESSIONID", "warning")
-            return False
+        from app.utils.files import get_valid_session_cache, get_valid_laishixi_session_cache
 
         try:
-            err_msg = validate_config(read_config(CONFIG_FILE))
+            cfg = read_config(CONFIG_FILE)
         except Exception as exc:
             ToastManager.instance().show(f"读取配置失败: {exc}", "error")
             return False
 
+        service_provider = str((cfg.get("input") or {}).get("serviceProvider", "xyb")).strip().lower() or "xyb"
+        if service_provider == "laishixi":
+            has_session = get_valid_laishixi_session_cache() is not None
+            session_label = "Laishixi OPENID"
+        else:
+            has_session = get_valid_session_cache() is not None
+            session_label = "SESSIONID"
+
+        if not has_session:
+            ToastManager.instance().show(f"请先点击“获取code”获取有效 {session_label}", "warning")
+            return False
+
+        err_msg = validate_config(cfg)
         if err_msg:
             logging.warning(f"配置校验失败: {err_msg}")
             ToastManager.instance().show(err_msg, "warning")

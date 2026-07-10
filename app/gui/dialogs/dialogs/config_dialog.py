@@ -153,6 +153,17 @@ class ConfigDialog(QDialog):
         system_ver = self.extract_android_version(dev.get('system', ''))
         model_conf = self.current_data.get('model', {})
 
+        # Service provider
+        service_combo = NoWheelComboBox()
+        service_combo.addItems(["xyb", "laishixi"])
+        service_provider = str(input_conf.get('serviceProvider', 'xyb')).strip().lower()
+        idx = service_combo.findText(service_provider)
+        service_combo.setCurrentIndex(idx if idx >= 0 else 0)
+        service_combo.currentIndexChanged.connect(lambda: setattr(self, 'is_modified', True))
+        form.addRow("签到平台", service_combo)
+        self.inputs['serviceProvider'] = service_combo
+        self.add_tip(form, "提示：xyb 为校友邦；laishixi 为莱实习/莱芜职业实习小程序。")
+
         # ===========================================================
         # 位置（标题 + 按钮 一行）
         # ===========================================================
@@ -310,6 +321,7 @@ class ConfigDialog(QDialog):
                 'system': system,
                 'platform': self.get_input_value('platform').lower()
             }
+            inp['serviceProvider'] = self.get_input_value('serviceProvider').lower() or 'xyb'
             inp['userAgent'] = build_user_agent(device)
             inp['location'] = {'longitude': self.inputs['lng'].text(), 'latitude': self.inputs['lat'].text()}
             inp['mapProvider'] = self.get_input_value('mapProvider').lower() or 'amap'
@@ -381,6 +393,8 @@ class ConfigDialog(QDialog):
             key = "system_version"
         elif "平台" in msg or "platform" in msg:
             key = "platform"
+        elif "serviceProvider" in msg:
+            key = "serviceProvider"
         elif "UA" in msg or "User-Agent" in msg or "userAgent" in msg:
             key = "userAgent"
 

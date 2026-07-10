@@ -6,7 +6,7 @@ import shutil
 from datetime import datetime
 from typing import Dict, List
 
-from app.config.common import IMAGE_DIR, JOURNAL_DIR, JOURNAL_HISTORY_FILE, SESSION_CACHE_FILE
+from app.config.common import IMAGE_DIR, JOURNAL_DIR, JOURNAL_HISTORY_FILE, SESSION_CACHE_FILE, LAISHIXI_SESSION_CACHE_FILE
 
 IMAGE_EXTS = {'.png', '.jpg', '.jpeg', '.bmp', '.gif', '.webp'}
 
@@ -76,6 +76,10 @@ def validate_config(data: dict):
     if "input" not in data or not isinstance(data["input"], dict):
         return "配置格式不完整：缺少 input。建议重新打开配置页后点击“保存并应用”。"
     input_data = data["input"]
+
+    service_provider = str(input_data.get("serviceProvider", "xyb")).strip().lower()
+    if service_provider not in ("xyb", "laishixi"):
+        return "serviceProvider must be xyb or laishixi."
 
     # location
     loc = input_data.get("location")
@@ -314,6 +318,58 @@ def get_valid_session_cache() -> dict:
         "traineeId": cache.get("traineeId")
     }
 
+
+
+def load_laishixi_session_cache() -> dict:
+    """Load Laishixi session cache."""
+    if not os.path.exists(LAISHIXI_SESSION_CACHE_FILE):
+        return {}
+    try:
+        with open(LAISHIXI_SESSION_CACHE_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def save_laishixi_session_cache(open_id: str, cookies: dict = None):
+    """Save Laishixi H5 session cache for 24 hours."""
+    import time
+    cache = {
+        "service": "laishixi",
+        "openId": open_id,
+        "cookies": cookies or {},
+        "timestamp": int(time.time()),
+        "expire_seconds": 24 * 3600
+    }
+    ensure_dir(os.path.dirname(LAISHIXI_SESSION_CACHE_FILE))
+    save_json_file(LAISHIXI_SESSION_CACHE_FILE, cache)
+
+
+def get_valid_laishixi_session_cache() -> dict:
+    """Return valid Laishixi session cache or None."""
+    import time
+    cache = load_laishixi_session_cache()
+    if not cache:
+        return None
+    timestamp = cache.get("timestamp", 0)
+    expire_seconds = cache.get("expire_seconds", 24 * 3600)
+    if time.time() - timestamp > expire_seconds:
+        return None
+    open_id = str(cache.get("openId") or "").strip()
+    if not open_id:
+        return None
+    return {
+        "service": "laishixi",
+        "openId": open_id,
+        "cookies": cache.get("cookies") if isinstance(cache.get("cookies"), dict) else {},
+        "timestamp": timestamp,
+    }
+
+
+def clear_laishixi_session_cache():
+    """Clear Laishixi session cache."""
+    if os.path.exists(LAISHIXI_SESSION_CACHE_FILE):
+        os.remove(LAISHIXI_SESSION_CACHE_FILE)
 
 def clear_session_cache():
     """清除会话缓存"""

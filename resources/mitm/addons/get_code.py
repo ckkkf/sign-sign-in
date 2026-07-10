@@ -27,6 +27,7 @@ PACKET_LOG_FILE = os.path.normpath(
 
 XYB_SOURCE = "xyb_code"
 JIELONG_SOURCE = "jielong_token"
+LAISHIXI_SOURCE = "laishixi_code"
 SEEN_HOSTS = set()
 
 
@@ -77,6 +78,7 @@ def is_interesting_flow(flow: http.HTTPFlow):
         or host.endswith("xybsyw.com")
         or host.endswith("servicewechat.com")
         or host.endswith("jielong.com")
+        or host.endswith("shx.lwvc.edu.cn")
     )
 
 
@@ -147,6 +149,7 @@ def write_payload(payload: dict):
 class GetCode:
     XYB_TARGET = "getOpenId.action"
     JIELONG_TARGET = "/api/User/Token"
+    LAISHIXI_TARGET = "/shixi/appLogin/appLogin"
 
     def _capture_xyb_code(self, flow: http.HTTPFlow):
         code = flow.request.urlencoded_form.get("code")
@@ -155,7 +158,7 @@ class GetCode:
             return
 
         code_preview = mask_value(code)
-        append_packet_log(f"[MITM] ?? {flow.request.method} {flow.request.pretty_url} | code={code_preview}")
+        append_packet_log(f"[MITM] XYB code request {flow.request.method} {flow.request.pretty_url} | code={code_preview}")
 
         try:
             write_payload({"source": XYB_SOURCE, "code": code})
@@ -164,6 +167,35 @@ class GetCode:
         except Exception as exc:
             append_packet_log(f"[MITM] code 写入失败: {exc}")
             print(f"[addon] code 写入失败: {exc}")
+
+        flow.kill()
+
+
+    def _capture_laishixi_code(self, flow: http.HTTPFlow):
+        action = str(flow.request.urlencoded_form.get("action") or "").strip()
+        if action != "autoWechat":
+            return
+
+        raw_key = str(flow.request.urlencoded_form.get("key") or "").strip()
+        try:
+            key_payload = json.loads(raw_key or "{}")
+        except json.JSONDecodeError:
+            append_packet_log(f"[MITM] Laishixi autoWechat key is not JSON: {compact_text(raw_key, 120)}")
+            return
+
+        code = str(key_payload.get("code") or "").strip()
+        if not code:
+            append_packet_log("[MITM] Laishixi autoWechat request has no code")
+            return
+
+        append_packet_log(f"[MITM] captured Laishixi code | code={mask_value(code)}")
+        try:
+            write_payload({"source": LAISHIXI_SOURCE, "code": code})
+            append_packet_log(f"[MITM] Laishixi code saved: {CODE_FILE}")
+            print(f"[addon] saved Laishixi code file: {CODE_FILE}")
+        except Exception as exc:
+            append_packet_log(f"[MITM] failed to save Laishixi code: {exc}")
+            print(f"[addon] failed to save Laishixi code: {exc}")
 
         flow.kill()
 
@@ -218,6 +250,10 @@ class GetCode:
 
         if self.XYB_TARGET in flow.request.pretty_url:
             self._capture_xyb_code(flow)
+            return
+
+        if flow.request.method.upper() == "POST" and self.LAISHIXI_TARGET in flow.request.pretty_url:
+            self._capture_laishixi_code(flow)
             return
 
         if flow.request.method.upper() == "POST" and self.JIELONG_TARGET in flow.request.pretty_url:

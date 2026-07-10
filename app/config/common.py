@@ -45,6 +45,12 @@ XYB_SM2_PUBLIC_KEY = "04a3c35de075a2e86f28d52a41989a08e740a82fb96d43d9af8a5509e0
 XYB_SM2_MODE = 1
 
 # 后端接口
+# Laishixi mini program parameters
+LAISHIXI_APP_ID = "wx89917cb641c9b11b"
+LAISHIXI_BASE_PATH = "https://shx.lwvc.edu.cn/SXGLXT"
+LAISHIXI_APP_LOGIN_URL = "https://shx.lwvc.edu.cn/shixi/appLogin/appLogin"
+LAISHIXI_REFERER = "https://servicewechat.com/" + LAISHIXI_APP_ID + "/0/page-frame.html"
+
 API_URL = "https://langoo.cn"
 
 # 代理地址
@@ -104,6 +110,7 @@ PACKET_LOG_FILE = os.path.join(LOG_DIR, "mitm_packet.log")
 
 # 会话缓存文件
 SESSION_CACHE_FILE = os.path.join(RES_DIR, "cache", "session_cache.json")
+LAISHIXI_SESSION_CACHE_FILE = os.path.join(RES_DIR, "cache", "laishixi_session_cache.json")
 
 # mitm addons
 ADDONS_DIR = os.path.join(MITM_RESOURCE_DIR, "addons")
