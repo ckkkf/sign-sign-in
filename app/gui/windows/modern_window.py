@@ -39,7 +39,7 @@ from app.utils.commands import (
     open_system_proxy_settings,
     open_terminal,
 )
-from app.utils.files import validate_config, read_config
+from app.utils.files import validate_config, read_config, save_json_file
 from app.utils.pushplus import notify_pushplus
 from app.workers.monitor_thread import MonitorThread
 from app.workers.sign_task import SignTaskThread, GetCodeAndSessionThread
@@ -163,6 +163,16 @@ class ModernWindow(QMainWindow):
         self.btn_platform_xyb.clicked.connect(self.show_home_page)
         nav_shell_layout.addWidget(self.btn_platform_xyb, 0, Qt.AlignTop | Qt.AlignHCenter)
 
+        self.btn_platform_laishixi = QPushButton("莱")
+        self.btn_platform_laishixi.setObjectName("RailNavCurrentBtn")
+        self.btn_platform_laishixi.setCursor(Qt.PointingHandCursor)
+        self.btn_platform_laishixi.setFixedSize(36, 36)
+        self.btn_platform_laishixi.setToolTip("切换到莱实习签到页")
+        self.btn_platform_laishixi.setCheckable(True)
+        self.btn_platform_laishixi.setText("莱\n实")
+        self.btn_platform_laishixi.clicked.connect(self.show_laishixi_page)
+        nav_shell_layout.addWidget(self.btn_platform_laishixi, 0, Qt.AlignTop | Qt.AlignHCenter)
+
         self.btn_nav_jielong = QPushButton("接龙")
         self.btn_nav_jielong.setObjectName("RailNavShortcutBtn")
         self.btn_nav_jielong.setCursor(Qt.PointingHandCursor)
@@ -176,6 +186,7 @@ class ModernWindow(QMainWindow):
         self.nav_group = QButtonGroup(self)
         self.nav_group.setExclusive(True)
         self.nav_group.addButton(self.btn_platform_xyb)
+        self.nav_group.addButton(self.btn_platform_laishixi)
         self.nav_group.addButton(self.btn_nav_jielong)
 
         rail_layout.addWidget(nav_shell, 0, Qt.AlignTop | Qt.AlignHCenter)
@@ -204,6 +215,11 @@ class ModernWindow(QMainWindow):
         title_row.addWidget(sub, 0, Qt.AlignLeft | Qt.AlignBottom)
         title_row.addStretch()
         l_vbox.addLayout(title_row)
+
+        self.lbl_platform_context = QLabel()
+        self.lbl_platform_context.setObjectName("PlatformContext")
+        self.lbl_platform_context.setWordWrap(True)
+        l_vbox.addWidget(self.lbl_platform_context)
 
         # QQ Group (click-to-copy)
         qq_bar = QFrame()
@@ -324,9 +340,9 @@ class ModernWindow(QMainWindow):
         l_vbox.addWidget(reminder)
 
         # ------------------------- Mode -------------------------
-        label = QLabel("执行操作（拍照签到签退经纬度不准会导致外勤）")
-        label.setObjectName("SectionLabel")
-        l_vbox.addWidget(label)
+        self.execution_mode_label = QLabel("执行操作（拍照签到签退经纬度不准会导致外勤）")
+        self.execution_mode_label.setObjectName("SectionLabel")
+        l_vbox.addWidget(self.execution_mode_label)
 
         self.grp = QButtonGroup(self)
 
@@ -345,6 +361,13 @@ class ModernWindow(QMainWindow):
 
         rb_img_out = QRadioButton("拍照签退")
         self.grp.addButton(rb_img_out, 4)
+        self.mode_buttons = {
+            0: rb_in,
+            1: rb_out,
+            2: rb_in_out,
+            3: rb_img_in,
+            4: rb_img_out,
+        }
 
         # 第一行：签到 + 签退
         mode_row1 = QHBoxLayout()
@@ -404,7 +427,7 @@ class ModernWindow(QMainWindow):
 
         self.left_stack.addWidget(home_page)
         self.left_stack.addWidget(self.jielong_page)
-        self.show_home_page()
+        self._apply_service_provider_ui(self._current_service_provider())
 
         # ------------------------- Right Panel -------------------------
         right = QFrame()
@@ -1079,6 +1102,8 @@ class ModernWindow(QMainWindow):
             ToastManager.instance().show("config.json 文件不存在", "error")
             return
         ConfigDialog(CONFIG_FILE, self).exec()
+        self._apply_service_provider_ui(self._current_service_provider())
+        self._update_session_display()
         self._load_auto_clock_settings()
         return None
 
@@ -1129,10 +1154,67 @@ class ModernWindow(QMainWindow):
             self.btn_nav_jielong.setChecked(True)
             return
         self.left_stack.setCurrentWidget(self.home_page)
-        self.btn_platform_xyb.setChecked(True)
+
+    def _activate_service_provider(self, service_provider: str):
+        """Switch the active sign-in platform only while no worker is running."""
+        normalized_provider = str(service_provider or "").strip().lower()
+        if normalized_provider not in ("xyb", "laishixi"):
+            return
+        if self.is_running or self.is_getting_code:
+            ToastManager.instance().show("任务执行或获取 code 期间不能切换签到平台", "warning")
+            self._apply_service_provider_ui(self._current_service_provider())
+            return
+        try:
+            config = read_config(CONFIG_FILE)
+            input_config = config.get("input")
+            if not isinstance(input_config, dict):
+                input_config = {}
+                config["input"] = input_config
+            if str(input_config.get("serviceProvider", "xyb")).strip().lower() != normalized_provider:
+                input_config["serviceProvider"] = normalized_provider
+                save_json_file(CONFIG_FILE, config)
+                persisted_config = read_config(CONFIG_FILE)
+                persisted_provider = str((persisted_config.get("input") or {}).get("serviceProvider", "")).strip().lower()
+                if persisted_provider != normalized_provider:
+                    raise RuntimeError("serviceProvider was not persisted")
+                logging.info("已切换签到平台: %s", normalized_provider)
+        except Exception as exc:
+            logging.error("切换签到平台失败，请检查配置文件: %s", exc)
+            ToastManager.instance().show("切换签到平台失败，请检查配置文件", "error")
+            self._apply_service_provider_ui(self._current_service_provider())
+            return
+        self._switch_left_page("home")
+        self._apply_service_provider_ui(normalized_provider)
+        self._update_session_display()
+
+    def _apply_service_provider_ui(self, service_provider: str):
+        """Keep navigation and supported modes consistent with the active platform."""
+        is_laishixi = service_provider == "laishixi"
+        self.btn_platform_xyb.setChecked(not is_laishixi)
+        self.btn_platform_laishixi.setChecked(is_laishixi)
+        if is_laishixi:
+            self.lbl_platform_context.setText("当前平台：莱实习。获取 code 后将进入已确认的每日定位签到入口。")
+            self.execution_mode_label.setText("执行操作（莱实习当前仅支持每日定位签到入口）")
+            self.mode_buttons[0].setText("进入签到页")
+            self.mode_buttons[0].setChecked(True)
+            for mode_id, button in self.mode_buttons.items():
+                button.setEnabled(mode_id == 0 and not self.is_running and not self.is_getting_code)
+            return
+        self.lbl_platform_context.setText("当前平台：校友邦。可使用普通签到、签退及拍照签到功能。")
+        self.execution_mode_label.setText("执行操作（拍照签到签退经纬度不准会导致外勤）")
+        self.mode_buttons[0].setText("普通签到")
+        for button in self.mode_buttons.values():
+            button.setEnabled(not self.is_running and not self.is_getting_code)
+
+    def _restore_mode_buttons(self):
+        """Restore mode availability after an asynchronous worker finishes."""
+        self._apply_service_provider_ui(self._current_service_provider())
 
     def show_home_page(self):
-        self._switch_left_page("home")
+        self._activate_service_provider("xyb")
+
+    def show_laishixi_page(self):
+        self._activate_service_provider("laishixi")
 
     def open_jielong_dialog(self):
         self._switch_left_page("jielong")
@@ -1299,8 +1381,7 @@ class ModernWindow(QMainWindow):
         
         self.prog.hide()
         self.btn_run.setEnabled(True)
-        for btn in self.grp.buttons():
-            btn.setEnabled(True)
+        self._restore_mode_buttons()
 
     def _bring_to_front(self):
         """尽量将主窗口切回前台活动状态"""
@@ -1658,8 +1739,7 @@ class ModernWindow(QMainWindow):
         self.style().polish(self.btn_get_code)
         self.prog.hide()
         self.btn_run.setEnabled(True)
-        for btn in self.grp.buttons():
-            btn.setEnabled(True)
+        self._restore_mode_buttons()
         self._update_session_display()
 
         pending_opt = self._pending_auto_clock_opt
@@ -1779,8 +1859,7 @@ class ModernWindow(QMainWindow):
         self.style().polish(self.btn_run)
         self.prog.hide()
         self.btn_get_code.setEnabled(True)
-        for btn in self.grp.buttons():
-            btn.setEnabled(True)
+        self._restore_mode_buttons()
 
         # 更新session显示，确保清除过期session后状态栏能及时更新
         self._update_session_display()
