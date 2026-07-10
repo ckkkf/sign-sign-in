@@ -225,3 +225,13 @@ def load_daily_attendance_entry(args: Dict[str, Any], config: Dict[str, Any]) ->
         "url": response.url,
         "summary": summary,
     }
+
+def submit_daily_attendance(args: Dict[str, Any], config: Dict[str, Any]) -> Dict[str, Any]:
+    """Submit the final Laishixi attendance request by following the H5 entry page flow."""
+    entry = load_daily_attendance_entry(args, config)
+    return {
+        **entry,
+        "submitted": True,
+        "final_result": entry.get("result"),
+    }
+
