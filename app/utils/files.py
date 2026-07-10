@@ -331,22 +331,23 @@ def load_laishixi_session_cache() -> dict:
         return {}
 
 
-def save_laishixi_session_cache(open_id: str, cookies: dict = None):
-    """Save Laishixi H5 session cache for 24 hours."""
+def save_laishixi_session_cache(open_id: str, referer: str = "", user_agent: str = ""):
+    """Save the reusable Laishixi identity and captured request context for 24 hours."""
     import time
     cache = {
         "service": "laishixi",
-        "openId": open_id,
-        "cookies": cookies or {},
+        "openId": str(open_id or "").strip(),
+        "referer": str(referer or "").strip(),
+        "userAgent": str(user_agent or "").strip(),
         "timestamp": int(time.time()),
-        "expire_seconds": 24 * 3600
+        "expire_seconds": 24 * 3600,
     }
     ensure_dir(os.path.dirname(LAISHIXI_SESSION_CACHE_FILE))
     save_json_file(LAISHIXI_SESSION_CACHE_FILE, cache)
 
 
 def get_valid_laishixi_session_cache() -> dict:
-    """Return valid Laishixi session cache or None."""
+    """Return a locally fresh identity cache; callers must still run server-side checklogin."""
     import time
     cache = load_laishixi_session_cache()
     if not cache:
@@ -361,7 +362,8 @@ def get_valid_laishixi_session_cache() -> dict:
     return {
         "service": "laishixi",
         "openId": open_id,
-        "cookies": cache.get("cookies") if isinstance(cache.get("cookies"), dict) else {},
+        "referer": str(cache.get("referer") or "").strip(),
+        "userAgent": str(cache.get("userAgent") or "").strip(),
         "timestamp": timestamp,
     }
 

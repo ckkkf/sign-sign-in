@@ -83,7 +83,7 @@ class CodeChannel:
             if not payload_source and source != "xyb_code":
                 return None
 
-        has_value = any(str(payload.get(key) or "").strip() for key in ("code", "token", "uuid"))
+        has_value = any(str(payload.get(key) or "").strip() for key in ("code", "token", "uuid", "openId", "openid"))
         if not has_value:
             return None
 

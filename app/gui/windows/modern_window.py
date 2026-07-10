@@ -1188,30 +1188,37 @@ class ModernWindow(QMainWindow):
         self._update_session_display()
 
     def _apply_service_provider_ui(self, service_provider: str):
-        """Keep navigation and supported modes consistent with the active platform."""
+        """Keep navigation and available capabilities consistent with the active platform."""
         is_laishixi = service_provider == "laishixi"
+        controls_available = not self.is_running and not self.is_getting_code
         self.btn_platform_xyb.setChecked(not is_laishixi)
         self.btn_platform_laishixi.setChecked(is_laishixi)
         if is_laishixi:
-            self.lbl_platform_context.setText("当前平台：莱实习。获取 code 后执行每日定位签到流程。")
-            self.execution_mode_label.setText("莱实习签到（当前仅接入每日定位签到）")
-            self.mode_buttons[0].setText("每日定位签到")
-            self.mode_buttons[0].setChecked(True)
-            for mode_id, button in self.mode_buttons.items():
-                if mode_id == 0:
-                    button.show()
-                    button.setEnabled(not self.is_running and not self.is_getting_code)
-                else:
-                    button.hide()
-                    button.setEnabled(False)
+            self.lbl_platform_context.setText(
+                "当前平台：莱实习。已接入微信登录态校验和定位回填协议；"
+                "解包源码未包含最终签到提交接口。"
+            )
+            self.execution_mode_label.setText("当前接入范围")
+            for button in self.mode_buttons.values():
+                button.hide()
+                button.setEnabled(False)
+            if not self.is_getting_code:
+                self.btn_get_code.setText("获取登录态")
+            self.btn_run.setText("待接入最终签到接口")
+            self.btn_run.setEnabled(False)
             return
+
         self.lbl_platform_context.setText("当前平台：校友邦。可使用普通签到、签退及拍照签到功能。")
         self.execution_mode_label.setText("执行操作（拍照签到签退经纬度不准会导致外勤）")
         self.mode_buttons[0].setText("普通签到")
         for button in self.mode_buttons.values():
             button.show()
-            button.setEnabled(not self.is_running and not self.is_getting_code)
-
+            button.setEnabled(controls_available)
+        if not self.is_getting_code:
+            self.btn_get_code.setText("获取code")
+        if not self.is_running:
+            self.btn_run.setText("开始执行")
+        self.btn_run.setEnabled(controls_available)
     def _restore_mode_buttons(self):
         """Restore mode availability after an asynchronous worker finishes."""
         self._apply_service_provider_ui(self._current_service_provider())
@@ -1328,15 +1335,21 @@ class ModernWindow(QMainWindow):
 
         # 验证数据
         try:
-            errMsg = validate_config(read_config(CONFIG_FILE))
-            if errMsg:
-                ToastManager.instance().show(errMsg, "warning")
-                if self._last_action_from_tray:
-                    self._show_tray_message("获取 code 失败", errMsg, False)
-                    self._last_action_from_tray = False
-                return
+            current_config = read_config(CONFIG_FILE)
+            if self._current_service_provider() != "laishixi":
+                errMsg = validate_config(current_config)
+                if errMsg:
+                    ToastManager.instance().show(errMsg, "warning")
+                    if self._last_action_from_tray:
+                        self._show_tray_message("获取 code 失败", errMsg, False)
+                        self._last_action_from_tray = False
         except Exception as e:
             ToastManager.instance().show(f"读取配置失败: {e}", "error")
+            if self._last_action_from_tray:
+                self._show_tray_message("获取 code 失败", f"读取配置失败: {e}", False)
+                self._last_action_from_tray = False
+            return
+
             if self._last_action_from_tray:
                 self._show_tray_message("获取 code 失败", f"读取配置失败: {e}", False)
                 self._last_action_from_tray = False
@@ -1356,39 +1369,35 @@ class ModernWindow(QMainWindow):
         self.code_worker.start()
 
     def on_get_code_done(self, success, msg):
-        """获取Code和JSESSIONID完成"""
+        """处理当前平台登录态获取完成事件。"""
         notify_from_tray = self._last_action_from_tray
         self._last_action_from_tray = False
+        is_laishixi = self._current_service_provider() == "laishixi"
         if success and not notify_from_tray:
             self._bring_to_front_retry(tries=4, delay_ms=350)
         self.is_getting_code = False
         self.btn_get_code.setEnabled(True)
-        self.btn_get_code.setText("获取code")
-        # 无论成功失败，都恢复原始样式
+        self.btn_get_code.setText("获取登录态" if is_laishixi else "获取code")
         self.btn_get_code.setStyleSheet("")
-        self.btn_get_code.setObjectName("BtnGetCode") # Re-apply ID to be safe
-        self.style().polish(self.btn_get_code)        # Force re-polish
-
+        self.btn_get_code.setObjectName("BtnGetCode")
+        self.style().polish(self.btn_get_code)
 
         if success:
-            ToastManager.instance().show("获取成功！", "success")
+            success_message = "莱实习登录态已更新" if is_laishixi else "JSESSIONID 已更新"
+            ToastManager.instance().show(success_message, "success")
             if notify_from_tray:
-                self._show_tray_message("获取 code 成功", "JSESSIONID 已更新。", True)
-            # 更新JSESSIONID显示
+                self._show_tray_message("获取登录态成功", success_message, True)
             self._update_session_display()
         else:
             if msg and msg != "任务已停止":
-                # 只有非手动停止的错误才弹窗
                 ToastManager.instance().show(msg, "error")
                 if notify_from_tray:
-                    self._show_tray_message("获取 code 失败", msg, False)
+                    self._show_tray_message("获取登录态失败", msg, False)
             elif notify_from_tray:
-                self._show_tray_message("获取 code 已停止", "后台获取已停止。", False)
-        
-        self.prog.hide()
-        self.btn_run.setEnabled(True)
-        self._restore_mode_buttons()
+                self._show_tray_message("获取登录态已停止", "后台获取已停止。", False)
 
+        self.prog.hide()
+        self._restore_mode_buttons()
     def _bring_to_front(self):
         """尽量将主窗口切回前台活动状态"""
         if self.isMinimized():
@@ -1607,8 +1616,7 @@ class ModernWindow(QMainWindow):
             logging.info("Auto-clock disabled (feature not enabled or no valid tasks configured)")
 
     def _can_start_sign_task(self) -> bool:
-
-        from app.utils.files import get_valid_session_cache, get_valid_laishixi_session_cache
+        from app.utils.files import get_valid_session_cache
 
         try:
             cfg = read_config(CONFIG_FILE)
@@ -1618,14 +1626,11 @@ class ModernWindow(QMainWindow):
 
         service_provider = str((cfg.get("input") or {}).get("serviceProvider", "xyb")).strip().lower() or "xyb"
         if service_provider == "laishixi":
-            has_session = get_valid_laishixi_session_cache() is not None
-            session_label = "Laishixi OPENID"
-        else:
-            has_session = get_valid_session_cache() is not None
-            session_label = "SESSIONID"
+            ToastManager.instance().show("莱实习最终签到提交接口尚未接入，当前不能执行签到", "warning")
+            return False
 
-        if not has_session:
-            ToastManager.instance().show(f"请先点击“获取code”获取有效 {session_label}", "warning")
+        if get_valid_session_cache() is None:
+            ToastManager.instance().show("请先点击“获取code”获取有效 SESSIONID", "warning")
             return False
 
         err_msg = validate_config(cfg)
@@ -1663,6 +1668,8 @@ class ModernWindow(QMainWindow):
 
     def _on_auto_clock_tick(self):
         if not self.auto_clock_enabled:
+            return
+        if self._current_service_provider() == "laishixi":
             return
         if self.is_running or self.is_getting_code:
             return
@@ -1739,7 +1746,7 @@ class ModernWindow(QMainWindow):
         """定时打卡自动获取code完成后的回调"""
         self.is_getting_code = False
         self.btn_get_code.setEnabled(True)
-        self.btn_get_code.setText("获取code")
+        self.btn_get_code.setText("获取登录态" if self._current_service_provider() == "laishixi" else "获取code")
         self.btn_get_code.setStyleSheet("")
         self.btn_get_code.setObjectName("BtnGetCode")
         self.style().polish(self.btn_get_code)
@@ -1759,6 +1766,10 @@ class ModernWindow(QMainWindow):
             self._show_tray_message("定时打卡", f"自动获取code失败: {msg}", False)
 
     def toggle(self):
+        if self._current_service_provider() == "laishixi":
+            ToastManager.instance().show("莱实习最终签到提交接口尚未接入，当前不能执行签到", "warning")
+            self._last_action_from_tray = False
+            return
 
         if not self.is_running:
             checked_id = self.grp.checkedId()

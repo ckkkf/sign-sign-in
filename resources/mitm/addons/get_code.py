@@ -27,7 +27,7 @@ PACKET_LOG_FILE = os.path.normpath(
 
 XYB_SOURCE = "xyb_code"
 JIELONG_SOURCE = "jielong_token"
-LAISHIXI_SOURCE = "laishixi_code"
+LAISHIXI_SOURCE = "laishixi_openid"
 SEEN_HOSTS = set()
 
 
@@ -52,12 +52,33 @@ def compact_text(value, max_len: int = 120):
     return f"{text[:max_len]}..."
 
 
+def _sanitize_nested_json(value):
+    """Mask sensitive fields embedded in form JSON such as key={"code":...}."""
+    try:
+        payload = json.loads(str(value or ""))
+    except json.JSONDecodeError:
+        return compact_text(value, 40)
+    if not isinstance(payload, dict):
+        return compact_text(value, 40)
+    sanitized = {}
+    sensitive_keys = {"code", "openid", "unionid", "sessionid", "encryptvalue", "authorization"}
+    for nested_key, nested_value in payload.items():
+        if str(nested_key).lower() in sensitive_keys:
+            sanitized[nested_key] = mask_value(nested_value)
+        else:
+            sanitized[nested_key] = nested_value
+    return compact_text(json.dumps(sanitized, ensure_ascii=False, separators=(",", ":")), 80)
+
+
 def format_pairs(items):
     parts = []
     for key, value in items:
         key_text = str(key or "")
-        if key_text.lower() in {"code", "openid", "unionid", "sessionid", "encryptvalue", "authorization"}:
+        key_lower = key_text.lower()
+        if key_lower in {"code", "openid", "unionid", "sessionid", "encryptvalue", "authorization"}:
             value_text = mask_value(value)
+        elif key_lower == "key":
+            value_text = _sanitize_nested_json(value)
         else:
             value_text = compact_text(value, 40)
         parts.append(f"{key_text}={value_text}")
@@ -171,33 +192,67 @@ class GetCode:
         flow.kill()
 
 
-    def _capture_laishixi_code(self, flow: http.HTTPFlow):
+    @staticmethod
+    def _laishixi_request_context(flow: http.HTTPFlow):
         action = str(flow.request.urlencoded_form.get("action") or "").strip()
         if action != "autoWechat":
-            return
+            return None
+        return {
+            "referer": str(flow.request.headers.get("referer") or ""),
+            "userAgent": str(flow.request.headers.get("user-agent") or ""),
+        }
 
-        raw_key = str(flow.request.urlencoded_form.get("key") or "").strip()
+    def _remember_laishixi_request(self, flow: http.HTTPFlow):
+        """Mark autoWechat requests for response-side openid capture without interrupting them."""
+        context = self._laishixi_request_context(flow)
+        if not context:
+            return
+        flow.metadata["laishixi_auto_wechat"] = context
+        append_packet_log("[MITM] Laishixi autoWechat request detected; waiting for openid response")
+
+    @staticmethod
+    def _extract_laishixi_openid(payload):
+        if not isinstance(payload, dict):
+            return ""
+        for container in (payload, payload.get("data")):
+            if not isinstance(container, dict):
+                continue
+            for key in ("openid", "openId"):
+                openid = str(container.get(key) or "").strip()
+                if openid:
+                    return openid
+        return ""
+
+    def _capture_laishixi_openid(self, flow: http.HTTPFlow):
+        context = flow.metadata.get("laishixi_auto_wechat")
+        if not isinstance(context, dict) or not flow.response:
+            return
         try:
-            key_payload = json.loads(raw_key or "{}")
+            response_payload = json.loads(flow.response.get_text(strict=False) or "{}")
         except json.JSONDecodeError:
-            append_packet_log(f"[MITM] Laishixi autoWechat key is not JSON: {compact_text(raw_key, 120)}")
+            append_packet_log("[MITM] Laishixi autoWechat response is not JSON")
             return
 
-        code = str(key_payload.get("code") or "").strip()
-        if not code:
-            append_packet_log("[MITM] Laishixi autoWechat request has no code")
+        openid = self._extract_laishixi_openid(response_payload)
+        if not openid:
+            append_packet_log("[MITM] Laishixi autoWechat response has no openid")
             return
 
-        append_packet_log(f"[MITM] captured Laishixi code | code={mask_value(code)}")
+        payload = {
+            "source": LAISHIXI_SOURCE,
+            "openId": openid,
+            "referer": str(context.get("referer") or ""),
+            "userAgent": str(context.get("userAgent") or ""),
+        }
+        append_packet_log(f"[MITM] captured Laishixi openid | openid={mask_value(openid)}")
         try:
-            write_payload({"source": LAISHIXI_SOURCE, "code": code})
-            append_packet_log(f"[MITM] Laishixi code saved: {CODE_FILE}")
-            print(f"[addon] saved Laishixi code file: {CODE_FILE}")
+            write_payload(payload)
+            append_packet_log(f"[MITM] Laishixi login state saved: {CODE_FILE}")
+            print(f"[addon] saved Laishixi login state file: {CODE_FILE}")
         except Exception as exc:
-            append_packet_log(f"[MITM] failed to save Laishixi code: {exc}")
-            print(f"[addon] failed to save Laishixi code: {exc}")
+            append_packet_log(f"[MITM] failed to save Laishixi login state: {exc}")
+            print(f"[addon] failed to save Laishixi login state: {exc}")
 
-        flow.kill()
 
     def _capture_jielong_token_code(self, flow: http.HTTPFlow):
         try:
@@ -253,7 +308,7 @@ class GetCode:
             return
 
         if flow.request.method.upper() == "POST" and self.LAISHIXI_TARGET in flow.request.pretty_url:
-            self._capture_laishixi_code(flow)
+            self._remember_laishixi_request(flow)
             return
 
         if flow.request.method.upper() == "POST" and self.JIELONG_TARGET in flow.request.pretty_url:
@@ -264,6 +319,8 @@ class GetCode:
         if not is_interesting_flow(flow):
             return
         log_response_details(flow)
+        if flow.request.method.upper() == "POST" and self.LAISHIXI_TARGET in flow.request.pretty_url:
+            self._capture_laishixi_openid(flow)
 
     def error(self, flow: http.HTTPFlow):
         if not is_interesting_flow(flow):
