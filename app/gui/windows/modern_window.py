@@ -1193,17 +1193,23 @@ class ModernWindow(QMainWindow):
         self.btn_platform_xyb.setChecked(not is_laishixi)
         self.btn_platform_laishixi.setChecked(is_laishixi)
         if is_laishixi:
-            self.lbl_platform_context.setText("当前平台：莱实习。获取 code 后将进入已确认的每日定位签到入口。")
-            self.execution_mode_label.setText("执行操作（莱实习当前仅支持每日定位签到入口）")
-            self.mode_buttons[0].setText("进入签到页")
+            self.lbl_platform_context.setText("当前平台：莱实习。获取 code 后执行每日定位签到流程。")
+            self.execution_mode_label.setText("莱实习签到（当前仅接入每日定位签到）")
+            self.mode_buttons[0].setText("每日定位签到")
             self.mode_buttons[0].setChecked(True)
             for mode_id, button in self.mode_buttons.items():
-                button.setEnabled(mode_id == 0 and not self.is_running and not self.is_getting_code)
+                if mode_id == 0:
+                    button.show()
+                    button.setEnabled(not self.is_running and not self.is_getting_code)
+                else:
+                    button.hide()
+                    button.setEnabled(False)
             return
         self.lbl_platform_context.setText("当前平台：校友邦。可使用普通签到、签退及拍照签到功能。")
         self.execution_mode_label.setText("执行操作（拍照签到签退经纬度不准会导致外勤）")
         self.mode_buttons[0].setText("普通签到")
         for button in self.mode_buttons.values():
+            button.show()
             button.setEnabled(not self.is_running and not self.is_getting_code)
 
     def _restore_mode_buttons(self):
