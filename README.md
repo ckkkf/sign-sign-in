@@ -6,6 +6,23 @@
 
 这是一个基于 Python 3 的开源自动化签到项目，专为校友邦类实习/签到平台设计。适用于需要自动化签到场景。该脚本适合用于学习、测试与个人自动化，不涉及任何商业、违法违规用途，且遵守相关服务条款与法律规定。
 
+## 🆕 全新客户端（v2.0.0 起，推荐下载）
+
+> 客户端已从 Python 脚本重写为跨平台应用：一套代码同时产出 **Windows / macOS / Linux 桌面端**与 **Android 手机端**，界面与流程在两端完全一致。
+> 内置校友邦签到、实习掌上通打卡、AI 周记、接龙管家、图片库、应用宝授权绑定、代理池、定时打卡等功能。
+
+**下载**：前往 [Releases 页面](https://github.com/ckkkf/sign-sign-in/releases/latest)，按自己的系统选文件（文件名都以 `FlexAPI_` 开头）：
+
+| 你的系统 | 选择哪个文件 |
+| --- | --- |
+| Windows | `..._windows-x64-setup.exe`（安装版，推荐）或 `..._windows-x64.msi` |
+| macOS（M1/M2/M3 芯片） | `..._macos-aarch64.dmg` |
+| macOS（Intel 芯片） | `..._macos-x64.dmg` |
+| Android 手机 | `..._android-universal.apk` |
+| Linux | `..._linux-x86_64.deb` / `..._linux-x86_64.AppImage` / `..._linux-x86_64.rpm` |
+
+遇到问题请带上系统版本与操作步骤在群里反馈。下面的 Python 版本教程仍然保留，老用户可继续按原方式使用。
+
 ## 软件架构
 
 本项目采用 Python 3 编写，主要功能包括配置读取、网络请求、设备模拟和签到逻辑。核心模块包括：
