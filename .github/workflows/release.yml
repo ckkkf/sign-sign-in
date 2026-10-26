@@ -211,11 +211,12 @@ jobs:
           name: release-macos-${{ needs.verify-tag.outputs.tag }}
           path: release
 
-      - name: Prepare release attachments
-        shell: bash
-        run: |
-          cp README.md release/
-          cp LICENSE release/
+      # 不附带 README.md / LICENSE 到 release 资产（取消注释可恢复）
+      # - name: Prepare release attachments
+      #   shell: bash
+      #   run: |
+      #     cp README.md release/
+      #     cp LICENSE release/
 
       - name: Generate release notes
         id: notes
@@ -296,8 +297,9 @@ jobs:
           tag_name: ${{ needs.verify-tag.outputs.tag }}
           name: ${{ needs.verify-tag.outputs.release_name }}
           body_path: ${{ steps.notes.outputs.notes_file }}
-          files: |
-            release/sign-sign-in-windows-${{ needs.verify-tag.outputs.tag }}.zip
-            release/sign-sign-in-macos-${{ needs.verify-tag.outputs.tag }}.zip
-            release/README.md
-            release/LICENSE
+          # 不上传任何资产，release 只保留更新日志（取消注释可恢复 zip 资产）
+          # files: |
+          #   release/sign-sign-in-windows-${{ needs.verify-tag.outputs.tag }}.zip
+          #   release/sign-sign-in-macos-${{ needs.verify-tag.outputs.tag }}.zip
+          #   release/README.md
+          #   release/LICENSE
